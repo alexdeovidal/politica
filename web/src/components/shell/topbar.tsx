@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useShell } from "./shell-context";
 import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
+import { BrandLockup } from "@/components/brand/brand-lockup";
 
 export function Topbar() {
   const { header, analysisMode, setAnalysisMode } = useShell();
@@ -24,6 +25,7 @@ export function Topbar() {
         style={{ backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
       />
       <div className="navbar">
+        <BrandLockup className="brand-lockup--topbar" />
         <span className="crumb">{header.group}</span>
         {header.current ? (
           <>

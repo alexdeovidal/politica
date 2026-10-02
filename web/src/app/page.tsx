@@ -33,34 +33,37 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
 
-      <div
-        className="animate-in relative overflow-hidden rounded-[var(--r-page)] border border-[var(--border-1)] px-6 py-16 sm:px-12 sm:py-20"
-      >
-        <div className="hero-glow" aria-hidden />
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px)",
-            backgroundSize: "64px 64px",
-            maskImage: "radial-gradient(900px 420px at 22% 30%, #000, transparent 72%)",
-          }}
-        />
-        <div className="relative max-w-2xl">
-          <div className="mono-label mb-4">busca de dados públicos · CPF/CNPJ</div>
-          <h1 className="text-[clamp(30px,5vw,48px)] leading-[1.06] font-medium tracking-tight text-balance">
-            Ficha pública de <span className="text-[var(--muted)]">qualquer candidato</span> brasileiro
-            <span className="text-[var(--accent-2)]">.</span>
-          </h1>
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-            Busque por nome ou CPF. Cada campo mostra de qual arquivo do TSE ele saiu, quando foi
-            baixado e o hash que comprova que não foi alterado.
+      <section className="portal-hero animate-in" aria-labelledby="portal-title">
+        <div className="portal-hero__content">
+          <div className="portal-hero__eyebrow">
+            <span className="portal-hero__status" aria-hidden="true" />
+            Plataforma independente · consulta de dados públicos
+          </div>
+          <h1 id="portal-title">Dados eleitorais organizados para consulta cidadã.</h1>
+          <p>
+            Pesquise candidaturas, prestações de contas e informações relacionadas por nome, CPF ou CNPJ.
+            Os registros indicam suas fontes públicas para que você possa conferi-los.
           </p>
-          <div className="mt-8">
+          <div className="portal-hero__search">
             <SearchBox />
           </div>
+          <div className="portal-hero__disclaimer">
+            Portal independente. Não é um serviço oficial do TSE ou do Governo.
+          </div>
         </div>
-      </div>
+        <div className="portal-hero__visual" aria-hidden="true">
+          <div className="portal-hero__visual-card">
+            <div className="portal-hero__visual-heading">
+              <span className="portal-hero__visual-symbol">P</span>
+              <span>CONSULTA DE DADOS</span>
+            </div>
+            <div className="portal-hero__visual-row"><span>Candidaturas</span><i /></div>
+            <div className="portal-hero__visual-row"><span>Contas eleitorais</span><i /></div>
+            <div className="portal-hero__visual-row"><span>Fontes identificadas</span><i /></div>
+            <div className="portal-hero__visual-foot">PESQUISA POR CPF OU CNPJ</div>
+          </div>
+        </div>
+      </section>
 
       <section className="animate-in flex flex-col gap-4" style={{ animationDelay: "80ms" }}>
         <div className="kpis">

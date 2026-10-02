@@ -17,9 +17,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "POLITICA — busca de candidatos",
+  title: "POLITICA — portal independente de dados públicos",
   description:
-    "Cruzamento de dados públicos de políticos brasileiros por CPF/CNPJ. Indício, não prova — todo campo aponta para a fonte oficial de onde saiu.",
+    "Portal independente para consultar dados públicos eleitorais por CPF/CNPJ, com fontes identificadas. Não é um serviço oficial do TSE ou do Governo.",
 };
 
 // Runs before hydration so a saved theme applies with no flash.
