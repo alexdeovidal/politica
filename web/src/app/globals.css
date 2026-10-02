@@ -346,6 +346,44 @@ a.card:hover, button.card:hover {
   color: var(--green);
 }
 .contribution-card__status.is-error { color: var(--red); }
+.contribution-reminder { display: flex; flex-direction: column; gap: 18px; }
+.contribution-reminder__lead { display: flex; align-items: flex-start; gap: 14px; }
+.contribution-reminder__lead h2 {
+  margin: 1px 0 8px;
+  color: var(--fg-1);
+  font-size: 19px;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+.contribution-reminder__lead p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.contribution-reminder__payment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+.contribution-reminder__payment .btn { min-height: 40px; }
+.contribution-reminder__status {
+  margin: -8px 0 0;
+  color: var(--green);
+  font-size: 12px;
+}
+.contribution-reminder__status.is-error { color: var(--red); }
+.contribution-reminder__dismiss { align-self: flex-start; }
+@media (max-width: 520px) {
+  .contribution-reminder__payment { align-items: stretch; flex-direction: column; }
+  .contribution-reminder__payment .btn { width: 100%; justify-content: center; }
+}
 
 /* entrance */
 @keyframes fade-in-up {

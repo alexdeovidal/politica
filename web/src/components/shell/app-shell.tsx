@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { SidebarCounts } from "@/lib/stats";
+import { ContributionReminder } from "@/components/contribution-card";
 import { ShellProvider } from "./shell-context";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -18,6 +19,7 @@ export function AppShell({
 }) {
   return (
     <ShellProvider aiReviewEnabled={aiReviewEnabled}>
+      <ContributionReminder />
       <div className="shell-layout">
         <Sidebar counts={counts} />
         <div className="shell-main">
