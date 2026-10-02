@@ -41,7 +41,7 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        group="EloSys"
+        group="POLITICA"
         current="Ranking"
         actions={
           tipo === "bens" ? (

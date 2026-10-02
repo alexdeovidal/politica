@@ -5,6 +5,7 @@ import { YearSelect } from "@/components/ui/year-select";
 import { getHomeStats } from "@/lib/stats";
 import { getExpenseYears } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
+import { ContributionCard } from "@/components/contribution-card";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
-        group="EloSys"
+        group="POLITICA"
         current="Início"
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
@@ -72,6 +73,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
+      <ContributionCard />
+
       <div className="animate-in" style={{ animationDelay: "150ms" }}>
         <TopSuppliers years={expenseYears} initialYear={year} />
       </div>
@@ -79,7 +82,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <div className="card animate-in max-w-2xl" style={{ animationDelay: "220ms" }}>
         <div className="label mb-3">indício não é prova</div>
         <p className="text-[13.5px] leading-relaxed text-[var(--muted)]">
-          O EloSys reúne dados que já são públicos por lei (registro de candidatura do TSE,
+          O POLITICA reúne dados que já são públicos por lei (registro de candidatura do TSE,
           prestação de contas eleitorais, redes sociais declaradas) e os organiza por pessoa. Nada
           aqui é acusação — é o dado bruto oficial, com a fonte exposta em cada campo, para que
           qualquer um confira e vá além se quiser apurar.

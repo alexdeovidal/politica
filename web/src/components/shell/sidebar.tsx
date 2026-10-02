@@ -29,8 +29,8 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
     <aside className="app-sidebar">
       <div className="app-sidebar__top">
         <Link href="/" className="app-sidebar__logo">
-          <span className="navbar__mark">E</span>
-          <span className="navbar__name">EloSys</span>
+          <span className="navbar__mark">P</span>
+          <span className="navbar__name">POLITICA</span>
         </Link>
         <button
           type="button"

@@ -49,7 +49,7 @@
   --radius-xl: var(--r-page);
 }
 
-/* EloSys design kit */
+/* POLITICA design kit */
 :root {
   --bg: #09090b;
   --surface: #0b0b0e;
@@ -271,6 +271,81 @@ a.card:hover, button.card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-card-hover);
 }
+
+/* Pix contribution prompt */
+.contribution-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-lg);
+  background: var(--card-tone);
+  box-shadow: var(--shadow-card);
+}
+.contribution-card__message {
+  display: flex;
+  flex: 1 1 360px;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+}
+.contribution-card__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(var(--accent-rgb), 0.26);
+  border-radius: 11px;
+  background: var(--accent-tint);
+  color: var(--accent-2);
+}
+.contribution-card__message h2 {
+  margin: 5px 0 4px;
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
+}
+.contribution-card__message p {
+  max-width: 470px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.contribution-card__actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.contribution-card__key {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+}
+.contribution-card__key code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-1);
+  white-space: nowrap;
+}
+.contribution-card__actions .btn { min-height: 36px; }
+.contribution-card__status {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 11px;
+  color: var(--green);
+}
+.contribution-card__status.is-error { color: var(--red); }
 
 /* entrance */
 @keyframes fade-in-up {

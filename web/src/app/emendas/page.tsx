@@ -26,7 +26,7 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader group="EloSys" current="Emendas Parlamentares" />
+      <PageHeader group="POLITICA" current="Emendas Parlamentares" />
 
       <section>
         <h1 className="text-[26px] leading-tight font-medium tracking-tight">
