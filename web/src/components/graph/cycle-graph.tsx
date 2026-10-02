@@ -119,6 +119,7 @@ function Ring({
           registryStatus: null,
           radius: NODE_R,
           loading: false,
+          compact: true,
           photoUrl: c.photoUrl,
         },
       };
@@ -132,7 +133,8 @@ function Ring({
         source: c.cpfCnpj,
         target: next.cpfCnpj,
         type: "floating",
-        data: { amountCents, kind: "donation", circular: true, showLabel: amountCents > 0 },
+        // The card header already shows the total. Individual amounts crowd the compact preview.
+        data: { amountCents, kind: "donation", circular: true, showLabel: false },
         style: { stroke: "var(--red)", strokeWidth: 2, strokeDasharray: "7 5", opacity: 0.9 },
         markerEnd: { type: MarkerType.ArrowClosed, color: "var(--red)", width: 13, height: 13 },
       };

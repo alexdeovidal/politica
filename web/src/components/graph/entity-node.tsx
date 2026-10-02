@@ -46,14 +46,18 @@ export function EntityNode({ data, selected }: NodeProps & { data: GraphNodeData
       </div>
 
       <div
-        className="max-w-[132px] truncate rounded-sm px-1.5 py-0.5 text-center font-mono text-[9.5px]"
-        style={{ color: data.circular ? "var(--red)" : color.text, background: "rgba(8,8,10,.55)" }}
+        className={`graph-entity-label max-w-[132px] truncate rounded-sm px-1.5 py-0.5 text-center font-mono text-[9.5px]${
+          data.compact ? " graph-entity-label--compact" : ""
+        }`}
+        style={{ color: data.circular ? "var(--red)" : color.text }}
       >
         {data.label}
       </div>
-      <div className="font-mono text-[7.5px] tracking-[0.1em] text-[var(--muted-2)] uppercase">
-        {data.circular ? "doação circular" : NODE_KIND_LABEL[data.kind]}
-      </div>
+      {!data.compact ? (
+        <div className="font-mono text-[7.5px] tracking-[0.1em] text-[var(--muted-2)] uppercase">
+          {data.circular ? "doação circular" : NODE_KIND_LABEL[data.kind]}
+        </div>
+      ) : null}
     </div>
   );
 }

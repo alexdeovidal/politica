@@ -16,6 +16,7 @@ export type GraphNodeData = {
   registryStatus: string | null;
   radius: number;
   loading: boolean;
+  compact?: boolean;
   circular?: boolean;
   photoUrl?: string | null;
 };

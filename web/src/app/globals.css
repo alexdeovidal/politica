@@ -1088,6 +1088,17 @@ tr.source-zone--hover::before {
 }
 
 /* graph */
+.graph-entity-label {
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(15, 38, 51, 0.16);
+  line-height: 1.25;
+}
+.graph-entity-label--compact {
+  max-width: 104px;
+  padding: 2px 4px;
+  font-size: 8px;
+}
 @keyframes dash { to { stroke-dashoffset: -40; } }
 .edge          { stroke: var(--muted); stroke-width: 1.6; opacity: .55; }
 .edge--in      { stroke: var(--green); }
