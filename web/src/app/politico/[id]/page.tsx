@@ -93,7 +93,7 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
           </div>
 
           {overviewFinance.donationsCount > 0 || overviewFinance.expensesCount > 0 ? (
-            <div className="kpis mt-6">
+            <div className="kpis kpis--profile mt-6">
               <div className="kpi">
                 <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
                 <div className="kpi__value kpi__value--green">{formatBRL(overviewFinance.donationsTotalCents)}</div>

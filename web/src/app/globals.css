@@ -1691,6 +1691,8 @@ tr.source-zone--hover::before {
   .kpis { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
   .kpi { padding: 12px; }
   .kpi__value { font-size: 17px; }
+  .kpis--profile { grid-template-columns: minmax(0, 1fr); }
+  .kpis--profile .kpi__value { overflow-wrap: anywhere; font-size: 16px; }
 }
 
 @media (max-width: 420px) {
