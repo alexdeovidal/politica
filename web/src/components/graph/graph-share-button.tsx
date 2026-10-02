@@ -158,7 +158,7 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
       setOpen(true);
     } catch (error) {
       console.error("[Politica007] Não foi possível gerar a imagem do grafo.", error);
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage("Não foi possível gerar a imagem agora. Tente novamente em instantes.");
       setOpen(true);
     } finally {
       setGenerating(false);
