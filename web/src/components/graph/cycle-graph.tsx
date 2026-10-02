@@ -1,7 +1,7 @@
 "use client";
 
 import "@xyflow/react/dist/style.css";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import { formatBRL } from "@/lib/format";
 import { useColorMode } from "@/lib/use-color-mode";
 import { EntityNode } from "./entity-node";
 import { FloatingEdge } from "./floating-edge";
+import { GraphShareButton } from "./graph-share-button";
 import type { GraphEdgeData, GraphNodeData } from "./types";
 
 const nodeTypes = { entity: EntityNode };
@@ -42,9 +43,10 @@ export function CycleGraph({
   graphHref: string | null;
 }) {
   const isHigh = severity === "high";
+  const shareRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="cycle-card">
+    <div className="cycle-card" ref={shareRef}>
       <ReactFlowProvider>
         <Ring nodes={cycleNodes} selfCpfCnpj={selfCpfCnpj} edgeAmounts={edgeAmounts} />
       </ReactFlowProvider>
@@ -79,10 +81,16 @@ export function CycleGraph({
       </div>
 
       {graphHref ? (
-        <Link href={graphHref} className="btn cycle-card__cta">
+        <Link href={graphHref} className="btn cycle-card__cta" data-graph-share-ignore>
           grafo completo
         </Link>
       ) : null}
+
+      <GraphShareButton
+        targetRef={shareRef}
+        title={`ciclo de doações com ${pathLength ?? cycleNodes.length} nós`}
+        className="cycle-card__share"
+      />
     </div>
   );
 }

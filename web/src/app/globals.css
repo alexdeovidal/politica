@@ -479,6 +479,159 @@ a.card:hover, button.card:hover {
   padding: 6px 10px;
   background: var(--surface);
 }
+.graph-share-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-card);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+.graph-share-trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--active);
+  color: var(--fg-1);
+}
+.graph-share-trigger:disabled { cursor: wait; opacity: 0.75; }
+.cycle-card__share {
+  position: absolute;
+  right: auto;
+  bottom: 10px;
+  left: 10px;
+  z-index: 5;
+  font-size: 9px;
+}
+.politician-network__actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.graph-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(9, 18, 24, 0.66);
+  backdrop-filter: blur(3px);
+}
+.graph-share-dialog {
+  width: min(520px, 100%);
+  max-height: min(92vh, 820px);
+  overflow-y: auto;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--card-tone);
+  color: var(--fg-1);
+  box-shadow: var(--shadow-modal);
+}
+.graph-share-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 20px 15px;
+  border-bottom: 1px solid var(--border-1);
+}
+.graph-share-dialog__header h2 {
+  margin-top: 5px;
+  color: var(--fg-1);
+  font-size: 19px;
+  font-weight: 600;
+}
+.graph-share-dialog__header p,
+.graph-share-hint {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.graph-share-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+}
+.graph-share-close:hover { background: var(--hover); color: var(--fg-1); }
+.graph-share-preview {
+  display: grid;
+  min-height: 100px;
+  max-height: 250px;
+  place-items: center;
+  margin: 16px 20px 0;
+  overflow: hidden;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.graph-share-preview img {
+  display: block;
+  width: 100%;
+  max-height: 248px;
+  object-fit: contain;
+}
+.graph-share-primary,
+.graph-share-download {
+  display: flex;
+  width: calc(100% - 40px);
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 14px 20px 0;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 600;
+}
+.graph-share-primary { background: var(--accent); color: #fff; }
+.graph-share-primary:hover { background: var(--accent-2); }
+.graph-share-download { border: 1px solid var(--border-2); background: var(--surface); color: var(--fg-2); }
+.graph-share-download:hover { background: var(--active); color: var(--fg-1); }
+.graph-share-hint,
+.graph-share-message { margin: 12px 20px 0; }
+.graph-share-message { color: var(--red); font-size: 12px; }
+.graph-share-networks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 16px 20px;
+}
+.graph-share-network {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.graph-share-network:hover { border-color: var(--border-2); background: var(--hover); color: var(--fg-1); }
+.graph-share-domain {
+  margin: 0;
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--border-1);
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 
 /* search result avatar */
 .search-avatar {
@@ -1547,4 +1700,99 @@ tr.source-zone--hover::before {
   .navbar .brand-lockup__copy small { display: none; }
   .navbar .brand-lockup__copy strong { font-size: 12px; }
   .navbar > span[style] { gap: 6px !important; }
+}
+
+@media (max-width: 760px) {
+  .graph-page-body {
+    height: calc(100dvh - var(--navbar-offset)) !important;
+    min-height: 560px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .graph-canvas-shell { min-height: 560px; }
+  .graph-toolbar { gap: 9px; padding: 12px 14px; }
+  .graph-search { flex: 1 1 100%; max-width: none; }
+  .graph-search input { min-height: 44px; font-size: 16px; }
+  .graph-expand-toggle { min-height: 40px; }
+  .graph-amount-filter { flex: 1 1 100%; flex-wrap: wrap; row-gap: 7px; }
+  .graph-amount-filter input { min-height: 40px; width: 82px; }
+  .graph-stats { flex: 1 1 auto; }
+  .graph-toolbar .graph-share-trigger { min-height: 42px; margin-left: auto; }
+  .graph-canvas-viewport { min-height: 340px; }
+  .graph-canvas-viewport .react-flow__controls {
+    top: 10px;
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    flex-direction: row;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+  .graph-canvas-viewport .react-flow__controls-button { width: 36px; height: 36px; }
+  .graph-canvas-viewport [data-graph-share-ignore] {
+    top: auto !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    left: 10px !important;
+    width: auto !important;
+    max-height: 38dvh;
+    overflow-y: auto;
+  }
+  .graph-legend {
+    flex-wrap: nowrap;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 11px 14px;
+    scrollbar-width: thin;
+  }
+  .graph-legend > span { flex: none; }
+
+  .graph-share-backdrop { align-items: end; padding: 0; }
+  .graph-share-dialog {
+    width: 100%;
+    max-height: 92dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .graph-share-dialog__header { padding: 18px 18px 14px; }
+  .graph-share-dialog__header h2 { font-size: 18px; }
+  .graph-share-close { width: 44px; height: 44px; }
+  .graph-share-preview { max-height: 28dvh; margin: 14px 16px 0; }
+  .graph-share-preview img { max-height: 28dvh; }
+  .graph-share-primary,
+  .graph-share-download { width: calc(100% - 32px); min-height: 46px; margin-right: 16px; margin-left: 16px; }
+  .graph-share-hint,
+  .graph-share-message { margin-right: 16px; margin-left: 16px; }
+  .graph-share-networks { gap: 8px; padding: 14px 16px; }
+  .graph-share-network { min-height: 46px; font-size: 12px; }
+  .graph-share-domain { padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+
+  .politician-network__actions { justify-content: stretch; }
+  .politician-network__actions .graph-share-trigger { width: 100%; min-height: 44px; }
+  .politician-network__canvas { height: min(64dvh, 560px) !important; min-height: 360px; }
+  .cycle-card { height: 300px; }
+  .cycle-card__scrim { padding: 10px 11px 20px; }
+  .cycle-card__share { bottom: 8px; left: 8px; min-height: 34px; padding: 5px 8px; font-size: 8px; }
+  .cycle-card__cta { right: 8px; bottom: 8px; min-height: 34px; padding: 5px 8px; font-size: 9px; }
+}
+
+@media (max-width: 420px) {
+  .graph-toolbar { padding: 10px 12px; }
+  .graph-amount-filter { column-gap: 6px; }
+  .graph-amount-filter input { width: 74px; }
+  .graph-toolbar .graph-share-trigger { min-height: 40px; padding: 5px 8px; font-size: 8px; }
+  .graph-canvas-shell { min-height: 530px; }
+  .graph-canvas-viewport { min-height: 300px; }
+  .graph-share-dialog__header { padding: 15px 14px 12px; }
+  .graph-share-preview { margin-right: 12px; margin-left: 12px; }
+  .graph-share-networks { gap: 7px; padding-right: 12px; padding-left: 12px; }
+  .graph-share-network { min-height: 44px; font-size: 11px; }
+  .graph-share-primary,
+  .graph-share-download { width: calc(100% - 24px); margin-right: 12px; margin-left: 12px; }
+  .graph-share-hint,
+  .graph-share-message { margin-right: 12px; margin-left: 12px; }
+  .graph-share-domain { padding-right: 12px; padding-left: 12px; }
 }

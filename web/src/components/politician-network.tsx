@@ -1,7 +1,7 @@
 "use client";
 
 import "@xyflow/react/dist/style.css";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Background,
@@ -17,6 +17,7 @@ import type { PoliticianDonationNetwork, PoliticianNetworkBranch, PoliticianNetw
 import { useColorMode } from "@/lib/use-color-mode";
 import { EntityNode } from "./graph/entity-node";
 import { FloatingEdge } from "./graph/floating-edge";
+import { GraphShareButton } from "./graph/graph-share-button";
 import type { GraphEdgeData, GraphNodeData } from "./graph/types";
 
 const nodeTypes = { entity: EntityNode };
@@ -110,6 +111,7 @@ function Inner({
   network, centerLabel, centerPhotoUrl,
 }: { network: PoliticianDonationNetwork; centerLabel: string; centerPhotoUrl: string | null }) {
   const router = useRouter();
+  const shareRef = useRef<HTMLDivElement>(null);
   const { donatedTo, receivedFrom } = network;
 
   const { nodes, edges, height } = useMemo(() => {
@@ -186,28 +188,36 @@ function Inner({
   const colorMode = useColorMode();
 
   return (
-    <div style={{ height: Math.min(560, height) }} className="w-full rounded-sm border border-[var(--border-1)]">
-      <ReactFlow<NetNode, NetEdge>
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeClick={onNodeClick}
-        colorMode={colorMode}
-        fitView
-        minZoom={0.4}
-        maxZoom={1.6}
-        translateExtent={[
-          [-PAN_MARGIN, -PAN_MARGIN],
-          [WIDTH + PAN_MARGIN, height + PAN_MARGIN],
-        ]}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background color={colorMode === "dark" ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.06)"} gap={26} size={1.2} />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+    <div className="politician-network">
+      <div className="politician-network__actions">
+        <GraphShareButton
+          targetRef={shareRef}
+          title={`rede de doações de ${centerLabel}`}
+        />
+      </div>
+      <div ref={shareRef} style={{ height: Math.min(560, height) }} className="politician-network__canvas w-full rounded-sm border border-[var(--border-1)]">
+        <ReactFlow<NetNode, NetEdge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodeClick={onNodeClick}
+          colorMode={colorMode}
+          fitView
+          minZoom={0.2}
+          maxZoom={1.6}
+          translateExtent={[
+            [-PAN_MARGIN, -PAN_MARGIN],
+            [WIDTH + PAN_MARGIN, height + PAN_MARGIN],
+          ]}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color={colorMode === "dark" ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.06)"} gap={26} size={1.2} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
     </div>
   );
 }

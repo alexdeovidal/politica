@@ -34,7 +34,7 @@ export function AppShell({
 function ContentBody({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   if (pathname?.startsWith("/grafo")) {
-    return <div style={{ height: "calc(100vh - var(--navbar-offset))" }}>{children}</div>;
+    return <div className="graph-page-body" style={{ height: "calc(100vh - var(--navbar-offset))" }}>{children}</div>;
   }
   return <div className="content__inner">{children}</div>;
 }

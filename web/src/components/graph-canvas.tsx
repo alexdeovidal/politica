@@ -25,6 +25,7 @@ import { FloatingEdge } from "./graph/floating-edge";
 import { NODE_COLOR, NODE_KIND_LABEL, type GraphEdgeData, type GraphNodeData } from "./graph/types";
 import { Skeleton } from "./skeleton";
 import { useColorMode } from "@/lib/use-color-mode";
+import { GraphShareButton } from "./graph/graph-share-button";
 
 const WIDTH = 1100;
 const HEIGHT = 700;
@@ -87,6 +88,7 @@ function GraphCanvasInner() {
   const [maxReais, setMaxReais] = useState("");
   const [roots, setRoots] = useState<Set<string>>(new Set());
   const boxRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<HTMLDivElement>(null);
 
   const [expandFull, setExpandFull] = useState(false);
   const [truncatedNotice, setTruncatedNotice] = useState<string | null>(null);
@@ -420,16 +422,16 @@ function GraphCanvasInner() {
   }, [nodes, visibleEdges, amountFilterActive, selected, roots]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-1)] px-6 py-4">
-        <div ref={boxRef} className="relative w-full max-w-md">
+    <div className="graph-canvas-shell flex min-h-0 flex-1 flex-col">
+      <div className="graph-toolbar flex flex-wrap items-center gap-3 border-b border-[var(--border-1)] px-6 py-4">
+        <div ref={boxRef} className="graph-search relative w-full max-w-md">
           <input
             value={q}
             onChange={(e) => onQueryChange(e.target.value)}
             onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="buscar candidato/empresa, ou colar CPF/CNPJ…"
-            className="w-full rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] px-3 py-2.5 font-mono text-[12px] text-foreground placeholder:text-[var(--muted-2)] outline-none focus:border-[var(--border-2)]"
+          className="w-full min-w-0 rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] px-3 py-2.5 font-mono text-[12px] text-foreground placeholder:text-[var(--muted-2)] outline-none focus:border-[var(--border-2)]"
           />
           {open && (searching || results.length > 0) ? (
             <div className="absolute z-20 mt-1.5 max-h-[50vh] w-full overflow-y-auto rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] shadow-2xl">
@@ -456,7 +458,7 @@ function GraphCanvasInner() {
           ) : null}
         </div>
         <label
-          className="flex items-center gap-1.5 cursor-pointer select-none"
+          className="graph-expand-toggle flex items-center gap-1.5 cursor-pointer select-none"
           title="Ao adicionar, traz TODOS os vínculos diretos desse nó (doadores, fornecedores, candidatos), não só os que conectam com o que já está na tela."
         >
           <input
@@ -467,7 +469,7 @@ function GraphCanvasInner() {
           />
           <span className="mono-label !text-[var(--muted-2)]">trazer rede inteira</span>
         </label>
-        <div className="flex items-center gap-1.5">
+        <div className="graph-amount-filter flex items-center gap-1.5">
           <span className="mono-label !text-[var(--muted-2)]">movimentação</span>
           <input
             type="number"
@@ -495,7 +497,7 @@ function GraphCanvasInner() {
             </button>
           ) : null}
         </div>
-        <span className="mono-label !text-[var(--muted-2)]">
+        <span className="graph-stats mono-label !text-[var(--muted-2)]">
           {visibleNodes.length} {visibleNodes.length === 1 ? "nó" : "nós"} · {visibleEdges.length} ligações
           {amountFilterActive ? ` (de ${nodes.length} · ${edges.length})` : ""}
         </span>
@@ -519,9 +521,12 @@ function GraphCanvasInner() {
             limpar tudo
           </button>
         ) : null}
+        {visibleNodes.length > 0 ? (
+          <GraphShareButton targetRef={graphRef} title="grafo de correlações" />
+        ) : null}
       </div>
 
-      <div className="relative flex-1">
+      <div ref={graphRef} className="graph-canvas-viewport relative flex-1">
         {nodes.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <div className="text-[18px] font-light text-[var(--muted)]">Adicione um candidato ou empresa</div>
@@ -559,7 +564,7 @@ function GraphCanvasInner() {
         )}
 
         {selectedNode ? (
-          <div className="absolute top-4 right-4 w-72 rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] p-4 shadow-2xl">
+          <div data-graph-share-ignore className="absolute top-4 right-4 w-72 rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="mono-label !text-[8.5px]">{NODE_KIND_LABEL[selectedNode.data.kind]}</div>
@@ -615,7 +620,7 @@ function GraphCanvasInner() {
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-4 border-t border-[var(--border-1)] px-6 py-3 font-mono text-[9px] tracking-[0.1em] text-[var(--muted-2)] uppercase">
+      <div className="graph-legend flex flex-wrap gap-4 border-t border-[var(--border-1)] px-6 py-3 font-mono text-[9px] tracking-[0.1em] text-[var(--muted-2)] uppercase">
         {(Object.keys(NODE_COLOR) as Array<keyof typeof NODE_COLOR>).map((k) => (
           <span key={k} className="flex items-center gap-1.5">
             <span
