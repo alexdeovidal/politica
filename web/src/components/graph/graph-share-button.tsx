@@ -85,6 +85,7 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
       const isDark = document.documentElement.getAttribute("data-theme") === "dark";
       const backgroundColor = isDark ? "#101820" : "#f3f6f8";
       const includeNode = (node: HTMLElement) => {
+        if (typeof node.closest !== "function") return true;
         if (node.closest("[data-graph-share-ignore], .react-flow__controls, .react-flow__minimap, .react-flow__panel")) {
           return false;
         }
