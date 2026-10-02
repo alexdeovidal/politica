@@ -53,6 +53,10 @@ Se `elosys.db` não existir ainda, rode o pipeline Python primeiro (ver
   mesmo grafo), com pan/zoom **limitados** (`translateExtent`) — só entre
   candidatos (`donor_person_id IS NOT NULL`), quem doou à esquerda, pra quem
   ele doou à direita, mais uma camada em cada direção.
+- `src/components/person-vote-results.tsx` — votos por eleição, município,
+  local de votação, zona e seção. Os dados usam a tabela opcional
+  `election_vote_section`, preenchida pelo comando `elosys tse-voting-sections`;
+  quando ela não existe no banco implantado, essa seção não aparece.
 - `src/components/skeleton.tsx` — o shimmer shadcn-style. Usado por
   `<FinanceTable>`, `<TopSuppliers>`, `<SearchBox>` e a busca do `/grafo`
   enquanto o fetch não volta.

@@ -446,6 +446,116 @@ export function getPersonCandidacies(personId: number): Candidacy[] {
   }));
 }
 
+export type CandidateVoteSection = {
+  municipality: string | null;
+  zoneNumber: string | null;
+  sectionNumber: string;
+  pollingPlaceNumber: string | null;
+  pollingPlaceName: string | null;
+  pollingPlaceAddress: string | null;
+  votes: number;
+  provenance: Provenance;
+};
+
+export type PersonVoteResult = {
+  historyId: number;
+  year: number;
+  round: number;
+  office: string | null;
+  state: string | null;
+  partyAbbr: string | null;
+  candidateNumber: string | null;
+  result: string | null;
+  totalVotes: number;
+  sectionCount: number;
+};
+
+export function getPersonVoteResults(personId: number): PersonVoteResult[] {
+  if (!hasTable("election_vote_section")) return [];
+
+  const rows = db()
+    .prepare(
+      `SELECT h.id AS historyId, h.year, h.round, h.office,
+              h.state, h.party_abbr AS partyAbbr, h.candidate_number AS candidateNumber, h.result,
+              (SELECT COALESCE(SUM(t.votes), 0) FROM election_vote_section t WHERE t.history_id = h.id) AS totalVotes,
+              (SELECT COUNT(*) FROM election_vote_section t WHERE t.history_id = h.id) AS sectionCount
+       FROM politician_history h
+       WHERE h.person_id = ?
+         AND EXISTS (SELECT 1 FROM election_vote_section t WHERE t.history_id = h.id)
+       ORDER BY h.year DESC, h.round DESC, h.office`
+    )
+    .all(personId) as Array<Record<string, unknown>>;
+
+  return rows.map((row) => ({
+    historyId: row.historyId as number,
+    year: row.year as number,
+    round: (row.round as number) ?? 1,
+    office: (row.office as string) ?? null,
+    state: (row.state as string) ?? null,
+    partyAbbr: (row.partyAbbr as string) ?? null,
+    candidateNumber: (row.candidateNumber as string) ?? null,
+    result: (row.result as string) ?? null,
+    totalVotes: row.totalVotes as number,
+    sectionCount: row.sectionCount as number,
+  }));
+}
+
+export function getPersonVoteSectionsPage(
+  historyId: number,
+  page: number,
+  query: string,
+): { sections: CandidateVoteSection[]; total: number; pageSize: number } {
+  const pageSize = 25;
+  if (!hasTable("election_vote_section")) return { sections: [], total: 0, pageSize };
+
+  const trimmedQuery = query.trim().slice(0, 100);
+  const filterSql = trimmedQuery
+    ? `AND (
+         COALESCE(t.municipality, '') LIKE ? ESCAPE '\\' OR
+         COALESCE(t.polling_place_name, '') LIKE ? ESCAPE '\\' OR
+         COALESCE(t.polling_place_address, '') LIKE ? ESCAPE '\\' OR
+         COALESCE(t.polling_place_number, '') LIKE ? ESCAPE '\\' OR
+         COALESCE(t.zone_number, '') LIKE ? ESCAPE '\\' OR
+         COALESCE(t.section_number, '') LIKE ? ESCAPE '\\'
+       )`
+    : "";
+  const pattern = `%${trimmedQuery.replace(/[\\%_]/g, "\\$&")}%`;
+  const filterParams = trimmedQuery ? [pattern, pattern, pattern, pattern, pattern, pattern] : [];
+  const totalRow = db()
+    .prepare(`SELECT COUNT(*) AS total FROM election_vote_section t WHERE t.history_id = ? ${filterSql}`)
+    .get(historyId, ...filterParams) as { total: number };
+  const rows = db()
+    .prepare(
+      `SELECT t.municipality, t.zone_number AS zoneNumber, t.section_number AS sectionNumber,
+              t.polling_place_number AS pollingPlaceNumber,
+              t.polling_place_name AS pollingPlaceName,
+              t.polling_place_address AS pollingPlaceAddress, t.votes,
+              ${PROVENANCE_COLUMNS}
+       FROM election_vote_section t
+       ${PROVENANCE_JOIN}
+       WHERE t.history_id = ? ${filterSql}
+       ORDER BY t.votes DESC, t.municipality COLLATE NOCASE, t.polling_place_name COLLATE NOCASE,
+                t.zone_number, t.section_number
+       LIMIT ? OFFSET ?`
+    )
+    .all(historyId, ...filterParams, pageSize, (page - 1) * pageSize) as Array<Record<string, unknown>>;
+
+  return {
+    total: totalRow.total,
+    pageSize,
+    sections: rows.map((row) => ({
+      municipality: (row.municipality as string) ?? null,
+      zoneNumber: (row.zoneNumber as string) ?? null,
+      sectionNumber: row.sectionNumber as string,
+      pollingPlaceNumber: (row.pollingPlaceNumber as string) ?? null,
+      pollingPlaceName: (row.pollingPlaceName as string) ?? null,
+      pollingPlaceAddress: (row.pollingPlaceAddress as string) ?? null,
+      votes: row.votes as number,
+      provenance: pickProvenance(row),
+    })),
+  };
+}
+
 export function getPersonCampaignOrgs(personId: number): CampaignOrg[] {
   const rows = db()
     .prepare(

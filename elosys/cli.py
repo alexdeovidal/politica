@@ -21,7 +21,7 @@ from .rules import (
 )
 from .social import x_posts
 from .transparencia import earmarks, sanctions
-from .tse import accounts, assets, candidates, photo_urls, social
+from .tse import accounts, assets, candidates, photo_urls, social, voting
 
 DEFAULT_TMP = "dados_tmp"
 log = get_logger("elosys.cli")
@@ -117,6 +117,31 @@ def _run_photo_urls(args: argparse.Namespace) -> int:
         json.dumps(report, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8")
     log.info("wrote %s and refreshed manifest.json — commit both", report_path.name)
     return 0
+
+
+def _run_tse_voting(args: argparse.Namespace) -> int:
+    db = Path(args.db)
+    create_schema(db)
+    years = [int(y) for y in args.years.split(",")] if args.years else None
+    states = [state.strip().upper() for state in args.states.split(",")] if args.states else None
+    con = connect(db, write=True)
+    try:
+        report = voting.run(con, years=years, states=states, tmp_dir=args.tmp)
+        write_manifest(con, db.with_name("manifest.json"))
+    finally:
+        con.close()
+    report_path = db.with_name("tse_voting_report.json")
+    report_path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8"
+    )
+    errors = [
+        entry
+        for year_entries in report["years"].values()
+        for entry in year_entries
+        if "error" in entry
+    ]
+    log.info("wrote %s and refreshed manifest.json", report_path.name)
+    return 1 if errors else 0
 
 
 def _run_rule(args: argparse.Namespace, module, name: str) -> int:
@@ -281,6 +306,16 @@ def main(argv: list[str] | None = None) -> int:
                          "source's bot filter blocking the IP -- raise carefully (default: %(default)s)")
     pf.add_argument("--tmp", default=DEFAULT_TMP, help="temporary download directory")
     pf.set_defaults(func=_run_photo_urls)
+
+    pvote = sub.add_parser(
+        "tse-voting-sections",
+        help="ingest TSE candidate votes by polling section, zone, municipality, and polling place",
+    )
+    pvote.add_argument("--db", default="elosys.db")
+    pvote.add_argument("--years", help="e.g. 2014,2016,2018,2020,2022,2024 (default: all available)")
+    pvote.add_argument("--states", help="comma-separated UF list (default: all; presidential archives stay nationwide)")
+    pvote.add_argument("--tmp", default=DEFAULT_TMP, help="temporary download directory")
+    pvote.set_defaults(func=_run_tse_voting)
 
     ps = sub.add_parser("transparencia-sanctions",
                         help="ingest CEIS/CNEP (Portal da Transparencia) -> sanction")

@@ -107,9 +107,26 @@ uv run elosys tse-candidates --db elosys.db      # candidaturas 2014–2026 (TSE
 uv run elosys tse-accounts   --db elosys.db      # CNPJ de campanha, doações e despesas (a etapa mais longa)
 uv run elosys tse-social     --db elosys.db      # redes sociais declaradas
 uv run elosys tse-assets     --db elosys.db      # bens declarados
+uv run elosys tse-voting-sections --db elosys.db # votos por seção/local (2014, 2016, 2018, 2020, 2022, 2024)
 uv run elosys transparencia-sanctions --db elosys.db   # CEIS/CNEP
 uv run elosys transparencia-earmarks  --db elosys.db   # emendas parlamentares
 ```
+
+`tse-voting-sections` usa os resultados nominais oficiais do TSE. Sem filtros,
+baixa os arquivos de todas as UFs e eleições disponíveis; como são arquivos
+grandes, a etapa pode demorar e aumenta o banco. Para começar com um recorte:
+
+```sh
+uv run elosys tse-voting-sections --db elosys.db --years 2024 --states SP
+```
+
+Execute `tse-candidates` antes, pois as linhas de votação são vinculadas à
+candidatura registrada. Nos anos presidenciais (2014, 2018 e 2022), o TSE publica
+um arquivo nacional separado; ele é incluído também numa coleta limitada a uma
+UF. O nome e endereço do local não constam no arquivo de 2014, então nesse ano
+a ficha mostra o número do local, a zona e a seção. Depois de importar, atualize
+o artefato `elosys.db` usado pelo site para publicar a nova tabela junto com o
+app.
 
 Se um download der HTTP 403 (filtro anti-bot da fonte), baixe o `.zip` no
 navegador, coloque em `dados_tmp/` com o nome que o log mostrou e rode o crawler

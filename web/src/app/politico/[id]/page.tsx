@@ -6,6 +6,7 @@ import {
   getPersonSocialMedia, getPersonAssets, getPersonSignals, getCycleEdgeAmounts,
   getPoliticianDonationNetwork, getDiscourseSignals, getDiscourseCount, getExpenseYears,
   getPersonPhotoUrl, getPersonPhotoProvenance, getPersonEarmarks,
+  getPersonVoteResults,
 } from "@/lib/queries";
 import { SourceZone } from "@/components/source-zone";
 import { PoliticianNetwork } from "@/components/politician-network";
@@ -16,6 +17,7 @@ import { AssetsYearCards } from "@/components/assets-year-cards";
 import { SocialCard } from "@/components/social-card";
 import { TweetCard } from "@/components/tweet-card";
 import { FinanceTable } from "@/components/finance-table";
+import { PersonVoteResults } from "@/components/person-vote-results";
 import { Skeleton } from "@/components/skeleton";
 import { PageHeader } from "@/components/shell/shell-context";
 import { YearSelect } from "@/components/ui/year-select";
@@ -115,6 +117,10 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
   
         <Suspense fallback={<SectionSkeleton id="candidaturas" title="candidaturas por eleição" rows={3} />}>
           <CandidaciesSection personId={person.id} />
+        </Suspense>
+
+        <Suspense fallback={<SectionSkeleton id="votos-por-local" title="votos por local" rows={1} />}>
+          <VotingSection personId={person.id} />
         </Suspense>
   
         <Suspense fallback={<SectionSkeleton id="bens-declarados" title="bens declarados" rows={2} />}>
@@ -294,6 +300,12 @@ async function CandidaciesSection({ personId }: { personId: number }) {
       </div>
     </Section>
   );
+}
+
+async function VotingSection({ personId }: { personId: number }) {
+  const results = getPersonVoteResults(personId);
+  if (results.length === 0) return null;
+  return <PersonVoteResults results={results} />;
 }
 
 async function AssetsSection({ personId }: { personId: number }) {

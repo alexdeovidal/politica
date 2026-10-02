@@ -289,6 +289,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_ph_candidacy
     ON politician_history (year, tse_candidacy_id, round)
     WHERE tse_candidacy_id IS NOT NULL;
 
+-- DATA: TSE candidate votes by polling section (public, aggregated counts)
+
+CREATE TABLE IF NOT EXISTS election_vote_section (
+    id                    INTEGER PRIMARY KEY,
+    history_id            INTEGER NOT NULL REFERENCES politician_history(id),
+    tse_candidacy_id      TEXT,
+    year                  INTEGER NOT NULL,
+    round                 INTEGER NOT NULL,
+    state                 TEXT,
+    municipality_code     TEXT,
+    municipality          TEXT,
+    office_code           TEXT,
+    office                TEXT,
+    candidate_number      TEXT,
+    votes                 INTEGER NOT NULL,
+    zone_number           TEXT,
+    section_number        TEXT,
+    polling_place_number  TEXT,
+    polling_place_name    TEXT,
+    polling_place_address TEXT,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL,
+    UNIQUE (history_id, year, round, municipality_code, zone_number, section_number)
+);
+CREATE INDEX IF NOT EXISTS ix_election_vote_history ON election_vote_section (history_id, year);
+CREATE INDEX IF NOT EXISTS ix_election_vote_history_votes ON election_vote_section (history_id, votes DESC);
+CREATE INDEX IF NOT EXISTS ix_election_vote_municipality
+    ON election_vote_section (year, municipality_code, zone_number, section_number);
+
 -- DERIVED DATA: detection rules (see ADs/dados_derivados.md)
 
 CREATE TABLE IF NOT EXISTS rule_run (
