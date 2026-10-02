@@ -21,7 +21,7 @@ from ..util import clean_tse, normalize_name, now_utc
 log = get_logger("elosys.tse.voting")
 
 PARSER_NAME = "tse.voting_sections"
-PARSER_VERSION = "1.1"
+PARSER_VERSION = "1.2"
 URL_TEMPLATE = (
     "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/"
     "votacao_secao_{year}_{unit}.zip"
@@ -256,7 +256,7 @@ def _ingest_csv(
             votes = _integer(_g(row, "QT_VOTOS"), 0) or 0
             if votes <= 0:
                 continue
-            if not _g(row, "SQ_CANDIDATO"):
+            if not _g(row, "SQ_CANDIDATO") and year != 2014:
                 ignored_without_candidate_id += 1
                 continue
             history_id = _match_history(row, year, by_id, by_fallback)
