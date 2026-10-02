@@ -196,7 +196,7 @@ function ElectionVote({ result, initiallyOpen }: { result: PersonVoteResult; ini
               </a>
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </details>
   );
