@@ -155,7 +155,8 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
       setPreviewUrl(URL.createObjectURL(image));
       setCanShareFile(supportsImageShare);
       setOpen(true);
-    } catch {
+    } catch (error) {
+      console.error("[Politica007] Não foi possível gerar a imagem do grafo.", error);
       setMessage("Não foi possível gerar a imagem agora. Tente novamente em instantes.");
       setOpen(true);
     } finally {
