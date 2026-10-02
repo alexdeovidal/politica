@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import re
 import sqlite3
+import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+from curl_cffi import CurlError, requests
 
 from ..log import get_logger
 from ..provenance import download, get_source, record_collection, record_parse
@@ -41,6 +47,94 @@ SOURCE = {
 }
 
 csv.field_size_limit(1 << 24)
+
+_RANGE_SIZE = 16 * 1024 * 1024
+_RANGE_WORKERS = 8
+_HEADERS = {"Accept": "*/*", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"}
+
+
+def _download_archive(url: str, dest: Path) -> tuple[int, str | None]:
+    """Use parallel byte ranges when supported; fall back to the shared downloader otherwise."""
+    try:
+        probe = requests.get(
+            url,
+            headers={**_HEADERS, "Range": "bytes=0-0"},
+            stream=True,
+            timeout=300,
+            impersonate="chrome",
+        )
+    except Exception:
+        return download(url, dest)
+    try:
+        if probe.status_code == 403:
+            raise RuntimeError(f"HTTP 403 for {url} — bloqueado pelo filtro de acesso do TSE")
+        content_range = probe.headers.get("Content-Range", "")
+        match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
+        if probe.status_code != 206 or match is None:
+            return download(url, dest)
+        total = int(match.group(1))
+        content_type = probe.headers.get("Content-Type")
+    finally:
+        probe.close()
+
+    if total <= 1:
+        return download(url, dest)
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(f"{dest.name}.part")
+    with partial.open("wb") as file:
+        file.truncate(total)
+
+    ranges = [
+        (start, min(start + _RANGE_SIZE, total) - 1)
+        for start in range(0, total, _RANGE_SIZE)
+    ]
+
+    def fetch(byte_range: tuple[int, int]) -> None:
+        start, end = byte_range
+        expected = end - start + 1
+        last_error: Exception | None = None
+        for attempt in range(4):
+            try:
+                response = requests.get(
+                    url,
+                    headers={**_HEADERS, "Range": f"bytes={start}-{end}"},
+                    stream=True,
+                    timeout=300,
+                    impersonate="chrome",
+                )
+                try:
+                    if response.status_code == 403:
+                        raise RuntimeError(f"HTTP 403 para o intervalo bytes={start}-{end}")
+                    if response.status_code >= 500 or response.status_code == 429:
+                        raise CurlError(f"HTTP {response.status_code} para bytes={start}-{end}")
+                    expected_header = f"bytes {start}-{end}/{total}"
+                    if response.status_code != 206 or response.headers.get("Content-Range") != expected_header:
+                        raise CurlError(f"Resposta inesperada para bytes={start}-{end}")
+                    chunk = bytearray()
+                    for part in response.iter_content(1 << 20):
+                        chunk.extend(part)
+                    if len(chunk) != expected:
+                        raise CurlError(f"Intervalo incompleto: esperados {expected}, recebidos {len(chunk)}")
+                finally:
+                    response.close()
+
+                with partial.open("r+b") as file:
+                    file.seek(start)
+                    file.write(chunk)
+                return
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if attempt < 3:
+                    time.sleep(5 * (2 ** attempt))
+        raise RuntimeError(f"falha ao baixar bytes={start}-{end}: {last_error}") from last_error
+
+    with ThreadPoolExecutor(max_workers=min(_RANGE_WORKERS, len(ranges))) as pool:
+        list(pool.map(fetch, ranges))
+    os.replace(partial, dest)
+    return 206, content_type
 
 _INSERT = """
 INSERT OR IGNORE INTO election_vote_section (
@@ -214,8 +308,8 @@ def _ingest_archive(
         notes = "Arquivo TSE fornecido localmente; URL canônica preservada."
         remove_after = False
     else:
-        status, content_type = download(url, zip_path)
-        notes = "Arquivo de votação por seção publicado no CDN oficial do TSE."
+        status, content_type = _download_archive(url, zip_path)
+        notes = "Arquivo de votação por seção publicado no CDN oficial do TSE; baixado em intervalos paralelos."
         remove_after = True
 
     source_id = get_source(con, **SOURCE)
@@ -272,6 +366,7 @@ def _ingest_archive(
     finally:
         if remove_after:
             zip_path.unlink(missing_ok=True)
+            zip_path.with_name(f"{zip_path.name}.part").unlink(missing_ok=True)
 
 
 def run(
