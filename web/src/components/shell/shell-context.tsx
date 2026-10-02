@@ -18,7 +18,7 @@ type Ctx = {
   setAnalysisMode: (on: boolean) => void;
 };
 
-const DEFAULT_HEADER: PageHeaderState = { group: "POLITICA", current: "" };
+const DEFAULT_HEADER: PageHeaderState = { group: "Politica007", current: "" };
 
 const ShellCtx = createContext<Ctx | null>(null);
 

@@ -26,8 +26,8 @@ export function ContributionCard() {
           <Heart size={19} />
         </span>
         <div>
-          <div className="mono-label">APOIE O POLITICA</div>
-          <h2 id="contribution-title">O POLITICA te ajudou?</h2>
+          <div className="mono-label">APOIE O POLITICA007</div>
+          <h2 id="contribution-title">O Politica007 te ajudou?</h2>
           <p>Servidores e armazenamento têm custo. Seu Pix ajuda a manter os dados atualizados e o serviço gratuito.</p>
         </div>
       </div>
@@ -112,14 +112,14 @@ export function ContributionReminder() {
   if (!open) return null;
 
   return (
-    <Modal title="UMA AJUDA PARA MANTER O POLITICA" onClose={() => setOpen(false)}>
+    <Modal title="UMA AJUDA PARA MANTER O POLITICA007" onClose={() => setOpen(false)}>
       <div className="contribution-reminder">
         <div className="contribution-reminder__lead">
           <span className="contribution-card__icon" aria-hidden="true">
             <Heart size={19} />
           </span>
           <div>
-            <h2>Ajude a manter o POLITICA gratuito</h2>
+            <h2>Ajude a manter o Politica007 gratuito</h2>
             <p>
               Reunir milhões de informações públicas e deixá-las disponíveis para todos gera custos
               com servidores, armazenamento e atualizações. Se este sistema ajudou você, qualquer
@@ -155,7 +155,7 @@ export function ContributionReminder() {
           </p>
         ) : null}
         <button type="button" className="btn contribution-reminder__dismiss" onClick={() => setOpen(false)}>
-          Continuar usando o POLITICA
+          Continuar usando o Politica007
         </button>
       </div>
     </Modal>

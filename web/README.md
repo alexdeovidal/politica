@@ -1,4 +1,4 @@
-# EloSys — web (busca de candidatos)
+# Politica007 — portal independente de dados públicos
 
 App Next.js, **só leitura**. Não escreve no banco, não roda os crawlers — isso é
 trabalho do pipeline Python em [`/elosys`](../README.md). Este app só abre

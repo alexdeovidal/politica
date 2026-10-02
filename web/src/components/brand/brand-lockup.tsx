@@ -18,10 +18,10 @@ export function BrandMark({ className = "" }: { className?: string }) {
 
 export function BrandLockup({ className = "" }: { className?: string }) {
   return (
-    <Link href="/" className={`brand-lockup ${className}`.trim()} aria-label="POLITICA — portal independente de dados públicos">
+    <Link href="/" className={`brand-lockup ${className}`.trim()} aria-label="Politica007 — portal independente de dados públicos">
       <BrandMark />
       <span className="brand-lockup__copy">
-        <strong>POLITICA</strong>
+        <strong>Politica007</strong>
         <small>PORTAL DE DADOS PÚBLICOS</small>
       </span>
     </Link>

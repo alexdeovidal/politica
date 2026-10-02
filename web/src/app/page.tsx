@@ -28,7 +28,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
-        group="POLITICA"
+        group="Politica007"
         current="Início"
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
@@ -85,7 +85,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <div className="card animate-in max-w-2xl" style={{ animationDelay: "220ms" }}>
         <div className="label mb-3">indício não é prova</div>
         <p className="text-[13.5px] leading-relaxed text-[var(--muted)]">
-          O POLITICA reúne dados que já são públicos por lei (registro de candidatura do TSE,
+          O Politica007 reúne dados que já são públicos por lei (registro de candidatura do TSE,
           prestação de contas eleitorais, redes sociais declaradas) e os organiza por pessoa. Nada
           aqui é acusação — é o dado bruto oficial, com a fonte exposta em cada campo, para que
           qualquer um confira e vá além se quiser apurar.

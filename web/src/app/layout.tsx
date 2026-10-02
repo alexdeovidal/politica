@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "POLITICA — portal independente de dados públicos",
+  title: "Politica007 — portal independente de dados públicos",
   description:
     "Portal independente para consultar dados públicos eleitorais por CPF/CNPJ, com fontes identificadas. Não é um serviço oficial do TSE ou do Governo.",
 };
