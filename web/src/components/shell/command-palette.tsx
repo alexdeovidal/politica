@@ -31,7 +31,7 @@ export function useCommandPaletteShortcut() {
 }
 
 export function CommandPalette() {
-  const { setPaletteOpen } = useShell();
+  const { aiReviewEnabled, setPaletteOpen } = useShell();
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -75,7 +75,11 @@ export function CommandPalette() {
     router.push(href);
   };
 
-  const shortcuts = SHORTCUTS.filter((s) => s.label.toLowerCase().includes(trimmed.toLowerCase()));
+  const shortcuts = SHORTCUTS.filter(
+    (s) =>
+      (aiReviewEnabled || s.href !== "/sinais/analise-ia") &&
+      s.label.toLowerCase().includes(trimmed.toLowerCase())
+  );
 
   return (
     <div className="palette__backdrop" onClick={() => setPaletteOpen(false)}>

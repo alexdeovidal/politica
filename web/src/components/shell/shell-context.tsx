@@ -9,6 +9,7 @@ export type PageHeaderState = {
 };
 
 type Ctx = {
+  aiReviewEnabled: boolean;
   header: PageHeaderState;
   setHeader: (h: PageHeaderState) => void;
   paletteOpen: boolean;
@@ -21,13 +22,21 @@ const DEFAULT_HEADER: PageHeaderState = { group: "POLITICA", current: "" };
 
 const ShellCtx = createContext<Ctx | null>(null);
 
-export function ShellProvider({ children }: { children: ReactNode }) {
+export function ShellProvider({
+  children,
+  aiReviewEnabled,
+}: {
+  children: ReactNode;
+  aiReviewEnabled: boolean;
+}) {
   const [header, setHeader] = useState<PageHeaderState>(DEFAULT_HEADER);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [analysisMode, setAnalysisMode] = useState(false);
 
   return (
-    <ShellCtx.Provider value={{ header, setHeader, paletteOpen, setPaletteOpen, analysisMode, setAnalysisMode }}>
+    <ShellCtx.Provider
+      value={{ aiReviewEnabled, header, setHeader, paletteOpen, setPaletteOpen, analysisMode, setAnalysisMode }}
+    >
       {children}
     </ShellCtx.Provider>
   );

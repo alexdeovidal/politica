@@ -32,6 +32,7 @@ try {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   const counts = getSidebarCounts();
+  const aiReviewEnabled = Boolean(process.env.DEEPSEEK_API_KEY?.trim());
 
   return (
     <html
@@ -43,7 +44,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full bg-background text-foreground font-sans">
-        <AppShell counts={counts}>{children}</AppShell>
+        <AppShell counts={counts} aiReviewEnabled={aiReviewEnabled}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );

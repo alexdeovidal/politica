@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getAiReviewCount, getAiReviews, getAiReviewSummary, type AiVerdict } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -30,6 +31,8 @@ const RULES = [
 ];
 
 export default async function AnaliseIaPage({ searchParams }: PageProps<"/sinais/analise-ia">) {
+  if (!process.env.DEEPSEEK_API_KEY?.trim()) notFound();
+
   const sp = await searchParams;
   const verdictParam = typeof sp.verdict === "string" ? sp.verdict : undefined;
   const verdict = VERDICTS.includes(verdictParam as AiVerdict) ? (verdictParam as AiVerdict) : undefined;

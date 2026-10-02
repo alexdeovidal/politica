@@ -7,9 +7,17 @@ import { ShellProvider } from "./shell-context";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 
-export function AppShell({ counts, children }: { counts: SidebarCounts; children: ReactNode }) {
+export function AppShell({
+  counts,
+  aiReviewEnabled,
+  children,
+}: {
+  counts: SidebarCounts;
+  aiReviewEnabled: boolean;
+  children: ReactNode;
+}) {
   return (
-    <ShellProvider>
+    <ShellProvider aiReviewEnabled={aiReviewEnabled}>
       <div className="shell-layout">
         <Sidebar counts={counts} />
         <div className="shell-main">

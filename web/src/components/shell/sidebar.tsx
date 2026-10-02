@@ -9,7 +9,7 @@ type NavLink = { href: string; label: string; count?: number; alert?: boolean };
 
 export function Sidebar({ counts }: { counts: SidebarCounts }) {
   const pathname = usePathname();
-  const { setPaletteOpen } = useShell();
+  const { aiReviewEnabled, setPaletteOpen } = useShell();
 
   const top: NavLink[] = [
     { href: "/", label: "Início" },
@@ -21,7 +21,7 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
     { href: "/sinais/doacao-circular", label: "Doação circular", count: counts.circularDonations, alert: true },
     { href: "/sinais/despesa-desproporcional", label: "Despesa desproporcional", count: counts.disproportionateExpense },
     { href: "/sinais/socio-fornecedor", label: "Sócio de fornecedor", count: counts.supplierPartner },
-    { href: "/sinais/analise-ia", label: "Análise de IA", count: counts.aiReview },
+    ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise de IA", count: counts.aiReview }] : []),
     { href: "/sinais/discurso", label: "Discurso em rede social", count: counts.discourse, alert: true },
   ];
 
