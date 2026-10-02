@@ -21,7 +21,7 @@ from ..util import clean_tse, normalize_name, now_utc
 log = get_logger("elosys.tse.voting")
 
 PARSER_NAME = "tse.voting_sections"
-PARSER_VERSION = "1.0"
+PARSER_VERSION = "1.1"
 URL_TEMPLATE = (
     "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/"
     "votacao_secao_{year}_{unit}.zip"
@@ -241,10 +241,11 @@ def _ingest_csv(
     parse_id: int,
     by_id: dict[tuple[str, int], int],
     by_fallback: dict[tuple, list[int]],
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     staged: list[dict] = []
     imported = 0
     rejected = 0
+    ignored_without_candidate_id = 0
     collected_at = now_utc()
     with archive.open(filename) as raw:
         reader = csv.DictReader(
@@ -254,6 +255,9 @@ def _ingest_csv(
             row = {key.strip().lstrip("\ufeff"): value for key, value in source_row.items() if key}
             votes = _integer(_g(row, "QT_VOTOS"), 0) or 0
             if votes <= 0:
+                continue
+            if not _g(row, "SQ_CANDIDATO"):
+                ignored_without_candidate_id += 1
                 continue
             history_id = _match_history(row, year, by_id, by_fallback)
             if history_id is None:
@@ -292,7 +296,7 @@ def _ingest_csv(
         if staged:
             con.executemany(_INSERT, staged)
             imported += len(staged)
-    return imported, rejected
+    return imported, rejected, ignored_without_candidate_id
 
 
 def _ingest_archive(
@@ -351,18 +355,30 @@ def _ingest_archive(
                 "WHERE old.url = ? AND old.id != ?)",
                 (url, collection_id),
             )
+            con.execute(
+                "DELETE FROM election_vote_section WHERE provenance_id IN "
+                "(SELECT id FROM parse WHERE collection_id = ? AND parser_name = ? "
+                "AND parser_version != ?)",
+                (collection_id, PARSER_NAME, PARSER_VERSION),
+            )
             with zipfile.ZipFile(zip_path) as archive:
                 members = _csv_members(archive, unit)
                 if len(members) != 1:
                     raise ValueError(f"Esperado um CSV de votação em {zip_path.name}; encontrados {len(members)}")
-                imported, rejected = _ingest_csv(
+                imported, rejected, ignored_without_candidate_id = _ingest_csv(
                     con, archive, members[0], year, parse_id, by_id, by_fallback
                 )
             con.execute(
                 "UPDATE parse SET rows_extracted = ?, rows_rejected = ? WHERE id = ?",
-                (imported, rejected, parse_id),
+                (imported, rejected + ignored_without_candidate_id, parse_id),
             )
-        return {"unit": unit, "already_collected": False, "rows": imported, "unmatched": rejected}
+        return {
+            "unit": unit,
+            "already_collected": False,
+            "rows": imported,
+            "unmatched": rejected,
+            "ignored_without_candidate_id": ignored_without_candidate_id,
+        }
     finally:
         if remove_after:
             zip_path.unlink(missing_ok=True)
@@ -401,8 +417,11 @@ def run(
                     log.info("  %s: arquivo já integrado (%s linhas)", unit, f"{result['rows']:,}")
                 else:
                     log.info(
-                        "  %s: %s registros de candidato; %s sem vínculo",
-                        unit, f"{result['rows']:,}", f"{result['unmatched']:,}",
+                        "  %s: %s votos nominais; %s sem vínculo; %s sem candidatura ignorados",
+                        unit,
+                        f"{result['rows']:,}",
+                        f"{result['unmatched']:,}",
+                        f"{result['ignored_without_candidate_id']:,}",
                     )
             except Exception as exc:
                 log.error("  %s: %s", unit, exc)
