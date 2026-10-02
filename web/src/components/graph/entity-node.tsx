@@ -86,7 +86,11 @@ function getEntityInitials(label: string): string {
   const words = normalized
     .split(" ")
     .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
-    .filter((word) => word && !INITIALS_IGNORED_WORDS.has(word.toLocaleLowerCase("pt-BR")));
+    .filter((word) =>
+      word &&
+      !/^\p{N}+$/u.test(word) &&
+      !INITIALS_IGNORED_WORDS.has(word.toLocaleLowerCase("pt-BR"))
+    );
   const usefulWords = words.length > 0 ? words : normalized.split(" ");
   if (usefulWords.length === 1) return Array.from(usefulWords[0]).slice(0, 2).join("").toLocaleUpperCase("pt-BR");
   return usefulWords.slice(0, 2).map((word) => Array.from(word)[0]).join("").toLocaleUpperCase("pt-BR");
