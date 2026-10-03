@@ -69,13 +69,33 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
 
   const digits = digitsOnly(query);
   const looksLikeCpf = digits.length >= 6 && digits.length <= 11;
+  const normalizedQuery = normalizeName(query).replace(/[^A-Z0-9]+/g, " ").trim();
+  const nameTokens = [...new Set(normalizedQuery.split(" ").filter(Boolean))];
+  if (!looksLikeCpf && nameTokens.length === 0) return [];
+
+  // Match every typed name fragment independently, regardless of order or missing middle names.
+  const nameRank = looksLikeCpf
+    ? "0"
+    : `CASE
+        WHEN canonical_name = ? THEN 0
+        WHEN substr(canonical_name, 1, length(?)) = ? THEN 1
+        WHEN instr(canonical_name, ?) > 0 THEN 2
+        ELSE 3
+      END`;
+  const matchWhere = looksLikeCpf
+    ? "cpf LIKE ?"
+    : nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ");
+  const matchParams = looksLikeCpf
+    ? [`${digits}%`, limit * 4]
+    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens, limit * 4];
 
   // LIMIT in `matches` first; per-row latest-candidacy lookup avoids a full-table window function
   const sql = `
     WITH matches AS (
-      SELECT id, canonical_name, cpf, cpf_trusted
+      SELECT id, canonical_name, cpf, cpf_trusted, ${nameRank} AS nameRank
       FROM people
-      WHERE ${looksLikeCpf ? "cpf LIKE ?" : "canonical_name LIKE ?"}
+      WHERE ${matchWhere}
+      ORDER BY nameRank ASC, length(canonical_name) ASC, canonical_name ASC
       LIMIT ?
     )
     SELECT
@@ -91,10 +111,9 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
       ORDER BY year DESC, round DESC
       LIMIT 1
     )
-    ORDER BY l.year DESC
+    ORDER BY m.nameRank ASC, l.year DESC, m.canonical_name ASC
   `;
-  const pattern = looksLikeCpf ? `${digits}%` : `%${normalizeName(query)}%`;
-  const candidateRows = (db().prepare(sql).all(pattern, limit * 4) as Array<Record<string, unknown>>)
+  const candidateRows = (db().prepare(sql).all(...matchParams) as Array<Record<string, unknown>>)
     .slice(0, limit);
   const candidatePhotoUrls = batchPhotoUrls(candidateRows.map((r) => r.personId as number));
   const candidates: SearchResult[] = candidateRows.map((r) => ({
