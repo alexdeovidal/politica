@@ -10,6 +10,7 @@ from ..util import now_utc
 def run(db_path:Path):
     with closing(connect(db_path)) as con:
         con.execute('PRAGMA busy_timeout=60000')
+        con.execute('BEGIN')
         sources=[dict(row) for row in con.execute('SELECT s.name,s.agency,max(c.accessed_at) AS last_collected_at,count(c.id) AS collections FROM source s LEFT JOIN collection c ON c.source_id=s.id GROUP BY s.id ORDER BY s.name')]
         years=[dict(row) for row in con.execute('SELECT year,count(*) AS candidacies,count(DISTINCT person_id) AS people FROM politician_history GROUP BY year ORDER BY year')]
         missing=[dict(row) for row in con.execute('SELECT year,count(*) AS missing_values FROM declared_assets WHERE value_cents IS NULL GROUP BY year')]
