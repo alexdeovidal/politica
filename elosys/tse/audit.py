@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import logging
 from contextlib import closing
 from pathlib import Path
 from ..db import connect
@@ -19,8 +20,10 @@ def run(db_path:Path):
         account_mismatch=con.execute('SELECT count(*) FROM campaign_org co JOIN companies c ON c.id=co.company_id WHERE co.cnpj IS NOT NULL AND co.cnpj<>c.cnpj').fetchone()[0]
         financial=[dict(row) for row in con.execute('SELECT year,count(*) AS records,sum(amount_cents) AS contracted_cents FROM campaign_expense GROUP BY year ORDER BY year')]
         paid=[dict(row) for row in con.execute('SELECT year,count(*) AS installments,sum(amount_cents) AS reported_paid_cents FROM campaign_expense_payment GROUP BY year ORDER BY year')]
-        votes=[dict(row) for row in con.execute('SELECT year,round,count(*) AS sections,sum(votes) AS votes FROM election_vote_section GROUP BY year,round ORDER BY year,round')]
-        invalid_votes=con.execute('SELECT count(*) FROM election_vote_section WHERE votes<0').fetchone()[0]
+        logging.warning('Audit: aggregating vote totals with sequential scan')
+        votes=[dict(row) for row in con.execute('SELECT year,round,count(*) AS sections,sum(votes) AS votes,sum(CASE WHEN votes<0 THEN 1 ELSE 0 END) AS invalid FROM election_vote_section NOT INDEXED GROUP BY year,round ORDER BY year,round')]
+        invalid_votes=sum(row.pop('invalid') or 0 for row in votes)
+        logging.warning('Audit: vote reconciliation completed')
         cases=[dict(row) for row in con.execute('SELECT source_dataset_year,count(*) AS cases FROM electoral_case GROUP BY source_dataset_year ORDER BY source_dataset_year')]
     return {'checked_at':now_utc(),'mode':'read_only','sources':sources,'candidacies':years,'assets_missing':missing,'contracted':financial,'paid_installments':paid,'votes':votes,'cases':cases,'flags':{'duplicate_public_cpfs':cpf_duplicates,'parse_file_collection_mismatches':provenance_mismatch,'campaign_cnpj_mismatches':account_mismatch,'negative_vote_records':invalid_votes},'limitations':'Reconciliation of collected records and source metadata; does not certify every original TSE row or unpublished record. Null asset values are not zero; contracted and paid amounts are separate.'}
 
