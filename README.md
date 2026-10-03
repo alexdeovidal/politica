@@ -108,6 +108,7 @@ uv run elosys tse-accounts   --db elosys.db      # CNPJ de campanha, doações e
 uv run elosys tse-social     --db elosys.db      # redes sociais declaradas
 uv run elosys tse-assets     --db elosys.db      # bens declarados
 uv run elosys tse-voting-sections --db elosys.db # votos por seção/local (2014, 2016, 2018, 2020, 2022, 2024)
+uv run elosys tse-processual --db elosys.db      # processos eleitorais públicos e decisões (2018–2026)
 uv run elosys transparencia-sanctions --db elosys.db   # CEIS/CNEP
 uv run elosys transparencia-earmarks  --db elosys.db   # emendas parlamentares
 ```
@@ -221,6 +222,8 @@ governo. O banco é um artefato descartável; a prova de integridade fica no
 | `campaign_donation` | Cada doação recebida: quem doou (CPF/CNPJ, nome), quanto, quando, por qual via | `tse-accounts` |
 | `campaign_expense` | Cada despesa contratada: pra quem a campanha pagou, quanto, por qual serviço | `tse-accounts` |
 | `campaign_expense_payment` | Quando cada despesa foi de fato paga (pode ser em parcelas) | `tse-accounts` |
+| `electoral_case` / `electoral_case_candidate` | Processo eleitoral público e parte candidata ligada pelo `SQ_CANDIDATO` | `tse-processual` |
+| `electoral_case_subject` / `electoral_case_decision` / `electoral_case_appeal` | Assuntos, decisões e recursos do processo eleitoral | `tse-processual` |
 | `social_media` | Redes sociais/site declarados no registro da candidatura (URL + rede detectada) | `tse-social` |
 | `declared_assets` | Bens declarados no registro da candidatura (tipo, descrição, valor) | `tse-assets` |
 | `company_registry` / `company_partner` | Data de abertura, situação cadastral e sócios de um CNPJ | `receita-cnpj` (incremental) |
@@ -334,10 +337,11 @@ As decisões estão em [`ADs/`](ADs/), uma por assunto. Resumo:
 | TSE — `rede_social_candidato` | Redes sociais/site declarados no registro (obrigatório desde a Res. 23.610/2019) | ✅ coletado (2018–2026) |
 | X/Twitter (via Apify) | Posts/replies de contas **declaradas ao TSE**, filtrados por léxico e triados por LLM (`social-x` + `social-review`, ver ADs/dados_derivados.md §1.4) | ✅ eleitos federais |
 | TSE — `bem_candidato` | Bens declarados no registro (base do sinal de patrimônio) | ✅ coletado (2014–2026) |
+| TSE/SJD — `Processual` | Processos eleitorais, partes, assuntos, decisões e recursos | ✅ coletor disponível (2018–2026); associação de partes pelo `SQ_CANDIDATO` |
 | TSE — `foto_cand` (DivulgaCandContas, busca por CPF) | Foto oficial por candidatura | ✅ coletado (parcial, incremental — ver ADs/politician.md §5) |
 | TSE — DivulgaCandContas | Certidões criminais | ⬜ pendente |
 | Receita Federal (BrasilAPI) | Quadro societário de CNPJ, data de abertura, capital | ✅ coletado (incremental — não é rewrite-only, ver ADs/politician.md §2.3) |
-| CNJ — DataJud | Metadados de processos judiciais públicos | ⛔ inviável pela API pública — ver nota abaixo |
+| CNJ — DataJud | Metadados de processos judiciais públicos | ⛔ não permite identificar todos os processos de uma pessoa física com segurança — ver nota abaixo |
 | Portal da Transparência — CEIS/CNEP | Empresas/pessoas impedidas de contratar com o governo ou punidas por corrupção | ✅ coletado (snapshot diário) |
 | Portal da Transparência — contratos/emendas | Contratos, convênios, emendas parlamentares | ⬜ pendente |
 | Câmara / Senado — dados abertos | Mandatos em exercício, votações, cota parlamentar (CEAP) | ⬜ pendente |
@@ -345,26 +349,30 @@ As decisões estão em [`ADs/`](ADs/), uma por assunto. Resumo:
 **Não coletamos** (protegido / sigiloso): endereço residencial, telefone e e-mail
 pessoal de candidatos; antecedentes fora de processo público; relatórios do COAF.
 
-### Por que "quantidade de processos judiciais por candidato" não dá pra fazer (hoje)
+### Processos eleitorais e limite da cobertura nacional
 
-Pesquisamos a API Pública do DataJud (CNJ) especificamente pra isso. Conclusão:
-**os documentos que ela devolve não têm nome, CPF nem CNPJ das partes** — só
-metadado processual (`numeroProcesso`, `tribunal`, `classe`, `assuntos`,
-`orgaoJulgador`, `movimentos`, datas). O glossário oficial da API
-([datajud-wiki.cnj.jus.br/api-publica/glossario](https://datajud-wiki.cnj.jus.br/api-publica/glossario/))
-não lista nenhum campo de parte — é proposital, por sigilo (Portaria CNJ
-160/2020). Sem CPF/nome no índice, **não dá pra buscar "todos os processos do
-candidato X"** por essa API; ela só serve se você já sabe o número do
-processo, ou quer estatística agregada (quantos processos por classe/tribunal
-no geral), não "quantos processos tem essa pessoa".
+O Portal de Dados Abertos do TSE publica arquivos oficiais do conjunto
+[`Processual`](https://dadosabertos.tse.jus.br/pt_BR/dataset/?groups=processual)
+para os pleitos de 2018, 2020, 2022, 2024 e 2026. Os arquivos incluem processo,
+partes, assuntos, decisões e recursos, e a licença indicada é Creative Commons
+Atribuição. O coletor `elosys tse-processual` importa esses dados para o banco e
+liga a parte candidata ao perfil por `SQ_CANDIDATO` e ano da candidatura — nunca
+por semelhança de nome. O perfil mostra o número, órgão, classe, assuntos,
+participação, decisões e recursos com proveniência e link direto para o processo
+no PJe. Processos sob sigilo não aparecem no conjunto público.
 
-A alternativa real seria raspar a consulta processual pública de cada tribunal
-(TJ/TRF/TRT etc.) individualmente por nome — 90+ tribunais, sem padrão comum de
-resposta, boa parte também mascara ou omite nome em processos sigilosos, e é
-exatamente o tipo de fonte "não reprodutível" que já discutimos em
-[`ADs/confiabilidade.md`](ADs/confiabilidade.md) §2. Não está no radar de
-próximos passos por isso — é trabalho de raspagem massivo pra um retorno
-incerto, não uma tarde de crawler.
+Isso cobre a Justiça Eleitoral e os pleitos para os quais o TSE mantém esses
+arquivos. **Não é uma lista de todos os processos cíveis, criminais,
+trabalhistas, federais ou estaduais de cada pessoa.** A API Pública do DataJud
+centraliza metadados processuais, mas a regra vigente especifica os polos quando
+são pessoas jurídicas e exclui ou anonimiza casos em segredo de justiça. Além
+disso, seus termos vedam distribuição ou exploração comercial dos dados. Por
+isso ela não é uma fonte adequada para construir uma lista pessoal completa no
+Politica007. Consulte também a [Portaria CNJ nº 374/2026](https://atos.cnj.jus.br/atos/detalhar/6972).
+
+Não associamos casos de outras bases a uma pessoa apenas porque o nome coincide:
+isso confundiria homônimos. E a presença de um processo não significa culpa ou
+condenação; os detalhes e decisões devem ser lidos no registro oficial.
 
 ## Premissa legal e ética
 

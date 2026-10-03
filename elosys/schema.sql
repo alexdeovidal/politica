@@ -610,3 +610,111 @@ CREATE TABLE IF NOT EXISTS social_post_review (
     UNIQUE (social_post_id, model)
 );
 CREATE INDEX IF NOT EXISTS ix_social_post_review_sev ON social_post_review (severity);
+
+-- DATA: public electoral proceedings published by TSE (Processual datasets)
+
+CREATE TABLE IF NOT EXISTS electoral_case (
+    id                    INTEGER PRIMARY KEY,
+    case_number           TEXT NOT NULL UNIQUE,
+    source_dataset_year   INTEGER NOT NULL, -- election dataset that supplied the latest row
+    filed_at              TEXT,
+    closed_at             TEXT,
+    origin_state          TEXT,
+    origin_instance       INTEGER,
+    court_state           TEXT,
+    instance              INTEGER,
+    distributed_at        TEXT,
+    distribution_type     TEXT,
+    reporter_name         TEXT,
+    class_code            TEXT,
+    class_abbr            TEXT,
+    class_name            TEXT,
+    main_subject_code     TEXT,
+    main_subject          TEXT,
+    is_appeal             INTEGER,
+    decision_count        INTEGER,
+    last_decision_at      TEXT,
+    last_decision_type    TEXT,
+    source_url            TEXT,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_number ON electoral_case (case_number);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_dataset_year ON electoral_case (source_dataset_year);
+
+CREATE TABLE IF NOT EXISTS electoral_case_candidate (
+    id                    INTEGER PRIMARY KEY,
+    case_id               INTEGER NOT NULL REFERENCES electoral_case(id) ON DELETE CASCADE,
+    person_id             INTEGER NOT NULL REFERENCES people(id),
+    tse_candidacy_id      TEXT NOT NULL,
+    candidacy_year        INTEGER NOT NULL,
+    pole                  TEXT,
+    party_type            TEXT,
+    party_name            TEXT,
+    social_name           TEXT,
+    is_main_party         INTEGER,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL,
+    UNIQUE (case_id, person_id, tse_candidacy_id, candidacy_year, pole, party_type)
+);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_candidate_person
+    ON electoral_case_candidate (person_id, case_id);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_candidate_tse
+    ON electoral_case_candidate (candidacy_year, tse_candidacy_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_electoral_case_candidate_party
+    ON electoral_case_candidate (
+        case_id, person_id, tse_candidacy_id, candidacy_year,
+        COALESCE(pole, ''), COALESCE(party_type, ''), COALESCE(party_name, '')
+    );
+
+CREATE TABLE IF NOT EXISTS electoral_case_subject (
+    id                    INTEGER PRIMARY KEY,
+    case_id               INTEGER NOT NULL REFERENCES electoral_case(id) ON DELETE CASCADE,
+    subject_code          TEXT,
+    subject               TEXT NOT NULL,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL,
+    UNIQUE (case_id, subject_code, subject)
+);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_subject_case ON electoral_case_subject (case_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_electoral_case_subject_value
+    ON electoral_case_subject (case_id, COALESCE(subject_code, ''), subject);
+
+CREATE TABLE IF NOT EXISTS electoral_case_decision (
+    id                    INTEGER PRIMARY KEY,
+    case_id               INTEGER NOT NULL REFERENCES electoral_case(id) ON DELETE CASCADE,
+    decision_sequence     TEXT,
+    decided_at            TEXT,
+    author_name           TEXT,
+    decision_type         TEXT,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL,
+    UNIQUE (case_id, decision_sequence, decided_at, decision_type)
+);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_decision_case
+    ON electoral_case_decision (case_id, decided_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_electoral_case_decision_value
+    ON electoral_case_decision (
+        case_id, COALESCE(decision_sequence, ''), COALESCE(decided_at, ''),
+        COALESCE(decision_type, ''), COALESCE(author_name, '')
+    );
+
+CREATE TABLE IF NOT EXISTS electoral_case_appeal (
+    id                    INTEGER PRIMARY KEY,
+    case_id               INTEGER NOT NULL REFERENCES electoral_case(id) ON DELETE CASCADE,
+    appeal_id             TEXT NOT NULL,
+    filed_at              TEXT,
+    closed_at             TEXT,
+    court_state           TEXT,
+    instance              INTEGER,
+    class_name            TEXT,
+    appeal_type           TEXT,
+    appeal_nature          TEXT,
+    last_decision_at      TEXT,
+    last_decision_type    TEXT,
+    reporter_name         TEXT,
+    provenance_id         INTEGER NOT NULL REFERENCES parse(id),
+    collected_at          TEXT NOT NULL,
+    UNIQUE (case_id, appeal_id)
+);
+CREATE INDEX IF NOT EXISTS ix_electoral_case_appeal_case ON electoral_case_appeal (case_id);
