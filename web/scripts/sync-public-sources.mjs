@@ -21,7 +21,7 @@ if(!locked){console.log('PNCP: uma atualização já está em execução');db.cl
 let updated=0;
 try{
  // Recheck the latest three days, including late changes. Historical coverage advances durably.
- for(let offset=2;offset>=0;offset--){const day=new Date(Date.parse(today+'T12:00:00Z')-offset*86400000).toISOString().slice(0,10);for(let page=1;page<=100;page++){const r=await collect(day,page,true);updated+=r.count;if(!r.next)break;if(page===100)throw Error('Janela recente excedeu 100 páginas; aumente a capacidade sem declarar a cobertura completa.');}}
+ for(let offset=2;offset>=0;offset--){const day=new Date(Date.parse(today+'T12:00:00Z')-offset*86400000).toISOString().slice(0,10);for(let page=1;page<=1000;page++){const r=await collect(day,page,true);updated+=r.count;if(!r.next)break;if(page===1000)throw Error('Janela recente excedeu 1000 páginas; aumente a capacidade sem declarar a cobertura completa.');}}
  const cursor=getState();for(let i=0;i<60&&cursor.day<today;i++){const r=await collect(cursor.day,cursor.page);updated+=r.count;if(r.next)cursor.page++;else{cursor.day=nextDay(cursor.day);cursor.page=1;}setState(cursor);}
  db.prepare('INSERT INTO sync_run(source,status,checked_at,changed_at,detail) VALUES(?,?,?,?,?)').run('PNCP','success',new Date().toISOString(),updated?new Date().toISOString():null,JSON.stringify({rows:updated,historicalCursor:cursor,latestWindowDays:3}));
  console.log(JSON.stringify({source:'PNCP',status:'success',rows:updated,historicalCursor:cursor}));
