@@ -150,6 +150,8 @@ export function CommandPalette() {
                     {r.canonicalName}
                     <span className="palette__group">empresa</span>
                   </button>
+                ) : r.kind === "socio" ? (
+                  <button key={`s-${r.partnerId}`} type="button" className="palette__row" onClick={()=>go(`/socios/${r.partnerId}`)}><SearchAvatar photoUrl={null} name={r.canonicalName}/>{r.canonicalName}<span className="palette__group">Sócio · {r.companyName}</span></button>
                 ) : (
                   <button
                     key={`p-${r.cpf}`}

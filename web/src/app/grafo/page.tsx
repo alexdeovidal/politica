@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function GrafoPage() {
   return (
-    <main className="flex h-full flex-col">
+    <main className="flex min-h-0 flex-1 flex-col">
       <PageHeader group="Politica007" current="Grafo de correlações" />
       {/* useSearchParams in GraphCanvas requires a Suspense boundary. */}
       <Suspense fallback={null}>

@@ -47,6 +47,7 @@ function officialSourceUrl(provenance: Provenance): string {
 }
 
 function sourceLabel(provenance: Provenance): string {
+  if (/brasilapi/i.test(provenance.url)) return "Receita · via BrasilAPI";
   return /TSE|Tribunal Superior Eleitoral/i.test(`${provenance.agency} ${provenance.sourceName}`)
     ? "Fonte oficial TSE"
     : "Fonte oficial";
@@ -57,6 +58,8 @@ function SourceLink({ provenance, inline = false }: { provenance: Provenance; in
   return (
     <a
       className={`source-link${inline ? " source-link--inline" : ""}`}
+      data-source-date={provenance.accessedAt}
+      data-source-url={provenance.url}
       href={url}
       target="_blank"
       rel="noopener noreferrer"

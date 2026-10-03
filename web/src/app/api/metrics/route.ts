@@ -1,0 +1,4 @@
+import {allowedOrigin} from "@/lib/platform/origin";
+import {platformStore,rateLimit} from "@/lib/platform/store";
+export const dynamic="force-dynamic";
+export async function POST(request:Request){if(!allowedOrigin(request,true))return new Response(null,{status:403});if(!rateLimit(request,"metrics",30))return new Response(null,{status:429});const b=await request.json().catch(()=>null);if(!b||!["view","second_profile","share","referral","return"].includes(b.event)||!["profile","company","comparison","region","graph","other"].includes(b.area))return new Response(null,{status:400});platformStore().prepare("INSERT INTO metric VALUES(?,?,?,1) ON CONFLICT(day,event,area) DO UPDATE SET count=count+1").run(new Date().toISOString().slice(0,10),b.event,b.area);return new Response(null,{status:204});}

@@ -31,6 +31,8 @@ export function PersonElectoralCases({
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [status,setStatus]=useState("");
+  const [pole,setPole]=useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [searchRetry, setSearchRetry] = useState(0);
@@ -49,6 +51,7 @@ export function PersonElectoralCases({
       setSearchError(false);
       const params = new URLSearchParams({ personId: String(personId), offset: "0" });
       if (search.trim()) params.set("q", search.trim());
+      if(status)params.set("status",status);if(pole)params.set("pole",pole);
 
       fetch(`/api/person-electoral-cases?${params}`, { signal: controller.signal, cache: "no-store" })
         .then((response) => {
@@ -73,7 +76,7 @@ export function PersonElectoralCases({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [personId, search, searchRetry]);
+  }, [personId, search, searchRetry,status,pole]);
 
   function onSearch(value: string) {
     loadMoreController.current?.abort();
@@ -97,6 +100,7 @@ export function PersonElectoralCases({
     try {
       const params = new URLSearchParams({ personId: String(personId), offset: String(cases.length) });
       if (search.trim()) params.set("q", search.trim());
+      if(status)params.set("status",status);if(pole)params.set("pole",pole);
       const response = await fetch(`/api/person-electoral-cases?${params}`, {
         cache: "no-store",
         signal: controller.signal,
@@ -136,6 +140,7 @@ export function PersonElectoralCases({
         carregue os demais quando quiser.
       </p>
 
+      {data.available && <div className="platform-form mb-4"><label>Situação<select value={status} onChange={e=>{setStatus(e.target.value);onSearch(search);}}><option value="">Todas</option><option value="open">Sem baixa informada</option><option value="closed">Com baixa informada</option></select></label><label>Papel na causa<input value={pole} placeholder="Polo conforme informado pelo TSE" maxLength={50} onChange={e=>{setPole(e.target.value);onSearch(search);}}/></label></div>}
       {data.available ? (
         <label className="input mb-4 min-h-10 w-full sm:max-w-xl">
           <Search className="h-4 w-4 shrink-0 text-[var(--muted-2)]" aria-hidden="true" />
@@ -243,7 +248,7 @@ function CaseCard({ item }: { item: PublicElectoralCase }) {
 
   return (
     <details className="group card !p-0">
-        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden sm:px-5">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden sm:px-5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-1)] bg-[var(--surface-2)] text-[var(--accent-2)]">
             <Scale className="h-4 w-4" aria-hidden="true" />
           </span>
@@ -251,9 +256,11 @@ function CaseCard({ item }: { item: PublicElectoralCase }) {
             <span className="block truncate font-mono text-[12px] font-medium text-[var(--fg-1)]">
               {item.caseNumber}
             </span>
-            <span className="mt-1 block truncate text-[11px] text-[var(--muted-2)]">
+            <span className="mt-1 block text-[11px] text-[var(--muted-2)]">
               {item.className ?? "Classe não informada"} · {court}{instance ? ` · ${instance}` : ""}
             </span>
+            <span className="block text-[11px] mt-1">{item.mainSubject||"Assunto não informado"} · {parties.map(p=>p.pole||"Papel não informado").filter((v,i,a)=>a.indexOf(v)===i).join(" / ")}</span>
+            <span className="block text-[11px] mt-1">Última decisão: {item.lastDecisionType||"Não informada"}{item.lastDecisionAt?` · ${dateLabel(item.lastDecisionAt)}`:""}</span>
           </span>
           <span className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[9px] ${
             closedAt

@@ -1,0 +1,15 @@
+import Link from "next/link";
+import {db} from "@/lib/db";
+import {formatBRL} from "@/lib/format";
+import {PageHeader} from "@/components/shell/shell-context";
+export const dynamic="force-dynamic";
+export default async function RelationPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
+ const params=await searchParams,source=params.de||"",target=params.para||"",kind=params.tipo||"",year=Number(params.ano)||0,page=Math.max(1,Math.min(10000,Number(params.pagina)||1));
+ if(!/^\d{11}$/.test(kind==="payment"?source:target)||!/^\d{11}(?:\d{3})?$/.test(kind==="payment"?target:source)||!["payment","donation"].includes(kind)||!Number.isSafeInteger(page)||!Number.isInteger(year))return <main><h1>Selecione uma relação válida no grafo.</h1></main>;
+ const payment=kind==="payment",table=payment?"campaign_expense":"campaign_donation",doc=payment?"supplier_cpf_cnpj":"donor_cpf_cnpj",personDoc=payment?source:target,otherDoc=payment?target:source;
+ const where=`p.cpf=? AND t.${doc}=? ${year?"AND t.year=?":""}`,args=year?[personDoc,otherDoc,year]:[personDoc,otherDoc];
+ const total=(db().prepare(`SELECT count(*) AS n FROM ${table} t JOIN campaign_org co ON co.id=t.campaign_org_id JOIN people p ON p.id=co.person_id WHERE ${where}`).get(...args) as {n:number}).n;
+ const rows=db().prepare(`SELECT t.id,t.year,t.amount_cents AS cents,${payment?"t.description":"t.source"} AS description,col.url,col.accessed_at AS collectedAt FROM ${table} t JOIN campaign_org co ON co.id=t.campaign_org_id JOIN people p ON p.id=co.person_id JOIN parse pa ON pa.id=t.provenance_id JOIN collection col ON col.id=pa.collection_id WHERE ${where} ORDER BY t.year DESC,t.id LIMIT 40 OFFSET ?`).all(...args,(page-1)*40) as {id:number;year:number;cents:number;description:string|null;url:string;collectedAt:string}[];
+ function href(n:number){const q=new URLSearchParams({de:source,para:target,tipo:kind,pagina:String(n)});if(year)q.set("ano",String(year));return `/relacao?${q}`;}
+ return <main><PageHeader group="Relações" current="Registros que sustentam a ligação"/><h1>Registros que sustentam a ligação</h1><p>{source} → {target} · {payment?"Despesas contratadas":"Doações recebidas"} · {year||"todas as eleições"} · {total} registros.</p><p>Despesas são contratações; os registros abaixo não comprovam pagamento. Uma ligação financeira não demonstra irregularidade.</p><div className="platform-grid">{rows.map(r=><article className="card" key={r.id}><h2>{r.year} · {formatBRL(r.cents)}</h2><p>{r.description||"Descrição não informada"}</p><a className="source-link" data-source-date={r.collectedAt} href={r.url} target="_blank" rel="noopener noreferrer">Arquivo oficial TSE deste registro</a><p>Coleta: {new Date(r.collectedAt).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})} (Brasília)</p></article>)}</div><div className="platform-toolbar">{page>1&&<Link className="btn" href={href(page-1)}>Anterior</Link>}<span>Página {page}</span>{page*40<total&&<Link className="btn" href={href(page+1)}>Veja mais registros</Link>}</div></main>;
+}

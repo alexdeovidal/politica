@@ -1,10 +1,11 @@
-import type { GraphEdgeKind, GraphNodeKind } from "@/lib/queries";
+import type { GraphEdge, GraphEdgeKind, GraphNodeKind } from "@/lib/queries";
 
 export type GraphEdgeData = {
   amountCents: number;
   kind: GraphEdgeKind;
   circular: boolean;
   showLabel: boolean;
+  evidence?:GraphEdge["evidence"];
 };
 
 export type GraphNodeData = {

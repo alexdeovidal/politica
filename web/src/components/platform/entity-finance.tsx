@@ -1,0 +1,9 @@
+import Link from "next/link";
+import {db,hasTable} from "@/lib/db";
+import {formatBRL} from "@/lib/format";
+export function EntityFinance({document}:{document:string}){
+ const rows=db().prepare(`SELECT year,sum(amount_cents) AS contracted,count(*) AS records,count(DISTINCT tse_candidacy_id) AS candidacies FROM campaign_expense WHERE supplier_cpf_cnpj=? GROUP BY year ORDER BY year DESC`).all(document) as {year:number;contracted:number;records:number;candidacies:number}[];
+ const paid=hasTable("campaign_expense_payment")?db().prepare(`SELECT p.year,sum(p.amount_cents) AS cents FROM campaign_expense_payment p JOIN campaign_expense e ON e.id=p.campaign_expense_id WHERE e.supplier_cpf_cnpj=? GROUP BY p.year`).all(document) as {year:number;cents:number}[]:[];
+ if(!rows.length)return null;
+ return <section id="financas-por-eleicao" data-toc-title="Contratações por eleição" className="py-7"><h2 className="section-title mb-3">Contratações eleitorais por ano</h2><p className="text-sm mb-3">Despesas contratadas com este fornecedor e pagamentos identificados nos registros de parcelas do TSE. Sem parcela vinculada significa pagamento não identificado nesta coleta; não comprova que nada foi pago.</p><div className="platform-grid">{rows.map(r=><article className="card" key={r.year}><h3><Link className="link-primary" href={`/${document.length===14?"cnpj":"cpf"}/${document}?ano=${r.year}`}>{r.year}</Link></h3><p>Contratado: {formatBRL(r.contracted)}</p><p>Pago identificado: {paid.some(p=>p.year===r.year)?formatBRL(paid.find(p=>p.year===r.year)!.cents):"Não identificado"}</p><p>{r.records} despesas · {r.candidacies} candidaturas</p><a className="source-link" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/prestacao-de-contas-eleitorais-${r.year}`} target="_blank" rel="noopener noreferrer">Fonte oficial · TSE {r.year}</a></article>)}</div></section>;
+}

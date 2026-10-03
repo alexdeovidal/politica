@@ -15,7 +15,7 @@ from ..util import git_commit, now_utc
 log = get_logger("elosys.rules.circular_donations")
 
 RULE_NAME = "circular_donations"
-RULE_VERSION = "1.1"
+RULE_VERSION = "1.2"
 
 DEFAULT_MAX_DEPTH = 5
 DEFAULT_MAX_FANOUT = 400
@@ -357,9 +357,11 @@ def _write_cycle_signal(
         return 0
     chain = " -> ".join(f"{cpfs[i]} ({_name_for(con, cpfs[i], cache) or 'sem nome'})" for i in range(n))
     explanation = (
-        f"Loop de movimentação de campanha entre {n} entidades, R$ {total_amount / 100:,.2f} "
-        f"movimentados no total: {chain} -> {cpfs[0]}. Cada seta é uma doação recebida ou uma "
-        "despesa paga por uma campanha à seguinte da cadeia, fechando um ciclo. Pode ser "
+        f"Ciclo de registros eleitorais entre {n} entidades, R$ {total_amount / 100:,.2f} "
+        f"somados nos registros: {chain} -> {cpfs[0]}. Cada seta é uma doação recebida ou uma "
+        "despesa contratada por uma campanha com a entidade seguinte, fechando um ciclo. "
+        "A soma pode reunir eleições diferentes; não comprova pagamento, simultaneidade ou "
+        "circulação dos mesmos recursos. Pode ser "
         "coincidência entre campanhas de uma mesma coligação, um ressarcimento, ou merecer uma "
         "checagem manual mais de perto — não é, por si só, indício de irregularidade."
     )

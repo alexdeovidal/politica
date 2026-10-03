@@ -39,9 +39,9 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
     <section className="card">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="label">prestação de contas eleitorais · despesas pagas a fornecedores</div>
+          <div className="label">prestação de contas eleitorais · despesas contratadas com fornecedores</div>
           <h2 className="mt-2 text-[20px] font-medium tracking-tight">
-            Empresas que mais faturaram com campanhas
+            Empresas com maiores contratações em campanhas
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -111,7 +111,7 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
                   />
                 </div>
                 <span className="min-w-0 max-w-full break-words font-mono text-[9.5px] leading-relaxed text-[var(--muted-2)] sm:flex-none sm:whitespace-nowrap">
-                  {formatCnpj(s.cnpj)} · {s.paymentCount.toLocaleString("pt-BR")} pagamentos ·{" "}
+                  {formatCnpj(s.cnpj)} · {s.paymentCount.toLocaleString("pt-BR")} despesas contratadas ·{" "}
                   {s.candidacyCount.toLocaleString("pt-BR")} candidaturas
                 </span>
               </div>
@@ -121,7 +121,7 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
       )}
 
       <p className="mt-4 text-[10px] leading-relaxed text-[var(--muted-2)]">
-        Fontes oficiais dos pagamentos declarados: {(year === "all" ? years : [Number(year)]).map((sourceYear, index) => (
+        Fontes oficiais das despesas contratadas: {(year === "all" ? years : [Number(year)]).map((sourceYear, index) => (
           <span key={sourceYear}>
             {index ? ", " : " "}<a className="source-link source-link--inline" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/prestacao-de-contas-eleitorais-${sourceYear}`} target="_blank" rel="noopener noreferrer">TSE {sourceYear}</a>
           </span>

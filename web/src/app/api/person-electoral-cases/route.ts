@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
-  const data = getPersonElectoralCases(personId, Math.min(requestedOffset, 1_000_000), 8, query);
+  const data = getPersonElectoralCases(personId, Math.min(requestedOffset, 1_000_000), 8, query, ["open","closed"].includes(params.get("status")||"")?params.get("status")!:"", (params.get("pole")||"").slice(0,50));
   return NextResponse.json(data, {
     headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
   });

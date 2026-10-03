@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SearchBox } from "@/components/search-box";
 import { TopSuppliers } from "@/components/top-suppliers";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -37,6 +38,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
 
+      <div className="platform-toolbar"><Link href="/explorar" className="btn">Minha cidade e candidaturas</Link><Link href="/grafo" className="btn">Rede de pessoas e empresas</Link><Link href="/emendas" className="btn">Destino dos recursos públicos</Link><Link href="/comparar" className="btn">Comparar candidaturas</Link></div>
       <section className="portal-hero animate-in" aria-labelledby="portal-title">
         <div className="portal-hero__content">
           <div className="portal-hero__eyebrow">

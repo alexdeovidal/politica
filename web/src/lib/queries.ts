@@ -1,4 +1,5 @@
-import { db, hasTable } from "./db";
+import { companyPartners, personCompanies, partnerById, partnerOtherCompanies } from "./platform/relations";
+import { db, hasTable,dataVersion } from "./db";
 import { digitsOnly, normalizeName } from "./normalize";
 
 export type Provenance = {
@@ -43,6 +44,7 @@ function pickProvenance(row: Record<string, unknown>): Provenance {
 }
 
 export type SearchResult =
+  | {kind:"socio";partnerId:number;canonicalName:string;companyName:string}
   | {
       kind: "candidato";
       personId: number;
@@ -88,7 +90,7 @@ function searchCompanies(rawQuery: string, limit: number): Extract<SearchResult,
     : db().prepare(
       `SELECT c.cnpj, ${companyName} AS canonicalName
        FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
-       WHERE ${nameTokens.map(() => `instr(upper(${companySearchName}), ?) > 0`).join(" AND ")}
+       WHERE ${nameTokens.map(() => `instr(normalize_public_name(${companySearchName}), ?) > 0`).join(" AND ")}
        ORDER BY CASE
          WHEN upper(${companySearchName}) = ? THEN 0
          WHEN substr(upper(${companySearchName}), 1, length(?)) = ? THEN 1
@@ -104,12 +106,12 @@ function searchCompanies(rawQuery: string, limit: number): Extract<SearchResult,
   }));
 }
 
-export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
+export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:number;office?:string;state?:string;city?:string}): SearchResult[] {
   const query = rawQuery.trim();
   if (query.length < 2) return [];
 
   const digits = digitsOnly(query);
-  const looksLikeCpf = digits.length >= 6 && digits.length <= 11;
+  const looksLikeCpf = digits.length >= 6 && digits.length <= 11 && /^[\d./\-\s]+$/.test(query);
   const looksLikeCnpj = digits.length >= 6 && digits.length <= 14 && !/[a-z]/i.test(query);
   const normalizedQuery = normalizeName(query).replace(/[^A-Z0-9]+/g, " ").trim();
   const nameTokens = [...new Set(normalizedQuery.split(" ").filter(Boolean))];
@@ -124,19 +126,26 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
         WHEN instr(canonical_name, ?) > 0 THEN 2
         ELSE 3
       END`;
+  const indexedBallots = !looksLikeCpf && hasTable("politician_name_search") && hasTable("_politica_search_index") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version=1").get();
+  const ballotWhere=indexedBallots ? "id IN (SELECT person_id FROM politician_name_search WHERE politician_name_search MATCH ?)" : `id IN (SELECT person_id FROM politician_history search_history WHERE ${nameTokens.map(()=>"instr(normalize_public_name(search_history.ballot_name),?)>0").join(" AND ")})`;
+  const ballotParams=indexedBallots ? [nameTokens.map(token=>`"${token}"*`).join(" ")] : nameTokens;
   const matchWhere = looksLikeCpf
     ? "cpf LIKE ?"
-    : nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ");
+    : `(${nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ")} OR ${ballotWhere})`;
   const matchParams = looksLikeCpf
     ? [`${digits}%`, limit * 4]
-    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens, limit * 4];
+    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens,...ballotParams, limit * 4];
 
+  const filterClauses:string[]=[];const filterParams:(string|number)[]=[];
+  for(const [field,value] of [["year",filters?.year],["office",filters?.office],["state",filters?.state],["municipality",filters?.city]] as const)if(value){filterClauses.push(`filter_history.${field}=?`);filterParams.push(value);}
+  const historyFilter=filterClauses.length?` AND EXISTS(SELECT 1 FROM politician_history filter_history WHERE filter_history.person_id=people.id AND ${filterClauses.join(" AND ")})`:"";
+  matchParams.splice(matchParams.length-1,0,...filterParams);
   // LIMIT in `matches` first; per-row latest-candidacy lookup avoids a full-table window function
   const sql = `
     WITH matches AS (
       SELECT id, canonical_name, cpf, cpf_trusted, ${nameRank} AS nameRank
       FROM people
-      WHERE ${matchWhere}
+      WHERE ${matchWhere}${historyFilter}
       ORDER BY nameRank ASC, length(canonical_name) ASC, canonical_name ASC
       LIMIT ?
     )
@@ -173,6 +182,7 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
     latestResult: (r.latestResult as string) ?? null,
     photoUrl: candidatePhotoUrls.get(r.personId as number) ?? null,
   }));
+  if(filterClauses.length)return candidates;
   // Donors/suppliers have no `people` row; names go through FTS5 (LIKE over ~14M rows took 100s+)
   const known = new Set(candidates.map((c) => (c.kind === "candidato" ? c.cpf : null)).filter(Boolean));
   const remaining = limit;
@@ -219,12 +229,14 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
     ? searchCompanies(query, Math.min(limit, 8))
     : [];
 
+  const partners:SearchResult[]=!looksLikeCnpj && nameTokens.length && hasTable("company_partner") ? (db().prepare(`SELECT min(cp.id) AS partnerId,cp.partner_name AS canonicalName,max(coalesce(c.legal_name,cp.cnpj)) AS companyName FROM company_partner cp JOIN companies c ON c.id=cp.company_id WHERE ${nameTokens.map(()=>"instr(normalize_public_name(cp.partner_name),?)>0").join(" AND ")} GROUP BY normalize_public_name(cp.partner_name),cp.partner_doc_masked LIMIT 8`).all(...nameTokens) as {partnerId:number;canonicalName:string;companyName:string}[]).map(r=>({kind:"socio",...r})) : [];
   // Interleave entity types so one large result group cannot hide the other searchable records.
   const combined: SearchResult[] = [];
-  for (let i = 0; combined.length < limit && (i < candidates.length || i < companies.length || i < persons.length); i += 1) {
+  for (let i = 0; combined.length < limit && (i < candidates.length || i < companies.length || i < persons.length || i < partners.length); i += 1) {
     if (candidates[i]) combined.push(candidates[i]);
     if (companies[i] && combined.length < limit) combined.push(companies[i]);
     if (persons[i] && combined.length < limit) combined.push(persons[i]);
+    if (partners[i] && combined.length < limit) combined.push(partners[i]);
   }
   return combined.slice(0, limit);
 }
@@ -290,10 +302,11 @@ export type DeclaredAsset = {
   description: string | null;
   valueCents: number;
   sourceUpdatedAt: string | null;
+  valueMissing?:boolean;
   provenance: Provenance;
 };
 
-export type DeclaredAssetsYearSummary = { year: number; totalCents: number; count: number };
+export type DeclaredAssetsYearSummary = { year: number; totalCents: number; count: number;missingValues?:number };
 
 export type FinanceSummary = {
   donationsCount: number;
@@ -667,6 +680,8 @@ export function getPersonElectoralCases(
   offset = 0,
   requestedPageSize = 8,
   rawQuery = "",
+  status = "",
+  pole = "",
 ): PersonElectoralCases {
   const pageSize = Math.max(1, Math.min(20, Math.floor(requestedPageSize)));
   const safeOffset = Math.max(0, Math.floor(offset));
@@ -748,6 +763,9 @@ export function getPersonElectoralCases(
     });
     searchFilter = ` AND ${tokenFilters.join(" AND ")}`;
   }
+  if(status==="closed")searchFilter+=" AND t.closed_at IS NOT NULL";
+  else if(status==="open")searchFilter+=" AND t.closed_at IS NULL";
+  if(pole){searchFilter+=" AND EXISTS(SELECT 1 FROM electoral_case_candidate cc_role WHERE cc_role.case_id=t.id AND cc_role.person_id=? AND cc_role.pole=?)";searchParams.push(personId,pole);}
   const filterParams = [personId, ...searchParams];
   const total = (db().prepare(
     `SELECT COUNT(*) AS total FROM electoral_case t ${PROVENANCE_JOIN}
@@ -1012,6 +1030,7 @@ export function getPersonAssets(
       assetType: (r.assetType as string) ?? null,
       description: (r.description as string) ?? null,
       valueCents: (r.valueCents as number) ?? 0,
+      valueMissing:r.valueCents==null,
       sourceUpdatedAt: (r.sourceUpdatedAt as string) ?? null,
       provenance: pickProvenance(r),
     })),
@@ -1019,7 +1038,8 @@ export function getPersonAssets(
       rows.reduce<Record<number, DeclaredAssetsYearSummary>>((acc, r) => {
         const y = r.year as number;
         const cents = (r.valueCents as number) ?? 0;
-        acc[y] ??= { year: y, totalCents: 0, count: 0 };
+        acc[y] ??= { year: y, totalCents: 0, count: 0,missingValues:0 };
+        if(r.valueCents==null)acc[y].missingValues=(acc[y].missingValues||0)+1;
         acc[y].totalCents += cents;
         acc[y].count += 1;
         return acc;
@@ -1035,6 +1055,7 @@ export type CandidateComparisonRecord = {
   latestCandidacy: {
     year: number;
     office: string | null;
+    municipality:string|null; round:number|null;
     partyAbbr: string | null;
     state: string | null;
     result: string | null;
@@ -1044,10 +1065,11 @@ export type CandidateComparisonRecord = {
   electoralFundsTotalCents: number;
   expensesTotalCents: number;
   latestVote: { year: number; totalVotes: number } | null;
-  latestAssets: { year: number; totalCents: number } | null;
+  latestAssets: { year: number; totalCents: number; missingValues: number } | null;
+  paymentsTotalCents:number;
 };
 
-export function getCandidateComparison(personIds: number[]): CandidateComparisonRecord[] {
+export function getCandidateComparison(personIds: number[], year?: number): CandidateComparisonRecord[] {
   const ids = [...new Set(personIds)].filter((id) => Number.isSafeInteger(id) && id > 0).slice(0, 3);
 
   return ids.flatMap((personId) => {
@@ -1055,12 +1077,12 @@ export function getCandidateComparison(personIds: number[]): CandidateComparison
     if (!header || header.candidacyCount === 0) return [];
 
     const candidacies = getPersonCandidacies(personId);
-    const finance = getPersonFinance(personId);
+    const finance = getPersonFinance(personId, year);
     const votes = getPersonVoteResults(personId);
     const assetsByYear = getPersonAssets(personId).declaredAssetsByYear;
-    const latest = candidacies[0];
-    const latestVote = votes[0];
-    const latestAssets = assetsByYear[assetsByYear.length - 1];
+    const latest = candidacies.find(item => !year || item.year === year);
+    const latestVote = votes.find(item => !year || item.year === year);
+    const latestAssets = [...assetsByYear].reverse().find(item => !year || item.year === year);
 
     return [{
       personId,
@@ -1069,6 +1091,7 @@ export function getCandidateComparison(personIds: number[]): CandidateComparison
       latestCandidacy: latest ? {
         year: latest.year,
         office: latest.office,
+        municipality:latest.municipality,round:latest.round,
         partyAbbr: latest.partyAbbr,
         state: latest.state,
         result: latest.result,
@@ -1077,8 +1100,9 @@ export function getCandidateComparison(personIds: number[]): CandidateComparison
       donationsTotalCents: finance.donationsTotalCents,
       electoralFundsTotalCents: finance.electoralFundTotalCents,
       expensesTotalCents: finance.expensesTotalCents,
+      paymentsTotalCents:finance.paymentsTotalCents,
       latestVote: latestVote ? { year: latestVote.year, totalVotes: latestVote.totalVotes } : null,
-      latestAssets: latestAssets ? { year: latestAssets.year, totalCents: latestAssets.totalCents } : null,
+      latestAssets: latestAssets && latestAssets.count!==(latestAssets.missingValues||0) ? { year: latestAssets.year, totalCents: latestAssets.totalCents, missingValues: latestAssets.missingValues || 0 } : null,
     }];
   });
 }
@@ -1199,6 +1223,7 @@ export type EarmarkPaymentRow = {
   companyName: string | null;
   companyCnpj: string;
   amountCents: number;
+  earmarkType:string|null; purpose:string|null; locality:string|null; sourceUrl:string|null; collectedAt:string|null;
 };
 
 export type EarmarkPaymentPage = { rows: EarmarkPaymentRow[]; total: number };
@@ -1209,6 +1234,7 @@ export function getEarmarkPayments(opts: {
   page?: number;
   q?: string;
   order?: "asc" | "desc";
+  year?:number; type?:string; includePublic?:boolean;
 }): EarmarkPaymentPage {
   if (!hasTable("parliamentary_earmark_beneficiary")) return { rows: [], total: 0 };
   const page = Math.max(1, Math.floor(opts.page ?? 1));
@@ -1232,12 +1258,11 @@ export function getEarmarkPayments(opts: {
       SELECT earmark_code, beneficiary_doc, beneficiary_name, sum(amount_cents) AS amountCents
       FROM parliamentary_earmark_beneficiary
       WHERE beneficiary_type LIKE 'Pessoa Jur%' AND earmark_code != 'Sem informação'
-        AND beneficiary_doc NOT IN (${PASSTHROUGH_CNPJS.map(() => "?").join(", ")})
-        AND ${GOV_NAME_PATTERNS.map(() => "beneficiary_name NOT LIKE ?").join(" AND ")}
+        ${opts.includePublic?"":`AND beneficiary_doc NOT IN (${PASSTHROUGH_CNPJS.map(() => "?").join(", ")}) AND ${GOV_NAME_PATTERNS.map(() => "beneficiary_name NOT LIKE ?").join(" AND ")}`}
       GROUP BY earmark_code, beneficiary_doc
     ),
     author AS (
-      SELECT earmark_code, author_name, author_person_id, year,
+      SELECT earmark_code, author_name, author_person_id, year,earmark_type,program_name,action_name,locality,
              row_number() OVER (PARTITION BY earmark_code ORDER BY id) AS rn
       FROM parliamentary_earmark
     ),
@@ -1245,15 +1270,20 @@ export function getEarmarkPayments(opts: {
       SELECT agg.earmark_code AS earmarkCode, agg.beneficiary_doc AS companyCnpj,
              agg.beneficiary_name AS companyName, agg.amountCents,
              author.author_name AS authorName, author.author_person_id AS authorPersonId,
-             author.year AS year
+             author.year AS year, author.earmark_type AS earmarkType, author.program_name || ' · ' || author.action_name AS purpose,author.locality,
+             (SELECT col.url FROM parliamentary_earmark_beneficiary b JOIN parse pa ON pa.id=b.provenance_id JOIN collection col ON col.id=pa.collection_id WHERE b.earmark_code=agg.earmark_code AND b.beneficiary_doc=agg.beneficiary_doc LIMIT 1) AS sourceUrl,
+             (SELECT max(b.collected_at) FROM parliamentary_earmark_beneficiary b WHERE b.earmark_code=agg.earmark_code AND b.beneficiary_doc=agg.beneficiary_doc) AS collectedAt
       FROM agg
       LEFT JOIN author ON author.earmark_code = agg.earmark_code AND author.rn = 1
     )
   `;
-  const where = q ? "WHERE companyName LIKE ? OR authorName LIKE ?" : "";
-  const qArgs = q ? [`%${q}%`, `%${q}%`] : [];
+  const filters:string[]=[],qArgs:(string|number)[]=[];
+  if(q){filters.push("(instr(normalize_public_name(companyName),normalize_public_name(?))>0 OR instr(normalize_public_name(authorName),normalize_public_name(?))>0)");qArgs.push(q,q);}
+  if(opts.year){filters.push("year=?");qArgs.push(opts.year);}
+  if(opts.type){filters.push("earmarkType=?");qArgs.push(opts.type);}
+  const where=filters.length?"WHERE "+filters.join(" AND "):"";
 
-  const cteArgs = [...PASSTHROUGH_CNPJS, ...GOV_NAME_PATTERNS];
+  const cteArgs = opts.includePublic?[]:[...PASSTHROUGH_CNPJS, ...GOV_NAME_PATTERNS];
   const total = (
     db().prepare(`${CTE} SELECT count(*) AS n FROM joined ${where}`).get(...cteArgs, ...qArgs) as { n: number }
   ).n;
@@ -1278,6 +1308,7 @@ export function getEarmarkPayments(opts: {
       companyName: (r.companyName as string) ?? null,
       companyCnpj: r.companyCnpj as string,
       amountCents: r.amountCents as number,
+      earmarkType:r.earmarkType as string|null,purpose:r.purpose as string|null,locality:r.locality as string|null,sourceUrl:r.sourceUrl as string|null,collectedAt:r.collectedAt as string|null,
     })),
   };
 }
@@ -1440,9 +1471,12 @@ export type TopSupplier = {
   candidacyCount: number;
 };
 
+let yearsVersion=0;
+function invalidateYearCaches(){const version=dataVersion();if(version===yearsVersion)return;cachedCandidacyYears=null;cachedExpenseYears=null;cachedAssetYears=null;yearsVersion=version;}
 let cachedCandidacyYears: number[] | null = null;
 
 export function getCandidacyYears(): number[] {
+  invalidateYearCaches();
   if (cachedCandidacyYears) return cachedCandidacyYears;
   const rows = db()
     .prepare("SELECT DISTINCT year FROM politician_history ORDER BY year DESC")
@@ -1454,6 +1488,7 @@ export function getCandidacyYears(): number[] {
 let cachedExpenseYears: number[] | null = null;
 
 export function getExpenseYears(): number[] {
+  invalidateYearCaches();
   if (cachedExpenseYears) return cachedExpenseYears;
   const rows = db()
     .prepare("SELECT DISTINCT year FROM campaign_expense ORDER BY year DESC")
@@ -1465,6 +1500,7 @@ export function getExpenseYears(): number[] {
 let cachedAssetYears: number[] | null = null;
 
 export function getAssetYears(): number[] {
+  invalidateYearCaches();
   if (cachedAssetYears) return cachedAssetYears;
   const rows = db()
     .prepare("SELECT DISTINCT year FROM declared_assets ORDER BY year DESC")
@@ -1736,8 +1772,8 @@ export type EntityProfile = {
 };
 
 export function candidatePersonId(cpfCnpj: string): number | null {
-  const digits = digitsOnly(cpfCnpj);
-  if (digits.length !== 11 && digits.length !== 14) return null;
+  const digits = graphToken(cpfCnpj);
+  if (!validGraphToken(digits)) return null;
   const row =
     digits.length === 11
       ? (db().prepare("SELECT id FROM people WHERE cpf = ?").get(digits) as { id: number } | undefined)
@@ -1752,8 +1788,8 @@ export function candidatePersonId(cpfCnpj: string): number | null {
 
 export function getEntityProfile(cpfCnpj: string, opts: { year?: number } = {}): EntityProfile | null {
   const { year } = opts;
-  const digits = digitsOnly(cpfCnpj);
-  if (digits.length !== 11 && digits.length !== 14) return null;
+  const digits = graphToken(cpfCnpj);
+  if (!validGraphToken(digits)) return null;
   const isCompany = digits.length === 14;
 
   let personId: number | null = null;
@@ -2106,29 +2142,7 @@ export function searchEntities(rawQuery: string, limit = 15): GraphSearchResult[
     return [{ type: "person", cpfCnpj: digits, label: digits, sublabel: null }];
   }
 
-  const pattern = `%${normalizeName(query)}%`;
-  const people = db()
-    .prepare(
-      `SELECT cpf, canonical_name FROM people
-       WHERE canonical_name LIKE ? AND cpf IS NOT NULL LIMIT ?`
-    )
-    .all(pattern, limit) as Array<{ cpf: string; canonical_name: string | null }>;
-  const companies = db()
-    .prepare(
-      `SELECT c.cnpj, coalesce(cr.legal_name, c.legal_name) AS name
-       FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
-       WHERE coalesce(cr.legal_name, c.legal_name) LIKE ? LIMIT ?`
-    )
-    .all(pattern, limit) as Array<{ cnpj: string; name: string | null }>;
-
-  return [
-    ...people.map((p): GraphSearchResult => ({
-      type: "person", cpfCnpj: p.cpf, label: p.canonical_name ?? p.cpf, sublabel: "político",
-    })),
-    ...companies.map((c): GraphSearchResult => ({
-      type: "company", cpfCnpj: c.cnpj, label: c.name ?? c.cnpj, sublabel: "empresa",
-    })),
-  ].slice(0, limit);
+  return searchPeople(query,limit*2).flatMap((r):GraphSearchResult[]=>r.kind==="candidato"?r.cpf?[{type:"person",cpfCnpj:r.cpf,label:r.canonicalName,sublabel:`${r.latestOffice||"Pessoa"} · ${r.latestState||"UF não informada"}`}]:[]:r.kind==="empresa"?[{type:"company",cpfCnpj:r.cnpj,label:r.canonicalName,sublabel:"empresa"}]:r.kind==="socio"?[{type:"person",cpfCnpj:`soc:${r.partnerId}`,label:r.canonicalName,sublabel:`Sócio · ${r.companyName}`}]:[{type:"person",cpfCnpj:r.cpf,label:r.canonicalName,sublabel:"doador ou fornecedor"}]).slice(0,limit);
 }
 
 function formatCnpjLocal(cnpj: string): string {
@@ -2150,7 +2164,9 @@ export type GraphNodeInfo = {
   photoUrl: string | null;
 };
 
-export type GraphEdgeKind = "donation" | "payment";
+export type GraphEdgeKind = "donation" | "payment" | "ownership" | "administration" | "possibleidentity";
+function graphToken(value:string){return /^soc:[1-9][0-9]*$/.test(value)?value:digitsOnly(value);}
+function validGraphToken(value:string){return /^soc:[1-9][0-9]*$/.test(value)||/^([0-9]{11}|[0-9]{14})$/.test(value);}
 
 export type GraphEdge = {
   source: string; // cpfCnpj (the donor, or the politician who paid)
@@ -2158,6 +2174,7 @@ export type GraphEdge = {
   kind: GraphEdgeKind;
   amountCents: number;
   count: number;
+  evidence?: {role:string|null;entryDate:string|null;collectedAt:string;url:string;partnerId:number};
 };
 
 function lookupNodes(
@@ -2194,7 +2211,7 @@ function lookupNodes(
     .prepare(
       `SELECT DISTINCT c.cnpj, p.canonical_name AS name, p.id AS personId FROM campaign_org co
        JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
-       WHERE c.cnpj IN (${placeholders})`
+       WHERE c.cnpj IN (${placeholders}) AND co.cnpj=c.cnpj`
     )
     .all(...clean) as Array<{ cnpj: string; name: string | null; personId: number }>) {
     if (!committeeOwner.has(r.cnpj)) committeeOwner.set(r.cnpj, { name: r.name, personId: r.personId });
@@ -2208,6 +2225,7 @@ function lookupNodes(
       sanctioned: sanctioned.has(id), registryStatus: null, personId: null, photoUrl: null,
     });
   }
+  for(const id of clean.filter(id=>id.startsWith("soc:"))){const row=partnerById(Number(id.slice(4)));const node=nodeById.get(id);if(row&&node){node.label=row.partnerName;node.type=(row.document?.replace(/\D/g,"").length??0)>=8&&!row.document?.includes("*")?"company":"person";node.kind=node.type;}}
   for (const p of people) {
     const n = nodeById.get(p.cpf);
     if (n) {
@@ -2261,9 +2279,10 @@ type IncidentRow = {
   amountCents: number;
   n: number;
   anchorIsSource: 0 | 1;
+  evidence?: GraphEdge["evidence"];
 };
 
-function incidentEdges(anchorIds: string[]): IncidentRow[] {
+function incidentEdges(anchorIds: string[],year?:number): IncidentRow[] {
   if (anchorIds.length === 0) return [];
   const ph = anchorIds.map(() => "?").join(", ");
   const sql = `
@@ -2271,33 +2290,48 @@ function incidentEdges(anchorIds: string[]): IncidentRow[] {
            sum(d.amount_cents) AS amountCents, count(*) AS n, 1 AS anchorIsSource
     FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
     JOIN people p ON p.id = co.person_id
-    WHERE d.donor_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND d.donor_cpf_cnpj != p.cpf
+    WHERE d.donor_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}`:""}
     GROUP BY d.donor_cpf_cnpj, p.cpf
     UNION ALL
     SELECT p.cpf AS anchor, d.donor_cpf_cnpj AS other, 'donation',
            sum(d.amount_cents), count(*), 0
     FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
     JOIN people p ON p.id = co.person_id
-    WHERE p.cpf IN (${ph}) AND d.donor_cpf_cnpj IS NOT NULL AND d.donor_cpf_cnpj != p.cpf
+    WHERE p.cpf IN (${ph}) AND d.donor_cpf_cnpj IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}`:""}
     GROUP BY p.cpf, d.donor_cpf_cnpj
     UNION ALL
     SELECT p.cpf AS anchor, e.supplier_cpf_cnpj AS other, 'payment',
            sum(e.amount_cents), count(*), 1
     FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
     JOIN people p ON p.id = co.person_id
-    WHERE p.cpf IN (${ph}) AND e.supplier_cpf_cnpj IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj
+    WHERE p.cpf IN (${ph}) AND e.supplier_cpf_cnpj IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}`:""}
     GROUP BY p.cpf, e.supplier_cpf_cnpj
     UNION ALL
     SELECT e.supplier_cpf_cnpj AS anchor, p.cpf AS other, 'payment',
            sum(e.amount_cents), count(*), 0
     FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
     JOIN people p ON p.id = co.person_id
-    WHERE e.supplier_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj
+    WHERE e.supplier_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}`:""}
     GROUP BY e.supplier_cpf_cnpj, p.cpf
   `;
   const params: string[] = [];
   for (let i = 0; i < 4; i++) params.push(...anchorIds);
-  return db().prepare(sql).all(...params) as IncidentRow[];
+  const rows=db().prepare(sql).all(...params) as IncidentRow[];
+  const seen=new Set<string>();
+  for(const anchor of anchorIds){
+    const person=anchor.length===11?db().prepare("SELECT id FROM people WHERE cpf=?").get(anchor) as {id:number}|undefined:undefined;
+    const partner=anchor.startsWith("soc:")?partnerById(Number(anchor.slice(4))):null;
+    const related=partner?partnerOtherCompanies(partner):anchor.length===14?companyPartners(anchor):person?personCompanies(person.id):[];
+    for(const relation of related){
+      const owner=relation.confidence==="documento"&&relation.personCpf?relation.personCpf:relation.href.startsWith("/cnpj/")?relation.href.split("/").pop()!: `soc:${relation.id}`;
+      const kind:GraphEdgeKind=/ADMIN|DIRETOR|PRESIDENTE/i.test(relation.role||"")?"administration":"ownership";
+      const other=anchor.length===14?owner:person&&owner!==anchor?`soc:${relation.id}`:relation.cnpj;
+      const linkKind:GraphEdgeKind=person&&owner!==anchor?"possibleidentity":kind;
+      const key=`${anchor}|${other}|${linkKind}`;if(anchor===other||seen.has(key))continue;seen.add(key);
+      rows.push({anchor,other,kind:linkKind,amountCents:0,n:1,anchorIsSource:anchor.length===14?0:1,evidence:{role:relation.role,entryDate:relation.entryDate,collectedAt:relation.collectedAt,url:relation.sourceUrl,partnerId:relation.id}});
+    }
+  }
+  return rows;
 }
 
 type GraphIdentity = { canonical: string; name: string | null; aliases: string[] };
@@ -2313,7 +2347,7 @@ function getGraphIdentity(ids: string[]): Map<string, GraphIdentity> {
     .prepare(
       `SELECT DISTINCT c.cnpj, p.cpf FROM campaign_org co
        JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
-       WHERE c.cnpj IN (${ph}) AND p.cpf IS NOT NULL`
+       WHERE c.cnpj IN (${ph}) AND co.cnpj=c.cnpj AND p.cpf IS NOT NULL`
     )
     .all(...clean) as Array<{ cnpj: string; cpf: string }>) {
     if (!cnpjOwner.has(r.cnpj)) cnpjOwner.set(r.cnpj, r.cpf);
@@ -2328,7 +2362,7 @@ function getGraphIdentity(ids: string[]): Map<string, GraphIdentity> {
         `SELECT p.cpf, p.canonical_name AS name, c.cnpj
          FROM people p
          LEFT JOIN campaign_org co ON co.person_id = p.id
-         LEFT JOIN companies c ON c.id = co.company_id
+         LEFT JOIN companies c ON c.id = co.company_id AND c.cnpj=co.cnpj
          WHERE p.cpf IN (${cph})`
       )
       .all(...cpfs) as Array<{ cpf: string; name: string | null; cnpj: string | null }>) {
@@ -2355,16 +2389,16 @@ function getGraphIdentity(ids: string[]): Map<string, GraphIdentity> {
 
 function incidentToEdge(r: IncidentRow): GraphEdge {
   const [source, target] = r.anchorIsSource ? [r.anchor, r.other] : [r.other, r.anchor];
-  return { source, target, kind: r.kind, amountCents: r.amountCents, count: r.n };
+  return { source, target, kind: r.kind, amountCents: r.amountCents, count: r.n, evidence:r.evidence };
 }
 
 export function getGraphPaths(
-  newIdRaw: string, existingIdsRaw: string[]
+  newIdRaw: string, existingIdsRaw: string[],year?:number
 ): { nodes: GraphNodeInfo[]; edges: GraphEdge[] } {
-  const newDigits = digitsOnly(newIdRaw);
-  if (newDigits.length !== 11 && newDigits.length !== 14) return { nodes: [], edges: [] };
+  const newDigits = graphToken(newIdRaw);
+  if (!validGraphToken(newDigits)) return { nodes: [], edges: [] };
   const existingDigits = [
-    ...new Set(existingIdsRaw.map(digitsOnly).filter((d) => d.length === 11 || d.length === 14)),
+    ...new Set(existingIdsRaw.map(graphToken).filter(validGraphToken)),
   ];
 
   const idents = getGraphIdentity([newDigits, ...existingDigits]);
@@ -2379,13 +2413,13 @@ export function getGraphPaths(
   for (const [c, aliases] of canonToAliases) for (const a of aliases) aliasToCanon.set(a, c);
   const anchorAliases = [...new Set([newId, ...existing].flatMap((c) => canonToAliases.get(c) ?? [c]))];
 
-  const rawRows = incidentEdges(anchorAliases);
+  const rawRows = incidentEdges(anchorAliases,year);
   const otherIdents = getGraphIdentity([...new Set(rawRows.map((r) => r.other))]);
   const rows: IncidentRow[] = rawRows
     .map((r) => ({
       ...r,
       anchor: aliasToCanon.get(r.anchor) ?? r.anchor,
-      other: otherIdents.get(r.other)?.canonical ?? r.other,
+      other: ["donation","payment"].includes(r.kind)?otherIdents.get(r.other)?.canonical ?? r.other:r.other,
     }))
     .filter((r) => r.anchor !== r.other);
 
@@ -2428,8 +2462,8 @@ export function getGraphPaths(
 }
 
 export function resolveGraphNode(cpfCnpj: string): GraphNodeInfo | null {
-  const digits = digitsOnly(cpfCnpj);
-  if (digits.length !== 11 && digits.length !== 14) return null;
+  const digits = graphToken(cpfCnpj);
+  if (!validGraphToken(digits)) return null;
   const ident = getGraphIdentity([digits]).get(digits);
   const canonical = ident?.canonical ?? digits;
   const node = lookupNodes([canonical]).get(canonical) ?? null;
@@ -2441,18 +2475,18 @@ export function resolveGraphNode(cpfCnpj: string): GraphNodeInfo | null {
 }
 
 export function getGraphNodeNetwork(
-  rawId: string, limit = 400
+  rawId: string, limit = 80,year?:number,relation=""
 ): { nodes: GraphNodeInfo[]; edges: GraphEdge[]; truncated: boolean } {
-  const digits = digitsOnly(rawId);
-  if (digits.length !== 11 && digits.length !== 14) return { nodes: [], edges: [], truncated: false };
+  const digits = graphToken(rawId);
+  if (!validGraphToken(digits)) return { nodes: [], edges: [], truncated: false };
   const ident = getGraphIdentity([digits]).get(digits);
   const canonical = ident?.canonical ?? digits;
   const aliases = ident?.aliases ?? [digits];
 
-  const rawRows = incidentEdges(aliases);
+  const rawRows = incidentEdges(aliases,year).filter(r=>!relation||relation==="todos"||(relation==="societario"?!["donation","payment"].includes(r.kind):relation==="financeiro"?["donation","payment"].includes(r.kind):r.kind===relation));
   const otherIdents = getGraphIdentity([...new Set(rawRows.map((r) => r.other))]);
   const rows: IncidentRow[] = rawRows
-    .map((r) => ({ ...r, anchor: canonical, other: otherIdents.get(r.other)?.canonical ?? r.other }))
+    .map((r) => ({ ...r, anchor: canonical, other: ["donation","payment"].includes(r.kind)?otherIdents.get(r.other)?.canonical ?? r.other:r.other }))
     .filter((r) => r.anchor !== r.other);
 
   const merged = new Map<string, IncidentRow>();
@@ -2470,7 +2504,7 @@ export function getGraphNodeNetwork(
   let edgeRows = [...merged.values()];
   const truncated = edgeRows.length > limit;
   if (truncated) {
-    edgeRows = edgeRows.sort((a, b) => b.amountCents - a.amountCents).slice(0, limit);
+    edgeRows = edgeRows.sort((a, b) => Number(!!b.evidence)-Number(!!a.evidence)||b.amountCents - a.amountCents).slice(0, limit);
   }
   const edges = edgeRows.map(incidentToEdge);
   const allIds = new Set([canonical, ...edges.flatMap((e) => [e.source, e.target])]);
@@ -3175,6 +3209,7 @@ export type ExpenseCategoryPage = { rows: ExpenseCategoryRow[]; total: number };
 
 // Full-table LIKE scan takes tens of seconds; cache per (category, year) since the DB is read-only
 const expenseCategoryRankingCache = new Map<string, Array<Record<string, unknown>>>();
+let rankingVersion=0;
 
 export function getExpenseCategoryRanking(opts: {
   /** undefined = all categories */
@@ -3191,6 +3226,7 @@ export function getExpenseCategoryRanking(opts: {
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;
 
+  const version=dataVersion();if(version!==rankingVersion){expenseCategoryRankingCache.clear();rankingVersion=version;}
   const cacheKey = `${opts.category ?? "*"}|${opts.year ?? "*"}`;
   let allRows = expenseCategoryRankingCache.get(cacheKey);
   if (!allRows) {

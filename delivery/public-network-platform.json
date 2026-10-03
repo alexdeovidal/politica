@@ -1,0 +1,118 @@
+{
+  "status": "implementation_in_progress",
+  "productionPublished": false,
+  "requirements": [
+    {
+      "id": "identity-network",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Document and masked document confidence, corporate root, linked partners, reverse participation, provenance and dates verified"
+    },
+    {
+      "id": "regional-discovery",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "State/city/office/election discovery, home entry paths, unified search and homonyms"
+    },
+    {
+      "id": "profile-timeline",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Profile summaries, tab navigation, events and relationship timelines"
+    },
+    {
+      "id": "ownership-graph",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Ownership/admin graph edges, staged expansion, relation and time filters, evidence explanation, paths"
+    },
+    {
+      "id": "finance",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Contracted versus paid, concentration, source of funds, election evolution"
+    },
+    {
+      "id": "votes-map",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Territory map, municipality/zone/polling-place breakdown, percentages, compatible election compare"
+    },
+    {
+      "id": "comparison",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Election/office/region context, persistent URL, shared PNG and legislative/proposal data"
+    },
+    {
+      "id": "assets",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Filters, changes, election compare, missing versus zero"
+    },
+    {
+      "id": "cases",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Status/role/decisions summaries, timeline, full search, specific official records"
+    },
+    {
+      "id": "earmarks-contracts",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Individual/caucus/committee distinction, recipients, purpose, execution, providers"
+    },
+    {
+      "id": "signals",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Rule, raw evidence, source period and computation date"
+    },
+    {
+      "id": "social-proposals",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Themes/dates/context, official government proposals"
+    },
+    {
+      "id": "freshness-monitor",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Source freshness/history, profile/company/city meaningful update monitoring"
+    },
+    {
+      "id": "sharing",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Each datum or section, three image formats, branding, source/date/period, QR, editable factual summary, URL filters and OG"
+    },
+    {
+      "id": "public-profile",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Public summary, declared domain control verification, sourced clarification, correction queue"
+    },
+    {
+      "id": "saved-consultations",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Saved profiles, companies, cities and comparisons with meaningful change alerts"
+    },
+    {
+      "id": "official-integrations",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Camara activities/votes/expenses, Senado votes, PNCP contracts, official TSE proposals, explicit coverage"
+    },
+    {
+      "id": "metrics",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Anonymous aggregate profile exploration, share, referral and return metrics"
+    },
+    {
+      "id": "validation",
+      "status": "implemented_pending_final_verification",
+      "acceptance": "Identity fixtures, official data reconciliation, filtered URL persistence, visible sources and mobile checks"
+    },
+    {
+      "id": "production",
+      "status": "pending",
+      "acceptance": "Merged reviewed commit, successful deploy, migrated persistent data, scheduled workers, production verification"
+    }
+  ],
+  "verification": {
+    "pythonTests": 66,
+    "typescript": "passed_after_final_adjustments",
+    "build": "passed",
+    "mobileOverflow": "regional page: scrollWidth equals viewport width",
+    "identityPath": "masked document shown as possible identity",
+    "fullSearch": "name fragments + ballot aliases + election filters applied before limit",
+    "sourceAudit": "production snapshots before and after refresh: no duplicated public documents, file-provenance mismatch, campaign CNPJ mismatch or negative votes",
+    "pncpRegression": "offline rate limit, interruption and durable resumption passed",
+    "searchIndex": "ballot-name index maintained transactionally; fixture search verified",
+    "writerCoordination": "shared ingestion lock regression passed"
+  }
+}

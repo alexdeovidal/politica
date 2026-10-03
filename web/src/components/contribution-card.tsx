@@ -77,6 +77,7 @@ export function ContributionReminder() {
       if (document.visibilityState !== "visible" || timeout !== null) return;
       timeout = window.setTimeout(() => {
         timeout = null;
+        if (document.visibilityState !== "visible" || document.querySelector('[role="dialog"]')) { startTimer(); return; }
         try {
           window.sessionStorage.setItem(REMINDER_STORAGE_KEY, "shown");
         } catch {}

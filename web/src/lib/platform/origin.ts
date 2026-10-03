@@ -1,0 +1,2 @@
+/** Public forms run behind Coolify's HTTPS proxy; the internal request URL may be HTTP. */
+export function allowedOrigin(request:Request,requireHeader=false){const origin=request.headers.get("origin");if(!origin)return !requireHeader;if(["https://politica007.com.br","https://www.politica007.com.br"].includes(origin))return true;return process.env.NODE_ENV!=="production"&&origin===new URL(request.url).origin;}

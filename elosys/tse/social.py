@@ -130,11 +130,18 @@ def refresh_year(con: sqlite3.Connection, year: int, *, tmp_dir: str | Path = "d
     if year not in SUPPORTED_YEARS:
         raise ValueError(f"no rede_social_candidato file for {year}")
     source_id = get_source(con, **SOURCE)
-    result = _ingest_year(con, year, Path(tmp_dir), source_id, upsert=True)
-    if result.get("rows", 0) == 0:
-        raise RuntimeError(f"TSE returned no social media rows for {year}; existing data was kept")
-    result.update({"year": year, "kept_other_years": True})
-    return result
+    from .derived import AtomicConnection
+    con.commit()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        result = _ingest_year(AtomicConnection(con), year, Path(tmp_dir), source_id, upsert=True)
+        if result.get("rows",0)==0:raise RuntimeError("TSE retornou um arquivo sem registros; a publicação anterior foi preservada")
+        result["withdrawn_rows"]=con.execute("DELETE FROM social_media WHERE year=? AND provenance_id IN (SELECT p.id FROM parse p WHERE p.collection_id<>?)",(year,result["collection_id"])).rowcount
+        result.update({"year":year,"kept_other_years":True})
+        con.commit()
+        return result
+    except BaseException:
+        con.rollback();raise
 
 
 def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: int,

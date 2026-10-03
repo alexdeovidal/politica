@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {db,hasTable} from "@/lib/db";
 import { getEarmarkPayments, EARMARK_PAGE_SIZE } from "@/lib/queries";
 import { formatBRL, formatCnpj } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -13,13 +14,16 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
   const q = typeof sp.q === "string" ? sp.q : "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const { rows, total } = getEarmarkPayments({ page, q, order: "desc" });
+  const year=Number(sp.ano)||undefined,type=typeof sp.tipo==="string"?sp.tipo:"",includePublic=sp.destino==="todos";
+  const types=hasTable("parliamentary_earmark")?db().prepare("SELECT DISTINCT earmark_type AS name FROM parliamentary_earmark WHERE earmark_type IS NOT NULL ORDER BY name").all() as {name:string}[]:[];
+  const { rows, total } = getEarmarkPayments({ page, q,year,type,includePublic, order: "desc" });
   const totalPages = Math.max(1, Math.ceil(total / EARMARK_PAGE_SIZE));
 
   const hrefFor = (p: Record<string, string | undefined>) => {
     const usp = new URLSearchParams();
     if (p.q) usp.set("q", p.q);
     if (p.page && p.page !== "1") usp.set("page", p.page);
+    if(year)usp.set("ano",String(year));if(type)usp.set("tipo",type);if(includePublic)usp.set("destino","todos");
     const s = usp.toString();
     return `/emendas${s ? `?${s}` : ""}`;
   };
@@ -30,30 +34,29 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
 
       <section>
         <h1 className="text-[26px] leading-tight font-medium tracking-tight">
-          Emendas parlamentares — quem fez, quanto, pra qual empresa
+          Emendas parlamentares — autoria, valores e favorecidos
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Toda emenda ao orçamento federal (2014-atual) cujo favorecido é uma empresa (pessoa
-          jurídica) — não um município, órgão público ou pessoa física. O autor é identificado só
+          Registros coletados do Portal da Transparência com favorecido pessoa jurídica. O filtro permite incluir órgãos públicos e intermediários bancários. Favorecido não significa necessariamente fornecedor contratado. O autor é identificado só
           por <strong style={{ color: "var(--fg-2)" }}>nome</strong>, não por CPF (a fonte não tem
           esse vínculo): é um cruzamento provável, não uma identidade confirmada.
         </p>
 
         <div className="mono mt-6" style={{ fontSize: 11, color: "var(--muted)" }}>
-          <span style={{ color: "var(--fg-1)" }}>{total.toLocaleString("pt-BR")}</span> emendas pra
-          empresas
+          <span style={{ color: "var(--fg-1)" }}>{total.toLocaleString("pt-BR")}</span> registros de emendas e favorecidos
         </div>
 
         <form className="mt-5 flex flex-wrap items-center gap-2" action="/emendas">
           <div className="input" style={{ width: 280 }}>
             <input name="q" defaultValue={q} placeholder="buscar autor ou empresa…" />
           </div>
-        </form>
+          <label>Ano<input className="input" type="number" name="ano" defaultValue={year}/></label><label>Tipo<select className="input" name="tipo" defaultValue={type}><option value="">Todos</option>{types.map(t=><option key={t.name}>{t.name}</option>)}</select></label><label>Favorecidos<select className="input" name="destino" defaultValue={includePublic?"todos":"empresas"}><option value="empresas">Empresas · exclui órgãos e bancos intermediários</option><option value="todos">Todas as pessoas jurídicas</option></select></label><button className="btn">Aplicar filtros</button>
+        </form><a className="source-link" href="https://portaldatransparencia.gov.br/emendas" target="_blank" rel="noopener noreferrer">Fonte oficial · Portal da Transparência</a>
       </section>
 
       <section>
         {rows.length === 0 ? (
-          <EmptyState icon="◌" title={q ? "nada para essa busca." : "nenhuma emenda pra empresa encontrada."} />
+          <EmptyState icon="◌" title={q ? "nada para essa busca." : "nenhum registro de emenda encontrado."} />
         ) : (
           <div className="table-wrap">
             <div className="overflow-x-auto">
@@ -95,7 +98,7 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
                           {formatCnpj(r.companyCnpj)}
                         </div>
                       </td>
-                      <td className="num">{formatBRL(r.amountCents)}</td>
+                      <td className="num">{formatBRL(r.amountCents)}<div className="text-xs whitespace-normal">Valor recebido pelo favorecido</div>{r.sourceUrl&&<a className="source-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">Arquivo oficial</a>}<details className="text-xs whitespace-normal"><summary>Finalidade e execução</summary><p>{r.earmarkType||"Tipo não informado"} · {r.locality||"Localidade não informada"}</p><p>{r.purpose||"Finalidade não informada na coleta"}</p><p>Coleta: {r.collectedAt?new Date(r.collectedAt).toLocaleString("pt-BR"):"Não informada"}</p></details></td>
                     </tr>
                   ))}
                 </tbody>
