@@ -57,6 +57,13 @@ Se `elosys.db` não existir ainda, rode o pipeline Python primeiro (ver
   local de votação, zona e seção. Os dados usam a tabela opcional
   `election_vote_section`, preenchida pelo comando `elosys tse-voting-sections`;
   quando ela não existe no banco implantado, essa seção não aparece.
+- `src/components/person-electoral-cases.tsx` — processos eleitorais públicos
+  do TSE, com classe, órgão, assuntos, parte vinculada, decisões e recursos
+  diretamente na ficha. Os dados usam `electoral_case*`, preenchidas por
+  `elosys tse-processual`; o vínculo com a pessoa exige o `SQ_CANDIDATO` oficial,
+  sem cruzamento apenas por nome. A cobertura fica limitada aos arquivos
+  processuais eleitorais do TSE (pleitos 2018–2026), não a todos os ramos da
+  Justiça. O perfil mostra a origem dos dados e o link para o registro oficial.
 - `src/components/skeleton.tsx` — o shimmer shadcn-style. Usado por
   `<FinanceTable>`, `<TopSuppliers>`, `<SearchBox>` e a busca do `/grafo`
   enquanto o fetch não volta.

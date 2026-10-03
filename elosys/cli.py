@@ -21,7 +21,7 @@ from .rules import (
 )
 from .social import x_posts
 from .transparencia import earmarks, sanctions
-from .tse import accounts, assets, candidates, photo_urls, social, voting
+from .tse import accounts, assets, candidates, photo_urls, processual, social, voting
 
 DEFAULT_TMP = "dados_tmp"
 log = get_logger("elosys.cli")
@@ -273,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         ("tse-accounts", accounts, "tse_accounts", "ingest TSE prestação de contas -> campaign_org"),
         ("tse-social", social, "tse_social", "ingest TSE rede_social_candidato -> social_media"),
         ("tse-assets", assets, "tse_assets", "ingest TSE bem_candidato -> declared_assets"),
+        ("tse-processual", processual, "tse_processual",
+         "ingest TSE public electoral cases, subjects, decisions, parties, and appeals"),
     ):
         sp = sub.add_parser(cmd, help=helptext)
         sp.add_argument("--db", default="elosys.db")

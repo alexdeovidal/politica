@@ -500,6 +500,223 @@ export function getPersonVoteResults(personId: number): PersonVoteResult[] {
   }));
 }
 
+export type ElectoralCaseSubject = {
+  code: string | null;
+  subject: string;
+  provenance: Provenance;
+};
+
+export type ElectoralCaseDecision = {
+  sequence: string | null;
+  date: string | null;
+  author: string | null;
+  type: string | null;
+  provenance: Provenance;
+};
+
+export type ElectoralCaseAppeal = {
+  id: string;
+  filedAt: string | null;
+  closedAt: string | null;
+  courtState: string | null;
+  instance: number | null;
+  className: string | null;
+  type: string | null;
+  nature: string | null;
+  lastDecisionAt: string | null;
+  lastDecisionType: string | null;
+  reporter: string | null;
+  provenance: Provenance;
+};
+
+export type ElectoralCaseParty = {
+  candidacyYear: number;
+  pole: string | null;
+  type: string | null;
+  name: string | null;
+  socialName: string | null;
+  isMain: boolean | null;
+};
+
+export type PublicElectoralCase = {
+  id: number;
+  caseNumber: string;
+  electionYear: number;
+  filedAt: string | null;
+  closedAt: string | null;
+  originState: string | null;
+  originInstance: number | null;
+  courtState: string | null;
+  instance: number | null;
+  distributedAt: string | null;
+  distributionType: string | null;
+  reporter: string | null;
+  classCode: string | null;
+  classAbbr: string | null;
+  className: string | null;
+  mainSubjectCode: string | null;
+  mainSubject: string | null;
+  isAppeal: boolean | null;
+  decisionCount: number | null;
+  lastDecisionAt: string | null;
+  lastDecisionType: string | null;
+  sourceUrl: string | null;
+  parties: ElectoralCaseParty[];
+  subjects: ElectoralCaseSubject[];
+  decisions: ElectoralCaseDecision[];
+  appeals: ElectoralCaseAppeal[];
+  provenance: Provenance;
+};
+
+export type PersonElectoralCases = {
+  available: boolean;
+  cases: PublicElectoralCase[];
+};
+
+export function getPersonElectoralCases(personId: number): PersonElectoralCases {
+  const requiredTables = [
+    "electoral_case",
+    "electoral_case_candidate",
+    "electoral_case_subject",
+    "electoral_case_decision",
+    "electoral_case_appeal",
+  ];
+  if (!requiredTables.every(hasTable)) return { available: false, cases: [] };
+
+  const candidateFilter = "EXISTS (SELECT 1 FROM electoral_case_candidate cc " +
+    "WHERE cc.case_id = t.id AND cc.person_id = ?)";
+  const rows = db().prepare(
+    `SELECT t.id, t.case_number AS caseNumber, t.source_dataset_year AS electionYear,
+            t.filed_at AS filedAt, t.closed_at AS closedAt,
+            t.origin_state AS originState, t.origin_instance AS originInstance,
+            t.court_state AS courtState, t.instance, t.distributed_at AS distributedAt,
+            t.distribution_type AS distributionType, t.reporter_name AS reporter,
+            t.class_code AS classCode, t.class_abbr AS classAbbr, t.class_name AS className,
+            t.main_subject_code AS mainSubjectCode, t.main_subject AS mainSubject,
+            t.is_appeal AS isAppeal, t.decision_count AS decisionCount,
+            t.last_decision_at AS lastDecisionAt, t.last_decision_type AS lastDecisionType,
+            t.source_url AS sourceUrl, ${PROVENANCE_COLUMNS}
+     FROM electoral_case t ${PROVENANCE_JOIN}
+     WHERE ${candidateFilter}
+     ORDER BY COALESCE(t.last_decision_at, t.filed_at, '') DESC, t.case_number`
+  ).all(personId) as Array<Record<string, unknown>>;
+
+  const cases = rows.map((row): PublicElectoralCase => ({
+    id: row.id as number,
+    caseNumber: row.caseNumber as string,
+    electionYear: row.electionYear as number,
+    filedAt: (row.filedAt as string) ?? null,
+    closedAt: (row.closedAt as string) ?? null,
+    originState: (row.originState as string) ?? null,
+    originInstance: (row.originInstance as number) ?? null,
+    courtState: (row.courtState as string) ?? null,
+    instance: (row.instance as number) ?? null,
+    distributedAt: (row.distributedAt as string) ?? null,
+    distributionType: (row.distributionType as string) ?? null,
+    reporter: (row.reporter as string) ?? null,
+    classCode: (row.classCode as string) ?? null,
+    classAbbr: (row.classAbbr as string) ?? null,
+    className: (row.className as string) ?? null,
+    mainSubjectCode: (row.mainSubjectCode as string) ?? null,
+    mainSubject: (row.mainSubject as string) ?? null,
+    isAppeal: row.isAppeal == null ? null : Boolean(row.isAppeal),
+    decisionCount: (row.decisionCount as number) ?? null,
+    lastDecisionAt: (row.lastDecisionAt as string) ?? null,
+    lastDecisionType: (row.lastDecisionType as string) ?? null,
+    sourceUrl: (row.sourceUrl as string) ?? null,
+    parties: [],
+    subjects: [],
+    decisions: [],
+    appeals: [],
+    provenance: pickProvenance(row),
+  }));
+  if (cases.length === 0) return { available: true, cases };
+
+  const byCaseId = new Map(cases.map((item) => [item.id, item]));
+  const selectedCaseIds = "SELECT id FROM electoral_case t WHERE " + candidateFilter;
+
+  const partyRows = db().prepare(
+    `SELECT cc.case_id AS caseId, cc.candidacy_year AS candidacyYear, cc.pole,
+            cc.party_type AS type, cc.party_name AS name, cc.social_name AS socialName,
+            cc.is_main_party AS isMain
+     FROM electoral_case_candidate cc
+     WHERE cc.person_id = ?
+     ORDER BY cc.candidacy_year DESC, cc.id`
+  ).all(personId) as Array<Record<string, unknown>>;
+  for (const row of partyRows) {
+    const item = byCaseId.get(row.caseId as number);
+    if (!item) continue;
+    item.parties.push({
+      candidacyYear: row.candidacyYear as number,
+      pole: (row.pole as string) ?? null,
+      type: (row.type as string) ?? null,
+      name: (row.name as string) ?? null,
+      socialName: (row.socialName as string) ?? null,
+      isMain: row.isMain == null ? null : Boolean(row.isMain),
+    });
+  }
+
+  const subjectRows = db().prepare(
+    `SELECT t.case_id AS caseId, t.subject_code AS code, t.subject, ${PROVENANCE_COLUMNS}
+     FROM electoral_case_subject t ${PROVENANCE_JOIN}
+     WHERE t.case_id IN (${selectedCaseIds})
+     ORDER BY t.subject COLLATE NOCASE`
+  ).all(personId) as Array<Record<string, unknown>>;
+  for (const row of subjectRows) {
+    byCaseId.get(row.caseId as number)?.subjects.push({
+      code: (row.code as string) ?? null,
+      subject: row.subject as string,
+      provenance: pickProvenance(row),
+    });
+  }
+
+  const decisionRows = db().prepare(
+    `SELECT t.case_id AS caseId, t.decision_sequence AS sequence, t.decided_at AS date,
+            t.author_name AS author, t.decision_type AS type, ${PROVENANCE_COLUMNS}
+     FROM electoral_case_decision t ${PROVENANCE_JOIN}
+     WHERE t.case_id IN (${selectedCaseIds})
+     ORDER BY t.decided_at DESC, t.id DESC`
+  ).all(personId) as Array<Record<string, unknown>>;
+  for (const row of decisionRows) {
+    byCaseId.get(row.caseId as number)?.decisions.push({
+      sequence: (row.sequence as string) ?? null,
+      date: (row.date as string) ?? null,
+      author: (row.author as string) ?? null,
+      type: (row.type as string) ?? null,
+      provenance: pickProvenance(row),
+    });
+  }
+
+  const appealRows = db().prepare(
+    `SELECT t.case_id AS caseId, t.appeal_id AS appealId, t.filed_at AS filedAt,
+            t.closed_at AS closedAt, t.court_state AS courtState, t.instance,
+            t.class_name AS className, t.appeal_type AS type, t.appeal_nature AS nature,
+            t.last_decision_at AS lastDecisionAt, t.last_decision_type AS lastDecisionType,
+            t.reporter_name AS reporter, ${PROVENANCE_COLUMNS}
+     FROM electoral_case_appeal t ${PROVENANCE_JOIN}
+     WHERE t.case_id IN (${selectedCaseIds})
+     ORDER BY t.filed_at DESC, t.id DESC`
+  ).all(personId) as Array<Record<string, unknown>>;
+  for (const row of appealRows) {
+    byCaseId.get(row.caseId as number)?.appeals.push({
+      id: row.appealId as string,
+      filedAt: (row.filedAt as string) ?? null,
+      closedAt: (row.closedAt as string) ?? null,
+      courtState: (row.courtState as string) ?? null,
+      instance: (row.instance as number) ?? null,
+      className: (row.className as string) ?? null,
+      type: (row.type as string) ?? null,
+      nature: (row.nature as string) ?? null,
+      lastDecisionAt: (row.lastDecisionAt as string) ?? null,
+      lastDecisionType: (row.lastDecisionType as string) ?? null,
+      reporter: (row.reporter as string) ?? null,
+      provenance: pickProvenance(row),
+    });
+  }
+
+  return { available: true, cases };
+}
+
 export function getPersonVoteSectionsPage(
   historyId: number,
   page: number,

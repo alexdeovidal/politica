@@ -6,7 +6,7 @@ import {
   getPersonSocialMedia, getPersonAssets, getPersonSignals, getCycleEdgeAmounts,
   getPoliticianDonationNetwork, getDiscourseSignals, getDiscourseCount, getExpenseYears,
   getPersonPhotoUrl, getPersonPhotoProvenance, getPersonEarmarks,
-  getPersonVoteResults,
+  getPersonVoteResults, getPersonElectoralCases,
 } from "@/lib/queries";
 import { SourceZone } from "@/components/source-zone";
 import { PoliticianNetwork } from "@/components/politician-network";
@@ -18,6 +18,7 @@ import { SocialCard } from "@/components/social-card";
 import { TweetCard } from "@/components/tweet-card";
 import { FinanceTable } from "@/components/finance-table";
 import { PersonVoteResults } from "@/components/person-vote-results";
+import { PersonElectoralCases } from "@/components/person-electoral-cases";
 import { Skeleton } from "@/components/skeleton";
 import { PageHeader } from "@/components/shell/shell-context";
 import { YearSelect } from "@/components/ui/year-select";
@@ -123,28 +124,9 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
           <VotingSection personId={person.id} />
         </Suspense>
 
-        <Section id="processos-eleitorais-publicos" title="processos eleitorais públicos">
-          <div className="card flex flex-col items-start gap-3 p-4 sm:p-5">
-            <p className="max-w-3xl text-[12px] leading-relaxed text-[var(--muted)]">
-              A Consulta Pública Unificada do PJe permite pesquisar processos públicos da Justiça
-              Eleitoral pelo nome em zonas eleitorais, TREs e TSE. Na página oficial, pesquise por:
-              <strong className="ml-1 text-[var(--fg-2)]">{displayName}</strong>.
-            </p>
-            <a
-              href="https://consultaunificadapje.tse.jus.br/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn inline-flex"
-            >
-              Abrir consulta oficial do PJe Eleitoral ↗
-            </a>
-            <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted-2)]">
-              A consulta abrange somente a Justiça Eleitoral e pode não exibir processos em sigilo.
-              Este link não representa uma lista completa de processos em outras áreas da Justiça.
-              A existência de um processo, por si só, não significa culpa ou condenação.
-            </p>
-          </div>
-        </Section>
+        <Suspense fallback={<SectionSkeleton id="processos-eleitorais" title="processos eleitorais" rows={2} />}>
+          <ElectoralCasesSection personId={person.id} />
+        </Suspense>
   
         <Suspense fallback={<SectionSkeleton id="bens-declarados" title="bens declarados" rows={2} />}>
           <AssetsSection personId={person.id} />
@@ -329,6 +311,11 @@ async function VotingSection({ personId }: { personId: number }) {
   const results = getPersonVoteResults(personId);
   if (results.length === 0) return null;
   return <PersonVoteResults results={results} />;
+}
+
+async function ElectoralCasesSection({ personId }: { personId: number }) {
+  const data = getPersonElectoralCases(personId);
+  return <PersonElectoralCases data={data} />;
 }
 
 async function AssetsSection({ personId }: { personId: number }) {
