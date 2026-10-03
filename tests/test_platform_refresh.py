@@ -105,6 +105,16 @@ class Response:
     def __init__(self,data=b''):self.content=data;self.headers={'ETag':'fixture1'}
     def raise_for_status(self):pass
 
+def test_proposal_retries_interrupted_large_archive(monkeypatch):
+    calls=[]
+    def get(*args,**kwargs):
+        calls.append(kwargs['timeout'])
+        if len(calls)==1:raise proposals.requests.RequestsError('interrupted',code=28)
+        return Response(b'complete archive')
+    monkeypatch.setattr(proposals.requests,'get',get)
+    assert proposals.download_archive('https://tse.example/archive.zip')==b'complete archive'
+    assert calls==[1800,1800]
+
 def test_proposal_only_associates_unique_official_candidate_id(tmp_path,monkeypatch):
     primary=tmp_path/'primary.db';create_schema(primary);con=connect(primary,write=True)
     con.execute("INSERT INTO source(name,agency,type,base_url,created_at) VALUES('fixture','TSE','csv','https://tse.example','now')")

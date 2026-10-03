@@ -8,12 +8,17 @@ import { SearchAvatar } from "@/components/search-avatar";
 import { useShell } from "./shell-context";
 
 const SHORTCUTS = [
-  { href: "/", label: "Início" },
-  { href: "/grafo", label: "Grafo de correlações" },
-  { href: "/sinais/doacao-circular", label: "Sinais · Doação circular" },
-  { href: "/sinais/socio-fornecedor", label: "Sinais · Sócio de fornecedor" },
+  { href: "/", label: "Visão geral" },
+  { href: "/explorar", label: "Minha cidade e candidaturas" },
+  { href: "/grafo", label: "Relações entre pessoas e empresas" },
+  { href: "/conexoes", label: "Como se conectam?" },
+  { href: "/comparar", label: "Comparar candidaturas" },
+  { href: "/fontes", label: "Fontes e atualização" },
+  { href: "/acompanhar", label: "Minhas consultas" },
+  { href: "/sinais/doacao-circular", label: "Ciclos de recursos eleitorais" },
+  { href: "/sinais/socio-fornecedor", label: "Sócios de fornecedores" },
   { href: "/sinais/analise-ia", label: "Sinais · Análise de IA" },
-  { href: "/sinais/discurso", label: "Sinais · Discurso em rede social" },
+  { href: "/sinais/discurso", label: "Atividade em redes sociais" },
 ];
 
 export function useCommandPaletteShortcut() {
@@ -36,14 +41,25 @@ export function CommandPalette() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchedQuery, setSearchedQuery] = useState("");
+  const [searchError, setSearchError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const previousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    const previousOverflow=document.body.style.overflow;document.body.style.overflow="hidden";
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setPaletteOpen(false);
+      if(e.key==='Tab'){
+        const controls=Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('input,button:not([disabled]),a[href]')??[]);
+        const first=controls[0],last=controls.at(-1);
+        if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}
+        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
+      }
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {document.removeEventListener("keydown", onKeyDown);document.body.style.overflow=previousOverflow;previousFocus?.focus();};
   }, [setPaletteOpen]);
 
   useEffect(() => {
@@ -57,10 +73,10 @@ export function CommandPalette() {
     const t = setTimeout(() => {
       setLoading(true);
       fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
-        .then((r) => r.json())
-        .then((d: { results: SearchResult[] }) => setResults(d.results))
-        .catch(() => {})
-        .finally(() => setLoading(false));
+        .then((r) => {if(!r.ok)throw new Error('consulta indisponível');return r.json();})
+        .then((d: { results: SearchResult[] }) => {if(!controller.signal.aborted){setResults(d.results);setSearchError("");}})
+        .catch(() => {if(!controller.signal.aborted){setResults([]);setSearchError("Não foi possível consultar agora. Tente novamente.");}})
+        .finally(() => {if(!controller.signal.aborted){setLoading(false);setSearchedQuery(trimmed);}});
     }, 180);
     return () => {
       clearTimeout(t);
@@ -83,17 +99,17 @@ export function CommandPalette() {
 
   return (
     <div className="palette__backdrop" onClick={() => setPaletteOpen(false)}>
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} className="palette" role="dialog" aria-modal="true" aria-label="Pesquisar dados públicos" onClick={(e) => e.stopPropagation()}>
         <div className="palette__input">
           <span className="mono" style={{ color: "var(--muted-2)" }}>⌕</span>
           <input
             ref={inputRef}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {setQ(e.target.value);setSearchedQuery("");}}
             placeholder="Nome, CPF ou CNPJ"
             aria-label="Pesquisar candidatos, empresas ou pessoas físicas por nome ou documento"
           />
-          <span className="input__kbd">Esc</span>
+          <button type="button" className="btn btn--icon" aria-label="Fechar pesquisa" title="Fechar pesquisa (Esc)" onClick={()=>setPaletteOpen(false)}>×</button>
         </div>
         <div className="palette__guide">
           <strong>Pesquise candidatos, empresas ou pessoas físicas.</strong>
@@ -107,8 +123,10 @@ export function CommandPalette() {
                 <span className="palette__group">ir para</span>
               </button>
             ))
-          ) : loading ? (
+          ) : loading || searchedQuery!==trimmed ? (
             <div className="palette__empty">Buscando…</div>
+          ) : searchError ? (
+            <div className="palette__empty" role="status">{searchError}</div>
           ) : shownResults.length === 0 && shortcuts.length === 0 ? (
             <div className="palette__empty">Nada encontrado nos registros públicos pesquisados.</div>
           ) : (

@@ -16,6 +16,18 @@ from pypdf import PdfReader
 BASE="https://cdn.tse.jus.br/estatistica/sead/odsele/proposta_governo/"
 STATES="AC AL AM AP BA BR CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR RS SC SE SP TO".split()
 
+def download_archive(url:str)->bytes:
+    # Historical state archives can exceed 1 GB. Retry an interrupted transfer
+    # without publishing incomplete contents or discarding the previous version.
+    for attempt in range(2):
+        try:
+            response=requests.get(url,impersonate="chrome",timeout=1800)
+            response.raise_for_status()
+            return response.content
+        except requests.RequestsError as error:
+            if attempt or getattr(error,"code",None) not in (28,92):raise
+    raise RuntimeError("Download incompleto")
+
 def run(db_path:Path,store_path:Path,files_path:Path,years:list[int],units:list[str])->dict:
     primary=sqlite3.connect(f"file:{db_path}?mode=ro",uri=True)
     store=sqlite3.connect(store_path,timeout=60)
@@ -37,9 +49,9 @@ def run(db_path:Path,store_path:Path,files_path:Path,years:list[int],units:list[
                     saved=store.execute("SELECT payload FROM cache WHERE key=?",(url,)).fetchone()
                     if saved and any(signature.values()) and json.loads(saved[0])==signature:
                         report["unchanged"]+=1;continue
-                    response=requests.get(url,impersonate="chrome",timeout=180);response.raise_for_status()
-                    archive_hash=hashlib.sha256(response.content).hexdigest()
-                    archive=zipfile.ZipFile(io.BytesIO(response.content))
+                    archive_content=download_archive(url)
+                    archive_hash=hashlib.sha256(archive_content).hexdigest()
+                    archive=zipfile.ZipFile(io.BytesIO(archive_content))
                     pending=[];pdf_count=sum(entry.filename.lower().endswith(".pdf") for entry in archive.infolist());matched_count=0
                     for entry in archive.infolist():
                         match=re.fullmatch(rf"{year}{unit}(\d+)(?:_(\d+))?\.pdf",Path(entry.filename).name,re.IGNORECASE)
