@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
-import {normalizeName} from "./normalize";
+import {normalizeName,normalizePublicTimestamp} from "./normalize";
 
 const DB_PATH = process.env.ELOSYS_DB_PATH ?? path.join(process.cwd(), "..", "elosys.db");
 
@@ -11,6 +11,7 @@ export function db(): Database.Database {
   _db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
   _db.pragma("query_only = ON");
   _db.function("normalize_public_name", {deterministic:true}, (value:unknown)=>normalizeName(String(value??"")));
+  _db.function("public_timestamp", {deterministic:true}, normalizePublicTimestamp);
   return _db;
 }
 
