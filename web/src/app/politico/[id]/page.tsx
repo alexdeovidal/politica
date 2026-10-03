@@ -315,7 +315,7 @@ async function VotingSection({ personId }: { personId: number }) {
 
 async function ElectoralCasesSection({ personId }: { personId: number }) {
   const data = getPersonElectoralCases(personId);
-  return <PersonElectoralCases data={data} />;
+  return <PersonElectoralCases key={personId} personId={personId} data={data} />;
 }
 
 async function AssetsSection({ personId }: { personId: number }) {

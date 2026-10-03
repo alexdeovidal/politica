@@ -590,9 +590,31 @@ export type PublicElectoralCase = {
 export type PersonElectoralCases = {
   available: boolean;
   cases: PublicElectoralCase[];
+  total: number;
+  offset: number;
+  pageSize: number;
 };
 
-export function getPersonElectoralCases(personId: number): PersonElectoralCases {
+let electoralCaseSearchNormalizerRegistered = false;
+
+function registerElectoralCaseSearchNormalizer() {
+  if (electoralCaseSearchNormalizerRegistered) return;
+  db().function(
+    "normalize_electoral_case_search",
+    { deterministic: true },
+    (value: unknown) => normalizeName(String(value ?? "")),
+  );
+  electoralCaseSearchNormalizerRegistered = true;
+}
+
+export function getPersonElectoralCases(
+  personId: number,
+  offset = 0,
+  requestedPageSize = 8,
+  rawQuery = "",
+): PersonElectoralCases {
+  const pageSize = Math.max(1, Math.min(20, Math.floor(requestedPageSize)));
+  const safeOffset = Math.max(0, Math.floor(offset));
   const requiredTables = [
     "electoral_case",
     "electoral_case_candidate",
@@ -600,10 +622,82 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
     "electoral_case_decision",
     "electoral_case_appeal",
   ];
-  if (!requiredTables.every(hasTable)) return { available: false, cases: [] };
+  if (!requiredTables.every(hasTable)) {
+    return { available: false, cases: [], total: 0, offset: safeOffset, pageSize };
+  }
+
+  const hasQuery = rawQuery.trim().length > 0;
+  const queryTokens = [...new Set(
+    normalizeName(rawQuery).replace(/[^A-Z0-9]+/g, " ").trim().split(" ").filter(Boolean),
+  )];
+  if (hasQuery && queryTokens.length === 0) {
+    return { available: true, cases: [], total: 0, offset: safeOffset, pageSize };
+  }
 
   const candidateFilter = "EXISTS (SELECT 1 FROM electoral_case_candidate cc " +
     "WHERE cc.case_id = t.id AND cc.person_id = ?)";
+  const searchParams: Array<string | number> = [];
+  let searchFilter = "";
+  if (queryTokens.length > 0) {
+    registerElectoralCaseSearchNormalizer();
+    const caseFields = [
+      "t.case_number", "CAST(t.source_dataset_year AS TEXT)", "t.filed_at", "t.closed_at",
+      "t.origin_state", "CAST(t.origin_instance AS TEXT)", "t.court_state", "CAST(t.instance AS TEXT)",
+      "t.distributed_at", "t.distribution_type", "t.reporter_name", "t.class_code", "t.class_abbr",
+      "t.class_name", "t.main_subject_code", "t.main_subject", "CAST(t.is_appeal AS TEXT)",
+      "CAST(t.decision_count AS TEXT)", "t.last_decision_at", "t.last_decision_type", "t.source_url",
+      "src.name", "src.agency", "col.url", "pa.parser_name",
+    ];
+    const fieldMatches = (fields: string[], pattern: string) => {
+      searchParams.push(...fields.map(() => pattern));
+      return fields.map((field) =>
+        `normalize_electoral_case_search(COALESCE(${field}, '')) LIKE ? ESCAPE '\\'`,
+      ).join(" OR ");
+    };
+    const tokenFilters = queryTokens.map((token) => {
+      const pattern = `%${token.replace(/[\\%_]/g, "\\$&")}%`;
+      const directMatches = fieldMatches(caseFields, pattern);
+
+      searchParams.push(personId);
+      const partyMatches = fieldMatches([
+        "cc_search.candidacy_year", "cc_search.pole", "cc_search.party_type",
+        "cc_search.party_name", "cc_search.social_name",
+      ].map((field) => `CAST(${field} AS TEXT)`), pattern);
+      const subjectMatches = fieldMatches(["cs_search.subject_code", "cs_search.subject"], pattern);
+      const decisionMatches = fieldMatches([
+        "cd_search.decision_sequence", "cd_search.decided_at", "cd_search.author_name", "cd_search.decision_type",
+      ], pattern);
+      const appealMatches = fieldMatches([
+        "ca_search.appeal_id", "ca_search.filed_at", "ca_search.closed_at", "ca_search.court_state",
+        "CAST(ca_search.instance AS TEXT)", "ca_search.class_name", "ca_search.appeal_type", "ca_search.appeal_nature",
+        "ca_search.last_decision_at", "ca_search.last_decision_type", "ca_search.reporter_name",
+      ], pattern);
+
+      return `(${directMatches}
+        OR EXISTS (
+          SELECT 1 FROM electoral_case_candidate cc_search
+          WHERE cc_search.case_id = t.id AND cc_search.person_id = ? AND (${partyMatches})
+        )
+        OR EXISTS (
+          SELECT 1 FROM electoral_case_subject cs_search
+          WHERE cs_search.case_id = t.id AND (${subjectMatches})
+        )
+        OR EXISTS (
+          SELECT 1 FROM electoral_case_decision cd_search
+          WHERE cd_search.case_id = t.id AND (${decisionMatches})
+        )
+        OR EXISTS (
+          SELECT 1 FROM electoral_case_appeal ca_search
+          WHERE ca_search.case_id = t.id AND (${appealMatches})
+        ))`;
+    });
+    searchFilter = ` AND ${tokenFilters.join(" AND ")}`;
+  }
+  const filterParams = [personId, ...searchParams];
+  const total = (db().prepare(
+    `SELECT COUNT(*) AS total FROM electoral_case t ${PROVENANCE_JOIN}
+     WHERE ${candidateFilter}${searchFilter}`,
+  ).get(...filterParams) as { total: number }).total;
   const rows = db().prepare(
     `SELECT t.id, t.case_number AS caseNumber, t.source_dataset_year AS electionYear,
             t.filed_at AS filedAt, t.closed_at AS closedAt,
@@ -616,9 +710,10 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
             t.last_decision_at AS lastDecisionAt, t.last_decision_type AS lastDecisionType,
             t.source_url AS sourceUrl, ${PROVENANCE_COLUMNS}
      FROM electoral_case t ${PROVENANCE_JOIN}
-     WHERE ${candidateFilter}
-     ORDER BY COALESCE(t.last_decision_at, t.filed_at, '') DESC, t.case_number`
-  ).all(personId) as Array<Record<string, unknown>>;
+     WHERE ${candidateFilter}${searchFilter}
+     ORDER BY COALESCE(t.last_decision_at, t.filed_at, '') DESC, t.case_number
+     LIMIT ? OFFSET ?`
+  ).all(...filterParams, pageSize, safeOffset) as Array<Record<string, unknown>>;
 
   const cases = rows.map((row): PublicElectoralCase => ({
     id: row.id as number,
@@ -649,19 +744,22 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
     appeals: [],
     provenance: pickProvenance(row),
   }));
-  if (cases.length === 0) return { available: true, cases };
+  if (cases.length === 0) {
+    return { available: true, cases, total, offset: safeOffset, pageSize };
+  }
 
   const byCaseId = new Map(cases.map((item) => [item.id, item]));
-  const selectedCaseIds = "SELECT id FROM electoral_case t WHERE " + candidateFilter;
+  const caseIds = cases.map((item) => item.id);
+  const casePlaceholders = caseIds.map(() => "?").join(", ");
 
   const partyRows = db().prepare(
     `SELECT cc.case_id AS caseId, cc.candidacy_year AS candidacyYear, cc.pole,
             cc.party_type AS type, cc.party_name AS name, cc.social_name AS socialName,
             cc.is_main_party AS isMain
      FROM electoral_case_candidate cc
-     WHERE cc.person_id = ?
+     WHERE cc.person_id = ? AND cc.case_id IN (${casePlaceholders})
      ORDER BY cc.candidacy_year DESC, cc.id`
-  ).all(personId) as Array<Record<string, unknown>>;
+  ).all(personId, ...caseIds) as Array<Record<string, unknown>>;
   for (const row of partyRows) {
     const item = byCaseId.get(row.caseId as number);
     if (!item) continue;
@@ -678,9 +776,9 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
   const subjectRows = db().prepare(
     `SELECT t.case_id AS caseId, t.subject_code AS code, t.subject, ${PROVENANCE_COLUMNS}
      FROM electoral_case_subject t ${PROVENANCE_JOIN}
-     WHERE t.case_id IN (${selectedCaseIds})
+     WHERE t.case_id IN (${casePlaceholders})
      ORDER BY t.subject COLLATE NOCASE`
-  ).all(personId) as Array<Record<string, unknown>>;
+  ).all(...caseIds) as Array<Record<string, unknown>>;
   for (const row of subjectRows) {
     byCaseId.get(row.caseId as number)?.subjects.push({
       code: (row.code as string) ?? null,
@@ -693,9 +791,9 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
     `SELECT t.case_id AS caseId, t.decision_sequence AS sequence, t.decided_at AS date,
             t.author_name AS author, t.decision_type AS type, ${PROVENANCE_COLUMNS}
      FROM electoral_case_decision t ${PROVENANCE_JOIN}
-     WHERE t.case_id IN (${selectedCaseIds})
+     WHERE t.case_id IN (${casePlaceholders})
      ORDER BY t.decided_at DESC, t.id DESC`
-  ).all(personId) as Array<Record<string, unknown>>;
+  ).all(...caseIds) as Array<Record<string, unknown>>;
   for (const row of decisionRows) {
     byCaseId.get(row.caseId as number)?.decisions.push({
       sequence: (row.sequence as string) ?? null,
@@ -713,9 +811,9 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
             t.last_decision_at AS lastDecisionAt, t.last_decision_type AS lastDecisionType,
             t.reporter_name AS reporter, ${PROVENANCE_COLUMNS}
      FROM electoral_case_appeal t ${PROVENANCE_JOIN}
-     WHERE t.case_id IN (${selectedCaseIds})
+     WHERE t.case_id IN (${casePlaceholders})
      ORDER BY t.filed_at DESC, t.id DESC`
-  ).all(personId) as Array<Record<string, unknown>>;
+  ).all(...caseIds) as Array<Record<string, unknown>>;
   for (const row of appealRows) {
     byCaseId.get(row.caseId as number)?.appeals.push({
       id: row.appealId as string,
@@ -733,7 +831,7 @@ export function getPersonElectoralCases(personId: number): PersonElectoralCases 
     });
   }
 
-  return { available: true, cases };
+  return { available: true, cases, total, offset: safeOffset, pageSize };
 }
 
 export function getPersonVoteSectionsPage(
