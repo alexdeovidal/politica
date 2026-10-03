@@ -104,12 +104,15 @@
     }
   ],
   "verification": {
-    "pythonTests": 62,
+    "pythonTests": 66,
     "typescript": "passed_after_final_adjustments",
     "build": "passed",
     "mobileOverflow": "regional page: scrollWidth equals viewport width",
     "identityPath": "masked document shown as possible identity",
     "fullSearch": "name fragments + ballot aliases + election filters applied before limit",
-    "sourceAudit": "fixture verified; production report pending"
+    "sourceAudit": "production snapshots before and after refresh: no duplicated public documents, file-provenance mismatch, campaign CNPJ mismatch or negative votes",
+    "pncpRegression": "offline rate limit, interruption and durable resumption passed",
+    "searchIndex": "ballot-name index maintained transactionally; fixture search verified",
+    "writerCoordination": "shared ingestion lock regression passed"
   }
 }
