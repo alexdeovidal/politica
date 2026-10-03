@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 import { useShell } from "./shell-context";
 import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 
 export function Topbar() {
-  const { header, analysisMode, setAnalysisMode } = useShell();
+  const { header, analysisMode, setAnalysisMode, mobileNavOpen, setMobileNavOpen } = useShell();
   const pathname = usePathname();
   useCommandPaletteShortcut();
 
@@ -25,6 +26,17 @@ export function Topbar() {
         style={{ backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
       />
       <div className="navbar">
+        <button
+          type="button"
+          className="btn btn--icon mobile-nav-toggle"
+          onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          aria-label={mobileNavOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
+          aria-expanded={mobileNavOpen}
+          aria-controls="primary-navigation"
+          data-mobile-nav-trigger
+        >
+          {mobileNavOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+        </button>
         <BrandLockup className="brand-lockup--topbar" />
         <span className="crumb">{header.group}</span>
         {header.current ? (

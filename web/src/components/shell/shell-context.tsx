@@ -14,6 +14,8 @@ type Ctx = {
   setHeader: (h: PageHeaderState) => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (open: boolean) => void;
   analysisMode: boolean;
   setAnalysisMode: (on: boolean) => void;
 };
@@ -31,11 +33,22 @@ export function ShellProvider({
 }) {
   const [header, setHeader] = useState<PageHeaderState>(DEFAULT_HEADER);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [analysisMode, setAnalysisMode] = useState(false);
 
   return (
     <ShellCtx.Provider
-      value={{ aiReviewEnabled, header, setHeader, paletteOpen, setPaletteOpen, analysisMode, setAnalysisMode }}
+      value={{
+        aiReviewEnabled,
+        header,
+        setHeader,
+        paletteOpen,
+        setPaletteOpen,
+        mobileNavOpen,
+        setMobileNavOpen,
+        analysisMode,
+        setAnalysisMode,
+      }}
     >
       {children}
     </ShellCtx.Provider>
