@@ -138,7 +138,7 @@ export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:numb
 
   const filterClauses:string[]=[];const filterParams:(string|number)[]=[];
   for(const [field,value] of [["year",filters?.year],["office",filters?.office],["state",filters?.state],["municipality",filters?.city]] as const)if(value){filterClauses.push(`filter_history.${field}=?`);filterParams.push(value);}
-  const historyFilter=filterClauses.length?` AND EXISTS(SELECT 1 FROM politician_history filter_history WHERE filter_history.person_id=people.id AND ${filterClauses.join(" AND ")})`:"";
+  const historyFilter=filterClauses.length?` AND id IN (SELECT filter_history.person_id FROM politician_history filter_history WHERE ${filterClauses.join(" AND ")})`:"";
   matchParams.splice(matchParams.length-1,0,...filterParams);
   // LIMIT in `matches` first; per-row latest-candidacy lookup avoids a full-table window function
   const sql = `
