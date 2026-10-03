@@ -9,6 +9,7 @@ dependencies = [
     # do TSE (e provavelmente outras fontes) devolve 403 para clientes Python.
     "curl-cffi>=0.7",
     "pypdf>=5.0",
+    "fonttools>=4.0",
 ]
 
 [project.scripts]
