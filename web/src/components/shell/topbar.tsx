@@ -41,9 +41,11 @@ export function Topbar() {
               className={`btn${analysisMode ? " btn--fonte-active" : ""}`}
               onClick={() => setAnalysisMode(!analysisMode)}
               title="Modo análise: passe o mouse sobre um dado para destacá-lo, clique para ver a fonte"
+              aria-label="Modo análise: mostrar fontes dos dados"
               aria-pressed={analysisMode}
             >
-              ◎ fonte
+              <span aria-hidden="true">◎</span>
+              <span className="btn-source-label">fonte</span>
             </button>
           ) : null}
           <ThemeToggle />

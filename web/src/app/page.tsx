@@ -66,7 +66,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       </section>
 
       <section className="animate-in flex flex-col gap-4" style={{ animationDelay: "80ms" }}>
-        <div className="kpis">
+        <div className="kpis kpis--home">
           {heroStats.map((s) => (
             <div key={s.label} className="kpi">
               <div className="kpi__label">{s.label}</div>
