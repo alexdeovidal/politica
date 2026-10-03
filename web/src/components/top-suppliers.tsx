@@ -88,29 +88,29 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
       ) : (
         <div className="flex flex-col">
           {suppliers.map((s, i) => (
-            <div key={s.cnpj} className="border-b border-[var(--border-1)] py-3.5 last:border-0">
-              <div className="flex items-baseline gap-3">
+            <div key={s.cnpj} className="min-w-0 border-b border-[var(--border-1)] py-3.5 last:border-0">
+              <div className="flex min-w-0 items-baseline gap-2.5 sm:gap-3">
                 <span className="w-6 flex-none font-mono text-[11px] text-[var(--muted-2)]">
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <Link
                   href={`/cnpj/${s.cnpj}`}
-                  className="min-w-0 flex-1 truncate text-[14px] hover:text-elo-amber hover:underline"
+                  className="line-clamp-2 min-w-0 flex-1 break-words text-[13px] leading-snug hover:text-elo-amber hover:underline sm:truncate sm:text-[14px]"
                 >
                   {s.name}
                 </Link>
-                <span className="flex-none font-mono text-[13px] text-elo-amber">
+                <span className="flex-none whitespace-nowrap font-mono text-[12px] text-elo-amber sm:text-[13px]">
                   {formatBRL(s.totalCents)}
                 </span>
               </div>
-              <div className="mt-2 flex items-center gap-3 pl-9">
-                <div className="h-[3px] flex-1 bg-[var(--hover)]">
+              <div className="mt-2 flex min-w-0 flex-col items-stretch gap-1.5 pl-9 sm:flex-row sm:items-center sm:gap-3">
+                <div className="h-[3px] min-w-0 bg-[var(--hover)] sm:flex-1">
                   <div
                     className="h-[3px] bg-elo-amber"
                     style={{ width: `${Math.max(2, (s.totalCents / max) * 100)}%` }}
                   />
                 </div>
-                <span className="flex-none font-mono text-[9.5px] text-[var(--muted-2)]">
+                <span className="min-w-0 max-w-full break-words font-mono text-[9.5px] leading-relaxed text-[var(--muted-2)] sm:flex-none sm:whitespace-nowrap">
                   {formatCnpj(s.cnpj)} · {s.paymentCount.toLocaleString("pt-BR")} pagamentos ·{" "}
                   {s.candidacyCount.toLocaleString("pt-BR")} candidaturas
                 </span>
