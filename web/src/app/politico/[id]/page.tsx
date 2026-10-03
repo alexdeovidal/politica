@@ -122,6 +122,29 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
         <Suspense fallback={<SectionSkeleton id="votos-por-local" title="votos por local" rows={1} />}>
           <VotingSection personId={person.id} />
         </Suspense>
+
+        <Section id="processos-eleitorais-publicos" title="processos eleitorais públicos">
+          <div className="card flex flex-col items-start gap-3 p-4 sm:p-5">
+            <p className="max-w-3xl text-[12px] leading-relaxed text-[var(--muted)]">
+              A Consulta Pública Unificada do PJe permite pesquisar processos públicos da Justiça
+              Eleitoral pelo nome em zonas eleitorais, TREs e TSE. Na página oficial, pesquise por:
+              <strong className="ml-1 text-[var(--fg-2)]">{displayName}</strong>.
+            </p>
+            <a
+              href="https://consultaunificadapje.tse.jus.br/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn inline-flex"
+            >
+              Abrir consulta oficial do PJe Eleitoral ↗
+            </a>
+            <p className="max-w-3xl text-[11px] leading-relaxed text-[var(--muted-2)]">
+              A consulta abrange somente a Justiça Eleitoral e pode não exibir processos em sigilo.
+              Este link não representa uma lista completa de processos em outras áreas da Justiça.
+              A existência de um processo, por si só, não significa culpa ou condenação.
+            </p>
+          </div>
+        </Section>
   
         <Suspense fallback={<SectionSkeleton id="bens-declarados" title="bens declarados" rows={2} />}>
           <AssetsSection personId={person.id} />
