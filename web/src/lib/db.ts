@@ -16,13 +16,17 @@ export function db(): Database.Database {
 
 const _tables = new Set<string>();
 let _tablesLoaded = false;
+let _schemaVersion = -1;
 
 export function hasTable(name: string): boolean {
-  if (!_tablesLoaded) {
+  const schemaVersion=db().pragma('schema_version',{simple:true}) as number;
+  if (!_tablesLoaded || schemaVersion!==_schemaVersion) {
+    _tables.clear();
     for (const r of db().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>) {
       _tables.add(r.name);
     }
     _tablesLoaded = true;
+    _schemaVersion = schemaVersion;
   }
   return _tables.has(name);
 }

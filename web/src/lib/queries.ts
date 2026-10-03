@@ -126,12 +126,15 @@ export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:numb
         WHEN instr(canonical_name, ?) > 0 THEN 2
         ELSE 3
       END`;
+  const indexedBallots = !looksLikeCpf && hasTable("politician_name_search") && hasTable("_politica_search_index") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version=1").get();
+  const ballotWhere=indexedBallots ? "id IN (SELECT person_id FROM politician_name_search WHERE politician_name_search MATCH ?)" : `id IN (SELECT person_id FROM politician_history search_history WHERE ${nameTokens.map(()=>"instr(normalize_public_name(search_history.ballot_name),?)>0").join(" AND ")})`;
+  const ballotParams=indexedBallots ? [nameTokens.map(token=>`"${token}"*`).join(" ")] : nameTokens;
   const matchWhere = looksLikeCpf
     ? "cpf LIKE ?"
-    : `(${nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ")} OR EXISTS(SELECT 1 FROM politician_history search_history WHERE search_history.person_id=people.id AND ${nameTokens.map(()=>"instr(normalize_public_name(search_history.ballot_name),?)>0").join(" AND ")}))`;
+    : `(${nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ")} OR ${ballotWhere})`;
   const matchParams = looksLikeCpf
     ? [`${digits}%`, limit * 4]
-    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens,...nameTokens, limit * 4];
+    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens,...ballotParams, limit * 4];
 
   const filterClauses:string[]=[];const filterParams:(string|number)[]=[];
   for(const [field,value] of [["year",filters?.year],["office",filters?.office],["state",filters?.state],["municipality",filters?.city]] as const)if(value){filterClauses.push(`filter_history.${field}=?`);filterParams.push(value);}

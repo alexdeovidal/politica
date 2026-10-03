@@ -71,6 +71,8 @@ def main():
     with a.state.with_suffix(".lock").open("w") as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return 0
+        from .search_index import ensure
+        ensure(a.db)
         results=run(a.db,a.state,a.tmp,a.manifest,max(1,a.max_updates));print(json.dumps(results,ensure_ascii=False))
     return int(any(r["status"]=="failed" for r in results))
 if __name__=="__main__":raise SystemExit(main())

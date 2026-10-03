@@ -8,6 +8,29 @@ from pypdf import PdfWriter
 from elosys.db import create_schema,connect
 from elosys.tse import monitor,derived,proposals,processual
 
+def test_ballot_index_tracks_refresh_and_rollback(tmp_path):
+    from elosys.tse.search_index import ensure
+    primary=tmp_path/'primary.db';create_schema(primary);con=connect(primary,write=True)
+    con.execute("INSERT INTO source(name,agency,type,base_url,created_at) VALUES('fixture','TSE','csv','https://tse.example','now')")
+    con.execute("INSERT INTO collection(source_id,url,accessed_at,payload_sha256,size_bytes) VALUES(1,'https://tse.example','now','hash',1)")
+    con.execute("INSERT INTO parse(collection_id,parser_name,parser_version,run_at) VALUES(1,'fixture','1','now')")
+    con.execute("INSERT INTO people(id,canonical_name,created_at) VALUES(1,'PESSOA FICTICIA','now')")
+    con.execute("INSERT INTO politician_history(id,person_id,cpf_trusted,ballot_name,year,provenance_id,collected_at) VALUES(1,1,1,'Flávio Exemplo',2022,1,'now')");con.commit()
+    assert ensure(primary)['rows']==1
+    assert con.execute("SELECT person_id FROM politician_name_search WHERE politician_name_search MATCH '\"FLAVIO\"* \"EXEMPLO\"*'").fetchone()[0]==1
+    con.execute("UPDATE politician_history SET ballot_name='Nome Novo' WHERE id=1");con.rollback()
+    assert con.execute("SELECT count(*) FROM politician_name_search WHERE politician_name_search MATCH 'FLAVIO'").fetchone()[0]==1
+    con.execute("UPDATE politician_history SET ballot_name='Nome Novo' WHERE id=1");con.commit()
+    assert con.execute("SELECT count(*) FROM politician_name_search WHERE politician_name_search MATCH 'FLAVIO'").fetchone()[0]==0
+    assert con.execute("SELECT person_id FROM politician_name_search WHERE politician_name_search MATCH 'NOVO'").fetchone()[0]==1
+    con.execute("UPDATE politician_history SET ballot_name=NULL WHERE id=1");con.commit()
+    assert con.execute("SELECT count(*) FROM politician_name_search").fetchone()[0]==0
+    con.execute("INSERT INTO politician_history(id,person_id,cpf_trusted,ballot_name,year,provenance_id,collected_at) VALUES(2,1,1,'Nova Candidatura',2026,1,'now')");con.commit()
+    assert con.execute("SELECT count(*) FROM politician_name_search").fetchone()[0]==1
+    con.execute("DELETE FROM politician_history WHERE id=2");con.commit()
+    assert con.execute("SELECT count(*) FROM politician_name_search").fetchone()[0]==0
+    assert ensure(primary)['status']=='unchanged';con.close()
+
 def test_monitor_failure_preserves_last_success(tmp_path,monkeypatch):
     path=tmp_path/'test.db';create_schema(path);state=tmp_path/'state.json'
     state.write_text(json.dumps({'sources':{'candidates_2026':{'synced_at':'2026-01-01','signature':{'etag':'old'}}}}))

@@ -157,6 +157,8 @@ def main() -> int:
         except BlockingIOError:
             log.info("uma sincronização TSE já está em execução; esta execução será ignorada")
             return 0
+        from .search_index import ensure
+        ensure(args.db)
         results = sync_changed(db_path=args.db, tmp_dir=args.tmp, state_path=args.state,
                                manifest_path=args.manifest, force=args.force)
         print(json.dumps({"checked_at": datetime.now(timezone.utc).isoformat(),
