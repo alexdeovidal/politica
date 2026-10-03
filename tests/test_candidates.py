@@ -21,6 +21,7 @@ HEADER = (
 )
 _CPF_A = "11144477735"
 _CPF_B = "15350946056"
+_CPF_C = "52998224725"
 
 
 def _row(sq, name, cpf, voter, office="DEPUTADO FEDERAL", uf="SP"):
@@ -124,6 +125,76 @@ def test_staging_table_is_gone_after_build(db, tmp_path):
         "SELECT name FROM sqlite_temp_master WHERE type='table' AND name='stg_candidate'"
     ).fetchone()
     assert got is None
+    con.close()
+
+
+def test_refresh_year_upserts_candidates_and_preserves_people_and_other_years(db, tmp_path, monkeypatch):
+    path = db
+    con = connect(path, write=True)
+    timestamp = "2026-01-01T00:00:00Z"
+    con.execute(
+        "INSERT INTO source (name, agency, type, base_url, created_at) VALUES ('seed', 'TSE', 'csv', 'x', ?)",
+        (timestamp,),
+    )
+    con.execute(
+        "INSERT INTO collection (source_id, url, accessed_at, payload_sha256, size_bytes) VALUES (1, 'seed', ?, 'seed', 0)",
+        (timestamp,),
+    )
+    con.execute(
+        "INSERT INTO parse (collection_id, parser_name, parser_version, run_at) VALUES (1, 'seed', '1', ?)",
+        (timestamp,),
+    )
+    con.execute(
+        "INSERT INTO people (cpf, cpf_trusted, voter_id, canonical_name, created_at) VALUES (?, 1, ?, 'PESSOA EXISTENTE', ?)",
+        (_CPF_A, "100000000001", timestamp),
+    )
+    existing_person = con.execute("SELECT id FROM people WHERE cpf = ?", (_CPF_A,)).fetchone()["id"]
+    con.execute(
+        "INSERT INTO people (cpf, cpf_trusted, voter_id, canonical_name, created_at) VALUES (?, 1, ?, 'PESSOA DE 2022', ?)",
+        (_CPF_B, "300000000003", timestamp),
+    )
+    other_person = con.execute("SELECT id FROM people WHERE cpf = ?", (_CPF_B,)).fetchone()["id"]
+    con.execute(
+        "INSERT INTO politician_history (person_id, cpf, cpf_trusted, voter_id, full_name, "
+        "normalized_name, tse_candidacy_id, year, round, provenance_id, collected_at) "
+        "VALUES (?, ?, 1, '100000000001', 'NOME ANTIGO', 'NOME ANTIGO', '2500001', 2026, 1, 1, ?)",
+        (existing_person, _CPF_A, timestamp),
+    )
+    con.execute(
+        "INSERT INTO politician_history (person_id, cpf, cpf_trusted, voter_id, full_name, "
+        "normalized_name, tse_candidacy_id, year, round, provenance_id, collected_at) "
+        "VALUES (?, ?, 1, '300000000003', 'PESSOA DE 2022', 'PESSOA DE 2022', '2500002', 2022, 1, 1, ?)",
+        (other_person, _CPF_B, timestamp),
+    )
+    con.commit()
+    old_history_id = con.execute(
+        "SELECT id FROM politician_history WHERE year = 2026 AND tse_candidacy_id = '2500001'"
+    ).fetchone()["id"]
+    con.close()
+
+    fresh_zip = _synthetic_zip([
+        _row("2500001", "NOME ATUALIZADO", _CPF_A, "100000000001").replace("2022;", "2026;", 1),
+        _row("2500005", "CANDIDATO NOVO", _CPF_C, "500000000005").replace("2022;", "2026;", 1),
+    ])
+
+    def fake_download(url, dest):
+        Path(dest).write_bytes(fresh_zip)
+        return 200, "application/zip"
+
+    monkeypatch.setattr(candidates, "download", fake_download)
+    con = connect(path, write=True)
+    report = candidates.refresh_year(con, 2026, tmp_dir=tmp_path)
+
+    updated = con.execute(
+        "SELECT id, person_id, full_name FROM politician_history WHERE year = 2026 AND tse_candidacy_id = '2500001'"
+    ).fetchone()
+    assert updated["id"] == old_history_id
+    assert updated["person_id"] == existing_person
+    assert updated["full_name"] == "NOME ATUALIZADO"
+    assert con.execute("SELECT count(*) FROM politician_history WHERE year = 2022").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM people").fetchone()[0] == 3
+    assert report["updated"] == 1 and report["inserted"] == 1
+    assert report["kept_other_years"] is True
     con.close()
 
 

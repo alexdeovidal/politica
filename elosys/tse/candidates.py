@@ -19,7 +19,7 @@ from ..provenance import (
     reset_source,
     sha256_bytes,
 )
-from ..util import clean_tse, digits_only, iso_date, normalize_name, now_utc
+from ..util import clean_tse, cpf_is_valid, digits_only, iso_date, normalize_name, now_utc
 
 log = get_logger("elosys.tse.candidates")
 
@@ -104,6 +104,88 @@ def run(con: sqlite3.Connection, *, years: list[int] | None = None,
     return report
 
 
+def refresh_year(con: sqlite3.Connection, year: int, *, tmp_dir: str | Path = "dados_tmp") -> dict:
+    """Merge one fresh TSE election file without clearing people or any prior year."""
+    if year not in SUPPORTED_YEARS:
+        raise ValueError(f"unsupported year: {year}")
+
+    create_staging(con)
+    con.execute("DELETE FROM stg_candidate WHERE year = ?", (year,))
+    staged = ingest_year(con, year, tmp_dir, force_stage=True)
+    if staged["staged"] == 0:
+        raise RuntimeError(f"TSE returned no candidate rows for {year}; existing data was kept")
+
+    # Ambiguity is checked for this election and against the existing global reject list,
+    # without deleting or rewriting people and histories from other years.
+    rejected = {r[0] for r in con.execute("SELECT cpf FROM rejected_cpf")}
+    rejected.update(r[0] for r in con.execute(
+        "SELECT cpf FROM stg_candidate WHERE year = ? AND cpf IS NOT NULL AND voter_id IS NOT NULL "
+        "GROUP BY cpf HAVING count(DISTINCT voter_id) > 1", (year,)))
+    rejected.update(r[0] for r in con.execute(
+        "SELECT DISTINCT cpf FROM stg_candidate WHERE year = ? AND cpf IS NOT NULL AND voter_id IN ("
+        "SELECT voter_id FROM stg_candidate WHERE year = ? AND cpf IS NOT NULL AND voter_id IS NOT NULL "
+        "GROUP BY voter_id HAVING count(DISTINCT cpf) > 1)", (year, year)))
+
+    existing = {
+        (str(row["tse_candidacy_id"]), row["round"]): row
+        for row in con.execute(
+            "SELECT id, person_id, cpf_trusted, tse_candidacy_id, round FROM politician_history WHERE year = ? "
+            "AND tse_candidacy_id IS NOT NULL", (year,))
+    }
+    updates = [column for column in _PH_COLUMNS if column not in {"person_id", "tse_candidacy_id", "year", "round"}]
+    update_sql = (
+        "UPDATE politician_history SET "
+        + ", ".join(f"{column} = :{column}" for column in updates)
+        + " WHERE id = :existing_id"
+    )
+    insert_sql = (
+        f"INSERT INTO politician_history ({', '.join(_PH_COLUMNS)}) "
+        f"VALUES ({', '.join(f':{column}' for column in _PH_COLUMNS)})"
+    )
+
+    inserted = updated = dropped_rows = 0
+    try:
+        con.execute("BEGIN")
+        for row in con.execute("SELECT * FROM stg_candidate WHERE year = ? ORDER BY id", (year,)):
+            item = dict(row)
+            key = (str(item["tse_candidacy_id"]), item["round"])
+            prior = existing.get(key)
+            if item["cpf"] in rejected:
+                item["cpf"] = None
+                dropped_rows += 1
+            item["cpf_trusted"] = int(cpf_is_valid(item["cpf"]))
+            if prior:
+                item["person_id"] = prior["person_id"]
+                con.execute(update_sql, {**{column: item[column] for column in updates}, "existing_id": prior["id"]})
+                updated += 1
+            else:
+                person_id, trusted = resolve_person(
+                    con, cpf=item["cpf"], voter_id=item["voter_id"], normalized_name=item["normalized_name"],
+                )
+                item["person_id"] = person_id
+                item["cpf_trusted"] = int(trusted)
+                inserted += 1
+                cursor = con.execute(insert_sql, {column: item[column] for column in _PH_COLUMNS})
+                existing[key] = {"id": cursor.lastrowid, "person_id": person_id, "cpf_trusted": int(trusted)}
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.execute("DROP TABLE IF EXISTS stg_candidate")
+        con.commit()
+
+    return {
+        "year": year,
+        "collection_id": staged["collection_id"],
+        "source_rows": staged["staged"],
+        "inserted": inserted,
+        "updated": updated,
+        "ambiguous_cpf_rows": dropped_rows,
+        "kept_other_years": True,
+    }
+
+
 def _g(row: dict, *names: str) -> str | None:
     for n in names:
         if n in row:
@@ -161,7 +243,8 @@ def _csv_members(zf: zipfile.ZipFile) -> list[str]:
     return sorted(brazil or csvs)
 
 
-def ingest_year(con: sqlite3.Connection, year: int, tmp_dir: str | Path) -> dict:
+def ingest_year(con: sqlite3.Connection, year: int, tmp_dir: str | Path,
+                *, force_stage: bool = False) -> dict:
     if year not in SUPPORTED_YEARS:
         raise ValueError(f"unsupported year: {year}")
 
@@ -184,7 +267,7 @@ def ingest_year(con: sqlite3.Connection, year: int, tmp_dir: str | Path) -> dict
         http_status=status, content_type=ctype, notes=notes,
     )
     con.commit()
-    if not is_new:
+    if not is_new and not force_stage:
         if not keep_file:
             zip_path.unlink(missing_ok=True)
         return {"year": year, "collection_id": collection_id, "already_collected": True, "staged": 0}

@@ -274,3 +274,72 @@ def test_rerun_is_idempotent(db, tmp_path):
     assert con.execute("SELECT count(*) FROM campaign_expense_payment").fetchone()[0] == 3
     assert con.execute("SELECT count(*) FROM companies").fetchone()[0] == 3
     con.close()
+
+
+def test_refresh_year_updates_finance_and_keeps_other_people_and_years(db, tmp_path, monkeypatch):
+    con = connect(db, write=True)
+    _seed_other_candidate(con)
+    accounts.run(con, years=[2022], tmp_dir=tmp_path)
+    old_donation = con.execute(
+        "SELECT id, campaign_org_id FROM campaign_donation WHERE year = 2022 AND tse_receipt_id = '1'"
+    ).fetchone()
+    old_expense = con.execute(
+        "SELECT id, campaign_org_id FROM campaign_expense WHERE year = 2022 AND tse_expense_id = '101'"
+    ).fetchone()
+    old_payment = con.execute(
+        "SELECT id, campaign_expense_id FROM campaign_expense_payment "
+        "WHERE year = 2022 AND tse_expense_id = '101' AND tse_installment_id = '9001'"
+    ).fetchone()
+    source_parse = con.execute("SELECT id FROM parse ORDER BY id LIMIT 1").fetchone()["id"]
+    company_count = con.execute("SELECT count(*) FROM companies").fetchone()[0]
+    con.execute(
+        "INSERT INTO campaign_donation (cnpj, year, tse_receipt_id, donor_cpf_cnpj, donor_name, "
+        "provenance_id, collected_at) VALUES ('00000000000000', 2020, 'historic-1', '32165498700', "
+        "'DOADOR DE OUTRO ANO', ?, '2020-01-01T00:00:00Z')", (source_parse,)
+    )
+    con.execute(
+        "INSERT INTO companies (cnpj, legal_name, kind, created_at) "
+        "VALUES ('11112222333344', 'EMPRESA DE OUTRO ANO', 'supplier', '2020-01-01T00:00:00Z')"
+    )
+    con.commit()
+    con.close()
+
+    changed = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(_zip())) as archive, zipfile.ZipFile(changed, "w") as output:
+        for name in archive.namelist():
+            payload = archive.read(name).replace(b"1000,00", b"2000,00").replace(b"800,00", b"900,00")
+            output.writestr(name, payload)
+    fresh_zip = changed.getvalue()
+
+    def fake_download(url, dest):
+        Path(dest).write_bytes(fresh_zip)
+        return 200, "application/zip"
+
+    monkeypatch.setattr(accounts, "download", fake_download)
+    con = connect(db, write=True)
+    report = accounts.refresh_year(con, 2022, tmp_dir=tmp_path)
+
+    donation = con.execute(
+        "SELECT id, amount_cents, campaign_org_id FROM campaign_donation "
+        "WHERE year = 2022 AND tse_receipt_id = '1'"
+    ).fetchone()
+    expense = con.execute(
+        "SELECT id, amount_cents, campaign_org_id FROM campaign_expense "
+        "WHERE year = 2022 AND tse_expense_id = '101'"
+    ).fetchone()
+    payment = con.execute(
+        "SELECT id, campaign_expense_id FROM campaign_expense_payment "
+        "WHERE year = 2022 AND tse_expense_id = '101' AND tse_installment_id = '9001'"
+    ).fetchone()
+    assert donation["id"] == old_donation["id"] and donation["amount_cents"] == 200000
+    assert donation["campaign_org_id"] == old_donation["campaign_org_id"]
+    assert expense["id"] == old_expense["id"] and expense["amount_cents"] == 90000
+    assert expense["campaign_org_id"] == old_expense["campaign_org_id"]
+    assert payment["id"] == old_payment["id"] and payment["campaign_expense_id"] == old_payment["campaign_expense_id"]
+    assert con.execute("SELECT count(*) FROM campaign_donation WHERE year = 2020").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM companies").fetchone()[0] == company_count + 1
+    assert con.execute(
+        "SELECT count(*) FROM pessoa_fisica_search WHERE cpf = '32165498700' AND name = 'DOADOR DE OUTRO ANO'"
+    ).fetchone()[0] == 1
+    assert report["kept_people_and_companies"] is True
+    con.close()

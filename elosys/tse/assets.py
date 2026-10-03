@@ -102,7 +102,20 @@ def run(con: sqlite3.Connection, *, years: list[int] | None = None,
     return report
 
 
-def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: int) -> dict:
+def refresh_year(con: sqlite3.Connection, year: int, *, tmp_dir: str | Path = "dados_tmp") -> dict:
+    """Upsert a single election's assets while retaining other people and years."""
+    if year not in SUPPORTED_YEARS:
+        raise ValueError(f"no bem_candidato file for {year}")
+    source_id = get_source(con, **SOURCE)
+    result = _ingest_year(con, year, Path(tmp_dir), source_id, upsert=True)
+    if result.get("rows", 0) == 0:
+        raise RuntimeError(f"TSE returned no asset rows for {year}; existing data was kept")
+    result.update({"year": year, "kept_other_years": True})
+    return result
+
+
+def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: int,
+                 *, upsert: bool = False) -> dict:
     url = URL_TEMPLATE.format(year=year)
     zip_path = tmp_dir / f"bem_candidato_{year}.zip"
 
@@ -155,7 +168,7 @@ def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: i
                 con.execute("UPDATE parse SET rows_extracted = ? WHERE id = ?", (len(rows), parse_id))
         rc.done()
 
-        inserted = _write_rows(con, rows)
+        inserted = _write_rows(con, rows, upsert=upsert)
         con.commit()
         if not keep:
             zip_path.unlink(missing_ok=True)
@@ -192,12 +205,18 @@ def _scan_assets(data: bytes, year: int, rows: list, ph_map: dict,
         })
 
 
-def _write_rows(con: sqlite3.Connection, rows: list[dict]) -> int:
+def _write_rows(con: sqlite3.Connection, rows: list[dict], *, upsert: bool = False) -> int:
     if not rows:
         return 0
     before = con.execute("SELECT count(*) FROM declared_assets").fetchone()[0]
     sql = (f"INSERT OR IGNORE INTO declared_assets ({', '.join(_DA_COLUMNS)}) "
            f"VALUES ({', '.join(f':{c}' for c in _DA_COLUMNS)})")
+    if upsert:
+        update = [c for c in _DA_COLUMNS if c not in {"year", "tse_candidacy_id", "asset_order"}]
+        sql = (f"INSERT INTO declared_assets ({', '.join(_DA_COLUMNS)}) "
+               f"VALUES ({', '.join(f':{c}' for c in _DA_COLUMNS)}) "
+               "ON CONFLICT(year, tse_candidacy_id, asset_order) DO UPDATE SET "
+               + ", ".join(f"{c} = excluded.{c}" for c in update))
     con.executemany(sql, rows)
     after = con.execute("SELECT count(*) FROM declared_assets").fetchone()[0]
     return after - before

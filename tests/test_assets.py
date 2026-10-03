@@ -110,3 +110,53 @@ def test_rerun_is_idempotent(db, tmp_path):
     assert rep2["assets"] == 3
     assert con.execute("SELECT count(*) FROM declared_assets").fetchone()[0] == 3
     con.close()
+
+
+def test_refresh_year_updates_archive_rows_without_deleting_other_years(db, tmp_path, monkeypatch):
+    con = connect(db, write=True)
+    person_id, history_id = _seed_candidacy(con)
+    assets.run(con, years=[2022], tmp_dir=tmp_path)
+    con.execute(
+        "INSERT INTO politician_history (person_id, cpf_trusted, tse_candidacy_id, year, provenance_id, collected_at) "
+        "VALUES (?, 0, 'OTHER_YEAR', 2024, 1, '2026-01-01T00:00:00Z')", (person_id,)
+    )
+    other_history = con.execute(
+        "SELECT id FROM politician_history WHERE tse_candidacy_id = 'OTHER_YEAR'"
+    ).fetchone()["id"]
+    con.execute(
+        "INSERT INTO declared_assets (person_id, history_id, tse_candidacy_id, year, asset_order, "
+        "asset_type, description, value_cents, provenance_id, collected_at) "
+        "VALUES (?, ?, 'OTHER_YEAR', 2024, 1, 'Imóvel', 'mantido', 12345, 1, '2026-01-01T00:00:00Z')",
+        (person_id, other_history),
+    )
+    con.commit()
+    original = con.execute(
+        "SELECT id FROM declared_assets WHERE year = 2022 AND tse_candidacy_id = ? AND asset_order = 1",
+        (_SQ,),
+    ).fetchone()["id"]
+    con.close()
+
+    updated_zip = _zip([
+        _bem(_SQ, "1", "Apartamento", "Valor revisado pelo TSE", "800000,00"),
+        _bem(_SQ, "2", "Veiculo automotor", "Carro popular", "35000,00"),
+        _bem("999999999999", "1", "Dinheiro em especie", "Reserva", "1000,00"),
+    ])
+
+    def fake_download(url, dest):
+        Path(dest).write_bytes(updated_zip)
+        return 200, "application/zip"
+
+    monkeypatch.setattr(assets, "download", fake_download)
+    con = connect(db, write=True)
+    report = assets.refresh_year(con, 2022, tmp_dir=tmp_path)
+    current = con.execute(
+        "SELECT id, person_id, history_id, description, value_cents FROM declared_assets "
+        "WHERE year = 2022 AND tse_candidacy_id = ? AND asset_order = 1", (_SQ,)
+    ).fetchone()
+    assert current["id"] == original
+    assert current["person_id"] == person_id and current["history_id"] == history_id
+    assert current["description"] == "Valor revisado pelo TSE"
+    assert current["value_cents"] == 80000000
+    assert con.execute("SELECT value_cents FROM declared_assets WHERE year = 2024").fetchone()[0] == 12345
+    assert report["kept_other_years"] is True
+    con.close()

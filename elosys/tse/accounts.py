@@ -172,9 +172,46 @@ def run(con: sqlite3.Connection, *, years: list[int] | None = None,
     return report
 
 
+def refresh_year(con: sqlite3.Connection, year: int, *, tmp_dir: str | Path = "dados_tmp") -> dict:
+    """Merge updated finance rows for one year without clearing other records."""
+    if year not in SUPPORTED_YEARS:
+        raise ValueError(f"no prestação de contas file for: {year}")
+    ph_rows = con.execute("SELECT count(*) FROM politician_history").fetchone()[0]
+    if ph_rows == 0:
+        raise RuntimeError("candidate history is empty; refresh candidates before campaign finance")
+    rejected_cpf = {r[0] for r in con.execute("SELECT cpf FROM rejected_cpf")}
+    cpf_to_person = dict(con.execute("SELECT cpf, id FROM people WHERE cpf IS NOT NULL"))
+    source_id = get_source(con, **SOURCE)
+    result = _ingest_year(
+        con, year, Path(tmp_dir), source_id, rejected_cpf, cpf_to_person, {}, upsert=True,
+    )
+    if result.get("rows", 0) == 0:
+        raise RuntimeError(f"TSE returned no finance rows for {year}; existing data was kept")
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pessoa_fisica_search'").fetchone():
+        con.execute("DELETE FROM pessoa_fisica_search")
+        con.execute(
+            "INSERT INTO pessoa_fisica_search (cpf, name) "
+            "SELECT cpf, max(name) FROM ("
+            " SELECT donor_cpf_cnpj AS cpf, donor_name AS name FROM campaign_donation "
+            " WHERE donor_company_id IS NULL AND donor_cpf_cnpj IS NOT NULL "
+            " AND length(donor_cpf_cnpj) = 11 AND donor_name IS NOT NULL "
+            " UNION ALL "
+            " SELECT supplier_cpf_cnpj AS cpf, supplier_name AS name FROM campaign_expense "
+            " WHERE supplier_company_id IS NULL AND supplier_cpf_cnpj IS NOT NULL "
+            " AND length(supplier_cpf_cnpj) = 11 AND supplier_name IS NOT NULL "
+            ") GROUP BY cpf"
+        )
+        con.commit()
+        result["person_search_index_rows"] = con.execute(
+            "SELECT count(*) FROM pessoa_fisica_search"
+        ).fetchone()[0]
+    result.update({"year": year, "kept_other_years": True, "kept_people_and_companies": True})
+    return result
+
+
 def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: int,
                  rejected_cpf: set[str], cpf_to_person: dict[str, int],
-                 company_cache: dict[str, int]) -> dict:
+                 company_cache: dict[str, int], *, upsert: bool = False) -> dict:
     url = URL_TEMPLATE.format(year=year)
     zip_path = tmp_dir / f"prestacao_contas_candidatos_{year}.zip"
 
@@ -228,13 +265,14 @@ def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: i
                                         parser_version=PARSER_VERSION,
                                         rows_extracted=0, rows_rejected=0)
                 _scan_receitas(data, year, seen_org, orgs, don_batch, counts, ph_person,
-                               rejected_cpf, cpf_to_person, company_cache, con, parse_id, rc)
+                               rejected_cpf, cpf_to_person, company_cache, con, parse_id, rc,
+                               upsert=upsert)
                 con.execute("UPDATE parse SET rows_extracted = ? WHERE id = ?", (rc.n, parse_id))
             if don_batch:
-                counts["donations"] += _write_donations(con, don_batch)
+                counts["donations"] += _write_donations(con, don_batch, upsert=upsert)
             rc.done()
 
-            counts["orgs"] = _write_orgs(con, orgs)
+            counts["orgs"] = _write_orgs(con, orgs, upsert=upsert)
             con.commit()
             with step(log, f"link donations {year} -> campaign_org"):
                 _link_to_org(con, "campaign_donation", year)
@@ -252,10 +290,10 @@ def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: i
                                             parser_version=PARSER_VERSION,
                                             rows_extracted=0, rows_rejected=0)
                     _scan_despesas(data, year, exp_batch, counts, ph_person, cpf_to_person,
-                                  company_cache, con, parse_id, rc2)
+                                  company_cache, con, parse_id, rc2, upsert=upsert)
                     con.execute("UPDATE parse SET rows_extracted = ? WHERE id = ?", (rc2.n, parse_id))
                 if exp_batch:
-                    counts["expenses"] += _write_expenses(con, exp_batch)
+                    counts["expenses"] += _write_expenses(con, exp_batch, upsert=upsert)
                 rc2.done()
                 con.commit()
                 with step(log, f"link expenses {year} -> campaign_org"):
@@ -275,10 +313,10 @@ def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: i
                                             collection_file_id=file_id, parser_name=PARSER_NAME,
                                             parser_version=PARSER_VERSION,
                                             rows_extracted=0, rows_rejected=0)
-                    _scan_pagas(data, year, pay_batch, counts, con, parse_id, rc3)
+                    _scan_pagas(data, year, pay_batch, counts, con, parse_id, rc3, upsert=upsert)
                     con.execute("UPDATE parse SET rows_extracted = ? WHERE id = ?", (rc3.n, parse_id))
                 if pay_batch:
-                    counts["payments"] += _write_payments(con, pay_batch)
+                    counts["payments"] += _write_payments(con, pay_batch, upsert=upsert)
                 rc3.done()
                 con.commit()
                 with step(log, f"link payments {year} -> campaign_expense"):
@@ -320,7 +358,8 @@ def _link_payments_to_expense(con: sqlite3.Connection, year: int) -> None:
 def _scan_receitas(data: bytes, year: int, seen_org: set, orgs: list, don_batch: list,
                    counts: dict, ph_person: dict, rejected_cpf: set[str],
                    cpf_to_person: dict[str, int], company_cache: dict[str, int],
-                   con: sqlite3.Connection, parse_id: int, rc: RowCounter) -> None:
+                   con: sqlite3.Connection, parse_id: int, rc: RowCounter,
+                   *, upsert: bool = False) -> None:
     reader = csv.DictReader(
         io.TextIOWrapper(io.BytesIO(data), encoding="latin-1", newline=""), delimiter=";")
     now = now_utc()
@@ -400,13 +439,14 @@ def _scan_receitas(data: bytes, year: int, seen_org: set, orgs: list, don_batch:
         })
 
         if len(don_batch) >= _LEDGER_FLUSH_EVERY:
-            counts["donations"] += _write_donations(con, don_batch)
+            counts["donations"] += _write_donations(con, don_batch, upsert=upsert)
             don_batch.clear()
 
 
 def _scan_despesas(data: bytes, year: int, exp_batch: list, counts: dict, ph_person: dict,
                    cpf_to_person: dict[str, int], company_cache: dict[str, int],
-                   con: sqlite3.Connection, parse_id: int, rc: RowCounter) -> None:
+                   con: sqlite3.Connection, parse_id: int, rc: RowCounter,
+                   *, upsert: bool = False) -> None:
     reader = csv.DictReader(
         io.TextIOWrapper(io.BytesIO(data), encoding="latin-1", newline=""), delimiter=";")
     now = now_utc()
@@ -459,12 +499,13 @@ def _scan_despesas(data: bytes, year: int, exp_batch: list, counts: dict, ph_per
         })
 
         if len(exp_batch) >= _LEDGER_FLUSH_EVERY:
-            counts["expenses"] += _write_expenses(con, exp_batch)
+            counts["expenses"] += _write_expenses(con, exp_batch, upsert=upsert)
             exp_batch.clear()
 
 
 def _scan_pagas(data: bytes, year: int, pay_batch: list, counts: dict,
-                con: sqlite3.Connection, parse_id: int, rc: RowCounter) -> None:
+                con: sqlite3.Connection, parse_id: int, rc: RowCounter,
+                *, upsert: bool = False) -> None:
     reader = csv.DictReader(
         io.TextIOWrapper(io.BytesIO(data), encoding="latin-1", newline=""), delimiter=";")
     now = now_utc()
@@ -493,7 +534,7 @@ def _scan_pagas(data: bytes, year: int, pay_batch: list, counts: dict,
         })
 
         if len(pay_batch) >= _LEDGER_FLUSH_EVERY:
-            counts["payments"] += _write_payments(con, pay_batch)
+            counts["payments"] += _write_payments(con, pay_batch, upsert=upsert)
             pay_batch.clear()
 
 
@@ -512,41 +553,65 @@ def _get_company(con: sqlite3.Connection, cnpj: str, *, kind: str, cache: dict[s
     return cache[cnpj]
 
 
-def _write_orgs(con: sqlite3.Connection, orgs: list[dict]) -> int:
+def _write_orgs(con: sqlite3.Connection, orgs: list[dict], *, upsert: bool = False) -> int:
     if not orgs:
         return 0
     before = con.execute("SELECT count(*) FROM campaign_org").fetchone()[0]
     sql = (f"INSERT OR IGNORE INTO campaign_org ({', '.join(_ORG_COLUMNS)}) "
            f"VALUES ({', '.join(f':{c}' for c in _ORG_COLUMNS)})")
+    if upsert:
+        update = [c for c in _ORG_COLUMNS if c not in {"year", "tse_candidacy_id", "cnpj"}]
+        sql = (f"INSERT INTO campaign_org ({', '.join(_ORG_COLUMNS)}) "
+               f"VALUES ({', '.join(f':{c}' for c in _ORG_COLUMNS)}) "
+               "ON CONFLICT(year, tse_candidacy_id, cnpj) DO UPDATE SET "
+               + ", ".join(f"{c} = excluded.{c}" for c in update))
     con.executemany(sql, orgs)
     after = con.execute("SELECT count(*) FROM campaign_org").fetchone()[0]
     return after - before
 
 
-def _write_donations(con: sqlite3.Connection, donations: list[dict]) -> int:
+def _write_donations(con: sqlite3.Connection, donations: list[dict], *, upsert: bool = False) -> int:
     before = con.execute("SELECT count(*) FROM campaign_donation").fetchone()[0]
     sql = (f"INSERT OR IGNORE INTO campaign_donation ({', '.join(_DON_COLUMNS)}) "
            f"VALUES ({', '.join(f':{c}' for c in _DON_COLUMNS)})")
+    if upsert:
+        update = [c for c in _DON_COLUMNS if c not in {"year", "tse_receipt_id", "campaign_org_id"}]
+        sql = (f"INSERT INTO campaign_donation ({', '.join(_DON_COLUMNS)}) "
+               f"VALUES ({', '.join(f':{c}' for c in _DON_COLUMNS)}) "
+               "ON CONFLICT(year, tse_receipt_id) DO UPDATE SET "
+               + ", ".join(f"{c} = excluded.{c}" for c in update))
     con.executemany(sql, donations)
     con.commit()
     after = con.execute("SELECT count(*) FROM campaign_donation").fetchone()[0]
     return after - before
 
 
-def _write_expenses(con: sqlite3.Connection, expenses: list[dict]) -> int:
+def _write_expenses(con: sqlite3.Connection, expenses: list[dict], *, upsert: bool = False) -> int:
     before = con.execute("SELECT count(*) FROM campaign_expense").fetchone()[0]
     sql = (f"INSERT OR IGNORE INTO campaign_expense ({', '.join(_EXP_COLUMNS)}) "
            f"VALUES ({', '.join(f':{c}' for c in _EXP_COLUMNS)})")
+    if upsert:
+        update = [c for c in _EXP_COLUMNS if c not in {"year", "tse_expense_id", "campaign_org_id"}]
+        sql = (f"INSERT INTO campaign_expense ({', '.join(_EXP_COLUMNS)}) "
+               f"VALUES ({', '.join(f':{c}' for c in _EXP_COLUMNS)}) "
+               "ON CONFLICT(year, tse_expense_id) DO UPDATE SET "
+               + ", ".join(f"{c} = excluded.{c}" for c in update))
     con.executemany(sql, expenses)
     con.commit()
     after = con.execute("SELECT count(*) FROM campaign_expense").fetchone()[0]
     return after - before
 
 
-def _write_payments(con: sqlite3.Connection, payments: list[dict]) -> int:
+def _write_payments(con: sqlite3.Connection, payments: list[dict], *, upsert: bool = False) -> int:
     before = con.execute("SELECT count(*) FROM campaign_expense_payment").fetchone()[0]
     sql = (f"INSERT OR IGNORE INTO campaign_expense_payment ({', '.join(_PAY_COLUMNS)}) "
            f"VALUES ({', '.join(f':{c}' for c in _PAY_COLUMNS)})")
+    if upsert:
+        update = [c for c in _PAY_COLUMNS if c not in {"year", "tse_expense_id", "tse_installment_id", "campaign_expense_id"}]
+        sql = (f"INSERT INTO campaign_expense_payment ({', '.join(_PAY_COLUMNS)}) "
+               f"VALUES ({', '.join(f':{c}' for c in _PAY_COLUMNS)}) "
+               "ON CONFLICT(year, tse_expense_id, tse_installment_id) DO UPDATE SET "
+               + ", ".join(f"{c} = excluded.{c}" for c in update))
     con.executemany(sql, payments)
     con.commit()
     after = con.execute("SELECT count(*) FROM campaign_expense_payment").fetchone()[0]

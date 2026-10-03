@@ -119,6 +119,14 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
           ))}
         </div>
       )}
+
+      <p className="mt-4 text-[10px] leading-relaxed text-[var(--muted-2)]">
+        Fontes oficiais dos pagamentos declarados: {(year === "all" ? years : [Number(year)]).map((sourceYear, index) => (
+          <span key={sourceYear}>
+            {index ? ", " : " "}<a className="source-link source-link--inline" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/prestacao-de-contas-eleitorais-${sourceYear}`} target="_blank" rel="noopener noreferrer">TSE {sourceYear}</a>
+          </span>
+        ))}
+      </p>
     </section>
   );
 }
