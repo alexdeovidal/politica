@@ -56,6 +56,18 @@ def test_proposal_only_associates_unique_official_candidate_id(tmp_path,monkeypa
     result=proposals.run(primary,tmp_path/'platform.db',tmp_path/'pdf',[2026],['BR'])
     assert result['updated']==1 and not result['failed'];store=sqlite3.connect(tmp_path/'platform.db');assert store.execute('SELECT entity_key FROM external_record').fetchone()[0]=='1';store.close()
     assert proposals.run(primary,tmp_path/'platform.db',tmp_path/'pdf',[2026],['BR'])['unchanged']==1
+    original_reader=proposals.PdfReader
+    def partial_reader(content):
+        reader=original_reader(content)
+        def fail_extract():raise ValueError('invalid font encoding')
+        for page in reader.pages:page.extract_text=fail_extract
+        return reader
+    def changed_head(*args,**kwargs):r=Response();r.headers={'ETag':'fixture2'};return r
+    monkeypatch.setattr(proposals,'PdfReader',partial_reader)
+    monkeypatch.setattr(proposals.requests,'head',changed_head)
+    assert not proposals.run(primary,tmp_path/'platform.db',tmp_path/'pdf',[2026],['BR'])['failed']
+    store=sqlite3.connect(tmp_path/'platform.db');payload=json.loads(store.execute('SELECT payload FROM external_record').fetchone()[0]);store.close()
+    assert payload['missingTextPages']==[1] and not payload['textComplete']
 
 def test_archive_monitor_does_not_treat_missing_headers_as_unchanged(tmp_path,monkeypatch):
     from elosys.tse import archive_monitor

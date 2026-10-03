@@ -50,8 +50,12 @@ def run(db_path:Path,store_path:Path,files_path:Path,years:list[int],units:list[
                         if person_id is None:continue
                         content=archive.read(entry);digest=hashlib.sha256(content).hexdigest()
                         filename=files_path/f"{digest}.pdf";filename.write_bytes(content)
-                        reader=PdfReader(io.BytesIO(content));text="\n\n".join(page.extract_text() or "" for page in reader.pages)
-                        payload={"year":year,"unit":unit,"candidacyId":candidacy,"version":version,"filename":filename.name,"text":text,"pages":len(reader.pages),"sha256":digest,"archiveSha256":archive_hash,"extracted":bool(text.strip())}
+                        reader=PdfReader(io.BytesIO(content));pages=list(reader.pages);texts=[];missing_text_pages=[]
+                        for page_number,page in enumerate(pages,1):
+                            try:texts.append(page.extract_text() or "")
+                            except Exception:missing_text_pages.append(page_number);texts.append("")
+                        text="\n\n".join(texts)
+                        payload={"missingTextPages":missing_text_pages,"textComplete":not missing_text_pages,"year":year,"unit":unit,"candidacyId":candidacy,"version":version,"filename":filename.name,"text":text,"pages":len(pages),"sha256":digest,"archiveSha256":archive_hash,"extracted":bool(text.strip())}
                         identifier=f"proposal:{year}:{candidacy}:{version}"
                         pending.append((identifier,"TSE propostas",str(person_id),"proposal",f"Proposta de governo {year} · {unit}",None,url,json.dumps(payload,ensure_ascii=False),now))
                     if pdf_count and not matched_count:raise ValueError("Formato dos nomes PDF desconhecido; registros publicados preservados")

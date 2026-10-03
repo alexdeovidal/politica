@@ -2225,3 +2225,5 @@ tr.source-zone--hover::before {
 .platform-stat{font-size:clamp(20px,3vw,28px);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .platform-source-row{border-bottom:1px solid var(--border-1);padding:16px 0}
 @media(max-width:640px){.platform-form label{flex-basis:100%}.platform-toolbar .btn{flex:1 1 auto}.platform-page{padding-top:12px;gap:18px}.platform-page .table{min-width:0}.platform-relations{grid-template-columns:1fr}}
+
+@media(max-width:640px){.graph-canvas-shell .react-flow__minimap{display:none}}

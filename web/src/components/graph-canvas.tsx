@@ -11,6 +11,8 @@ import {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useNodesInitialized,
+  useReactFlow,
   MarkerType,
   type Edge,
   type Node,
@@ -26,6 +28,12 @@ import { NODE_COLOR, NODE_KIND_LABEL, type GraphEdgeData, type GraphNodeData } f
 import { Skeleton } from "./skeleton";
 import { useColorMode } from "@/lib/use-color-mode";
 import { GraphShareButton } from "./graph/graph-share-button";
+
+function FitCollectedNetwork({count}:{count:number}){
+  const initialized=useNodesInitialized();const {fitView}=useReactFlow();
+  useEffect(()=>{if(!initialized||!count)return;const frame=requestAnimationFrame(()=>fitView({padding:0.25,duration:200}));return()=>cancelAnimationFrame(frame);},[initialized,count,fitView]);
+  return null;
+}
 
 const WIDTH = 1100;
 const HEIGHT = 700;
@@ -543,8 +551,7 @@ function GraphCanvasInner() {
             <p className="max-w-md text-[13px] leading-relaxed text-[var(--muted-2)]">
               Busque acima ou cole um CPF/CNPJ — por padrão, cada busca adiciona só aquele nó, e ao
               adicionar o próximo o grafo traz apenas o caminho de até 2 passos entre eles (ligação
-              direta, ou por um doador/fornecedor/candidato em comum). Ligue &ldquo;trazer rede
-              inteira&rdquo; se quiser que cada nó adicionado já venha com TODOS os seus vínculos diretos.
+              direta, ou por um doador/fornecedor/candidato em comum). Ligue &ldquo;expandir relações&rdquo; para carregar os vínculos por etapas. Selecione um nó para buscar mais relações.
             </p>
           </div>
         ) : (
@@ -562,6 +569,7 @@ function GraphCanvasInner() {
             minZoom={0.15}
             proOptions={{ hideAttribution: true }}
           >
+            <FitCollectedNetwork count={visibleNodes.length}/>
             <Background color={colorMode === "dark" ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.07)"} gap={28} size={1.4} />
             <Controls showInteractive={false} />
             <MiniMap
