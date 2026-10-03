@@ -314,6 +314,7 @@ export type FinanceSummary = {
   expensesCount: number;
   expensesTotalCents: number;
   paymentsTotalCents: number;
+  paymentsCount: number;
   electoralFundTotalCents: number;
   electoralFundCount: number;
 };
@@ -1062,11 +1063,14 @@ export type CandidateComparisonRecord = {
   } | null;
   candidacyCount: number;
   donationsTotalCents: number;
+  donationsCount: number;
+  expensesCount: number;
   electoralFundsTotalCents: number;
   expensesTotalCents: number;
   latestVote: { year: number; totalVotes: number } | null;
   latestAssets: { year: number; totalCents: number; missingValues: number } | null;
   paymentsTotalCents:number;
+  paymentsCount:number;
 };
 
 export function getCandidateComparison(personIds: number[], year?: number): CandidateComparisonRecord[] {
@@ -1098,9 +1102,12 @@ export function getCandidateComparison(personIds: number[], year?: number): Cand
       } : null,
       candidacyCount: header.candidacyCount,
       donationsTotalCents: finance.donationsTotalCents,
+      donationsCount: finance.donationsCount,
+      expensesCount: finance.expensesCount,
       electoralFundsTotalCents: finance.electoralFundTotalCents,
       expensesTotalCents: finance.expensesTotalCents,
       paymentsTotalCents:finance.paymentsTotalCents,
+      paymentsCount:finance.paymentsCount,
       latestVote: latestVote ? { year: latestVote.year, totalVotes: latestVote.totalVotes } : null,
       latestAssets: latestAssets && latestAssets.count!==(latestAssets.missingValues||0) ? { year: latestAssets.year, totalCents: latestAssets.totalCents, missingValues: latestAssets.missingValues || 0 } : null,
     }];
@@ -1343,13 +1350,13 @@ export function getPersonFinance(personId: number, year?: number): FinanceSummar
 
   const paymentsAgg = db()
     .prepare(
-      `SELECT coalesce(sum(p.amount_cents), 0) AS total
+      `SELECT count(*) AS n, coalesce(sum(p.amount_cents), 0) AS total
        FROM campaign_expense_payment p
        JOIN campaign_expense ce ON ce.id = p.campaign_expense_id
        JOIN campaign_org co ON co.id = ce.campaign_org_id
        WHERE co.person_id = ?${year != null ? " AND ce.year = ?" : ""}`
     )
-    .get(personId, ...yearArgs) as { total: number };
+    .get(personId, ...yearArgs) as { n: number; total: number };
 
   return {
     donationsCount: donationsAgg.n,
@@ -1357,6 +1364,7 @@ export function getPersonFinance(personId: number, year?: number): FinanceSummar
     expensesCount: expensesAgg.n,
     expensesTotalCents: expensesAgg.total,
     paymentsTotalCents: paymentsAgg.total,
+    paymentsCount: paymentsAgg.n,
     electoralFundTotalCents: electoralFundAgg.total,
     electoralFundCount: electoralFundAgg.n,
   };
