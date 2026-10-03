@@ -1,8 +1,10 @@
-import { ExternalLink, Scale } from "lucide-react";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ExternalLink, LoaderCircle, Scale, Search } from "lucide-react";
 import type {
   ElectoralCaseAppeal,
   ElectoralCaseDecision,
-  ElectoralCaseSubject,
   PersonElectoralCases as PersonElectoralCasesData,
   PublicElectoralCase,
 } from "@/lib/queries";
@@ -17,21 +19,136 @@ function dateLabel(value: string | null): string | null {
   );
 }
 
-export function PersonElectoralCases({ data }: { data: PersonElectoralCasesData }) {
+export function PersonElectoralCases({
+  data,
+  personId,
+}: {
+  data: PersonElectoralCasesData;
+  personId: number;
+}) {
+  const [cases, setCases] = useState(data.cases);
+  const [total, setTotal] = useState(data.total);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [searchRetry, setSearchRetry] = useState(0);
+  const initialSearch = useRef(true);
+  const loadMoreController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (initialSearch.current) {
+      initialSearch.current = false;
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      setSearchError(false);
+      const params = new URLSearchParams({ personId: String(personId), offset: "0" });
+      if (search.trim()) params.set("q", search.trim());
+
+      fetch(`/api/person-electoral-cases?${params}`, { signal: controller.signal, cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error("Não foi possível pesquisar todos os processos.");
+          return response.json() as Promise<PersonElectoralCasesData>;
+        })
+        .then((page) => {
+          if (!page.available) throw new Error("A base processual está temporariamente indisponível.");
+          setCases(page.cases);
+          setTotal(page.total);
+          setLoadError(null);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSearchError(true);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, search.trim() ? 300 : 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [personId, search, searchRetry]);
+
+  function onSearch(value: string) {
+    loadMoreController.current?.abort();
+    loadMoreController.current = null;
+    setSearch(value);
+    setCases([]);
+    setTotal(0);
+    setLoadingMore(false);
+    setSearching(true);
+    setSearchError(false);
+    setLoadError(null);
+  }
+
+  async function loadMoreCases() {
+    if (loadingMore || loadMoreController.current || cases.length >= total) return;
+    const controller = new AbortController();
+    loadMoreController.current = controller;
+    setLoadingMore(true);
+    setLoadError(null);
+
+    try {
+      const params = new URLSearchParams({ personId: String(personId), offset: String(cases.length) });
+      if (search.trim()) params.set("q", search.trim());
+      const response = await fetch(`/api/person-electoral-cases?${params}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Não foi possível carregar os processos agora.");
+
+      const page = await response.json() as PersonElectoralCasesData;
+      if (!page.available) throw new Error("A base processual está temporariamente indisponível.");
+      if (controller.signal.aborted) return;
+      setCases((current) => [...current, ...page.cases]);
+      setTotal(page.total);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setLoadError(error instanceof Error ? error.message : "Não foi possível carregar os processos agora.");
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        loadMoreController.current = null;
+        setLoadingMore(false);
+      }
+    }
+  }
+
   return (
     <section id="processos-eleitorais" data-toc-title="processos eleitorais" className="animate-in py-7">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="section-title">processos eleitorais</h2>
-        {data.available && data.cases.length > 0 ? (
+        {data.available && total > 0 ? (
           <span className="font-mono text-[10px] text-[var(--muted-2)]">
-            {data.cases.length.toLocaleString("pt-BR")} {data.cases.length === 1 ? "processo" : "processos"}
+            {total.toLocaleString("pt-BR")} {search.trim() ? "resultados" : total === 1 ? "processo" : "processos"}
           </span>
         ) : null}
       </div>
       <p className="mb-4 max-w-3xl text-[12px] leading-relaxed text-[var(--muted)]">
         Registros públicos dos conjuntos Processual do TSE, associados pelo código oficial da candidatura.
-        Cada processo, assunto e decisão aparece abaixo com seus dados e fonte.
+        Cada processo, assunto e decisão aparece abaixo com seus dados e fonte. Os mais recentes aparecem primeiro;
+        carregue os demais quando quiser.
       </p>
+
+      {data.available ? (
+        <label className="input mb-4 min-h-10 w-full sm:max-w-xl">
+          <Search className="h-4 w-4 shrink-0 text-[var(--muted-2)]" aria-hidden="true" />
+          <span className="sr-only">Buscar em todos os processos</span>
+          <input
+            type="search"
+            value={search}
+            maxLength={120}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Buscar em todos os processos por número, assunto, decisão…"
+          />
+        </label>
+      ) : null}
 
       {!data.available ? (
         <div className="card flex flex-col items-start gap-3 p-4 sm:p-5">
@@ -47,17 +164,60 @@ export function PersonElectoralCases({ data }: { data: PersonElectoralCasesData 
             Consultar o PJe Eleitoral <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </div>
-      ) : data.cases.length === 0 ? (
+      ) : searching && cases.length === 0 ? (
+        <div className="card flex items-center gap-2 p-4 text-[12px] text-[var(--muted)]" role="status">
+          <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Pesquisando em todos os processos…
+        </div>
+      ) : searchError ? (
+        <div className="card flex flex-wrap items-center gap-2 p-4 text-[12px] text-[var(--danger)]" role="alert">
+          Não foi possível pesquisar todos os processos.
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => {
+              setSearching(true);
+              setSearchRetry((current) => current + 1);
+            }}
+          >
+            tentar novamente
+          </button>
+        </div>
+      ) : total === 0 ? (
         <div className="card p-4 sm:p-5">
           <p className="text-[12px] leading-relaxed text-[var(--muted)]">
-            Nenhum registro foi associado a esta pessoa pelo código de candidatura nos arquivos processuais
-            importados do TSE. Isso não confirma que a pessoa nunca respondeu a um processo.
+            {search.trim()
+              ? `Nenhum processo encontrado para “${search.trim()}” em toda a base associada a esta candidatura.`
+              : <>Nenhum registro foi associado a esta pessoa pelo código de candidatura nos arquivos processuais
+                importados do TSE. Isso não confirma que a pessoa nunca respondeu a um processo.</>}
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {data.cases.map((item) => <CaseCard key={item.id} item={item} />)}
-        </div>
+        <>
+          <div className="flex flex-col gap-3">
+            {cases.map((item) => <CaseCard key={item.id} item={item} />)}
+          </div>
+          {cases.length < total ? (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                className="btn inline-flex min-h-10 items-center justify-center gap-2"
+                onClick={loadMoreCases}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Carregando processos…</>
+                ) : (
+                  <><ChevronDown className="h-4 w-4" aria-hidden="true" /> Ver mais processos</>
+                )}
+              </button>
+              <p className="text-center font-mono text-[10px] text-[var(--muted-2)]" aria-live="polite">
+                Exibindo {cases.length.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")} {search.trim() ? "resultados" : "processos"}
+              </p>
+              {loadError ? <p className="text-center text-[11px] text-[var(--danger)]" role="alert">{loadError}</p> : null}
+            </div>
+          ) : null}
+        </>
       )}
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-[var(--muted-2)]">
