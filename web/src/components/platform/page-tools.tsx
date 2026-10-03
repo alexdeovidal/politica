@@ -5,7 +5,7 @@ import Link from "next/link";
 import {GraphShareButton} from "@/components/graph/graph-share-button";
 export type SavedPage={url:string;title:string;savedAt:string};
 export const SAVED_KEY="politica007:saved:v1";
-export function readSaved():SavedPage[]{try{return JSON.parse(localStorage.getItem(SAVED_KEY)||"[]");}catch{return [];}}
+export function readSaved():SavedPage[]{try{const value=JSON.parse(localStorage.getItem(SAVED_KEY)||"[]");return Array.isArray(value)?value.filter(p=>p&&typeof p.url==="string"&&p.url.startsWith("/")&&!p.url.startsWith("//")&&typeof p.title==="string"&&typeof p.savedAt==="string"):[];}catch{return [];}}
 async function updateFollowed(pages:SavedPage[]){
  const before=JSON.parse(localStorage.getItem("politica:follow-baselines")||"{}") as Record<string,string>;
  const found=new Set<string>(JSON.parse(localStorage.getItem("politica:follow-changes")||"[]"));

@@ -110,18 +110,22 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
         return true;
       };
 
+      const isGraph=target.matches(".react-flow")||!!target.querySelector(".react-flow");
+      const captureTarget=format!=="original"&&!isGraph?target.cloneNode(true) as HTMLElement:target;
+      if(captureTarget!==target){Object.assign(captureTarget.style,{position:"fixed",left:"-10000px",top:"0",width:"540px",maxWidth:"540px",height:"auto",maxHeight:"none",margin:"0",boxSizing:"border-box"});document.body.appendChild(captureTarget);}
       let graphCanvas: HTMLCanvasElement;
       try {
-        graphCanvas = await toCanvas(target, { backgroundColor, cacheBust: true, pixelRatio, filter: includeNode });
+        graphCanvas = await toCanvas(captureTarget, { style: captureTarget!==target?{position:"static",left:"0",top:"0"}:undefined, backgroundColor, cacheBust: true, pixelRatio, filter: includeNode });
       } catch {
         // Some public photo hosts block canvas export; keep the graph and retry without photos.
-        graphCanvas = await toCanvas(target, {
+        graphCanvas = await toCanvas(captureTarget, {
+          style:captureTarget!==target?{position:"static",left:"0",top:"0"}:undefined,
           backgroundColor,
           cacheBust: true,
           pixelRatio,
           filter: (node) => includeNode(node) && node.tagName !== "IMG",
         });
-      }
+      } finally {if(captureTarget!==target)captureTarget.remove();}
 
       const output = document.createElement("canvas");
       const sizes:Record<string,[number,number]>={quadrado:[1080,1080],retrato:[1080,1350],paisagem:[1600,900]};
