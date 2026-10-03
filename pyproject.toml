@@ -8,6 +8,7 @@ dependencies = [
     # curl_cffi impersona o handshake TLS do Chrome — sem isso o Akamai Bot Manager
     # do TSE (e provavelmente outras fontes) devolve 403 para clientes Python.
     "curl-cffi>=0.7",
+    "pypdf>=5.0",
 ]
 
 [project.scripts]

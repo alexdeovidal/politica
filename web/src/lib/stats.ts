@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db,dataVersion } from "./db";
 import {
   getCircularDonationSummary,
   getSupplierPartnerSummary,
@@ -19,8 +19,10 @@ export type HomeStats = {
 
 // The .db is rewrite-only, so these full-table sums are cached per process.
 const cache = new Map<number, HomeStats>();
+let homeVersion=0;
 
 export function getHomeStats(year?: number): HomeStats {
+  const version=dataVersion();if(version!==homeVersion){cache.clear();homeVersion=version;}
   const key = year ?? 0;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -58,8 +60,10 @@ export type SidebarCounts = {
 };
 
 let cachedCounts: SidebarCounts | null = null;
+let countsVersion=0;
 
 export function getSidebarCounts(): SidebarCounts {
+  const version=dataVersion();if(version!==countsVersion){cachedCounts=null;countsVersion=version;}
   if (cachedCounts) return cachedCounts;
   cachedCounts = {
     circularDonations: getCircularDonationSummary().total,

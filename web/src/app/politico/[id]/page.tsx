@@ -1,4 +1,12 @@
+import {getTseUpdateStatus} from "@/lib/tse-update-status";
+import { ProfileNavigation,ProfileTimeline,FinanceInsights } from "@/components/platform/profile-overview";
+import { shareMetadata } from "@/lib/platform/share";
 import { Suspense } from "react";
+import { SignalMethodology } from "@/components/platform/signal-methodology";
+import { Proposals } from "@/components/platform/proposals";
+import { PublicStatements } from "@/components/platform/public-statements";
+import { OfficialRecords } from "@/components/platform/official-records";
+import { PersonCompanies } from "@/components/platform/relations";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -28,6 +36,8 @@ import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 const DISCOURSE_SHOWN = 8;
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({params,searchParams}:PageProps<"/politico/[id]">){const {id}=await params;const sp=await searchParams;const person=getPersonHeader(Number(id));return shareMetadata(person?.person.canonicalName||"Perfil público",`/politico/${id}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
 
 export default async function PoliticoPage({ params, searchParams }: PageProps<"/politico/[id]">) {
   const { id } = await params;
@@ -115,6 +125,8 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
             </div>
           ) : null}
         </header>
+        <ProfileNavigation/><ProfileTimeline personId={person.id}/>
+        <FinanceInsights personId={person.id} year={year}/>
   
         <Suspense fallback={<SectionSkeleton id="candidaturas" title="candidaturas por eleição" rows={3} />}>
           <CandidaciesSection personId={person.id} />
@@ -135,6 +147,13 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
         <Suspense fallback={<SectionSkeleton id="emendas-parlamentares" title="emendas parlamentares" rows={2} />}>
           <EarmarksSection personId={person.id} />
         </Suspense>
+
+        <PersonCompanies personId={person.id} />
+        <OfficialRecords personId={person.id} />
+        <Proposals personId={person.id}/>
+        <PublicStatements personId={person.id}/>
+        <Link className="btn" href={`/redes?pessoa=${person.id}`}>Ver publicações públicas e temas</Link>
+        <Link className="btn" href={`/ficha-publica?pessoa=${person.id}`}>Esclarecer ou solicitar correção de dados</Link>
 
         <Suspense fallback={<NetworkSkeleton />}>
           <NetworkSection personId={person.id} displayName={displayName} />
@@ -173,6 +192,7 @@ async function NetworkSection({ personId, displayName }: { personId: number; dis
 }
 
 async function SignalsSection({ personId, personCpf }: { personId: number; personCpf: string | null }) {
+  if(getTseUpdateStatus().derivedRefreshPending)return <section className="card"><h2>Análises em atualização</h2><p>As análises financeiras estão sendo recalculadas após alterações nas bases oficiais. Os registros originais continuam disponíveis nas seções de finanças.</p></section>;
   const { signals, signalsCount } = getPersonSignals(personId);
   if (signals.length === 0) return null;
   return (
@@ -187,6 +207,7 @@ async function SignalsSection({ personId, personCpf }: { personId: number; perso
       <p className="mb-4 text-[11.5px] text-[var(--muted-2)]">
         Gerado por regras sobre dados já coletados — indício, não prova.
       </p>
+      <details className="mb-4"><summary>Metodologia, períodos e evidências dos sinais</summary>{signals.map(s=><SignalMethodology key={s.id} signalId={s.id}/>)}</details>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2" style={{ alignItems: "start" }}>
         {signals.map((s) => {
           const isHigh = s.severity === "high";
@@ -326,7 +347,7 @@ async function AssetsSection({ personId }: { personId: number }) {
       {declaredAssetsByYear.length > 1 ? (
         <div className="mb-6">
           <div className="label mb-2">patrimônio declarado por eleição</div>
-          <AssetsCurveChart data={declaredAssetsByYear.map((y) => ({ year: y.year, totalCents: y.totalCents }))} />
+          <AssetsCurveChart data={declaredAssetsByYear.filter(y=>y.count!==(y.missingValues||0)).map((y) => ({ year: y.year, totalCents: y.totalCents }))} />
         </div>
       ) : null}
 
@@ -340,6 +361,7 @@ async function EarmarksSection({ personId }: { personId: number }) {
   if (earmarks.length === 0) return null;
   return (
     <Section id="emendas-parlamentares" title="emendas parlamentares">
+      <p className="text-sm mb-4">A associação deste perfil com o autor usa nome publicado pela fonte, sem confirmação por CPF. Confira homônimos. Emendas de bancada ou comissão não devem ser interpretadas como autoria individual.</p>
       <p className="mb-4 text-[11.5px] text-[var(--muted-2)]">
         Emendas ao orçamento federal autoradas por esta pessoa (Portal da Transparência) — o
         autor é identificado só por nome, não por CPF, então é um cruzamento provável, não uma
@@ -454,6 +476,7 @@ async function DiscourseSection({ personId, displayName }: { personId: number; d
   const discourse = getDiscourseSignals({ personId, limit: DISCOURSE_SHOWN });
   return (
     <Section id="discurso" tocLabel="discurso" title="posts no X sinalizados pela IA">
+      <Link className="btn mb-3" href={`/redes?pessoa=${personId}`}>Explorar publicações, temas e períodos</Link>
       <p className="mb-4 text-[11.5px] text-[var(--muted-2)]">
         Classificação automática por IA — pode errar.
         {discourseCount > discourse.length ? ` Mostrando os ${discourse.length} de ${discourseCount}.` : ""}

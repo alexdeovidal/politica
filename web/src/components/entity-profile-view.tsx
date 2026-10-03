@@ -1,4 +1,7 @@
 import Link from "next/link";
+import {EntityFinance} from "@/components/platform/entity-finance";
+import { Contracts } from "@/components/platform/contracts";
+import { CompanyRelations } from "@/components/platform/relations";
 import type { EntityProfile } from "@/lib/queries";
 import { getCompanyEarmarks } from "@/lib/queries";
 import { SourceZone } from "@/components/source-zone";
@@ -65,6 +68,7 @@ export function EntityProfileView({
           ) : null}
         </div>
       </header>
+      {isCompany&&<Contracts cnpj={cpfCnpj}/>}
 
       {registry ? (
         <section className="border-b border-[var(--border-1)] py-10">
@@ -89,24 +93,7 @@ export function EntityProfileView({
           {partners.length > 0 ? (
             <div className="mt-8">
               <div className="mono-label mb-4">quadro societário</div>
-              <p className="mb-4 max-w-xl text-[11.5px] leading-relaxed text-[var(--muted-2)]">
-                CPF do sócio vem mascarado pela própria fonte — não é possível cruzar com
-                candidatos de forma automática, só conferir o nome manualmente.
-              </p>
-              <div className="flex flex-col">
-                {partners.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[var(--border-1)] py-3 last:border-0"
-                  >
-                    <span className="text-[13px]">{p.partnerName}</span>
-                    <span className="font-mono text-[10.5px] text-[var(--muted-2)]">
-                      {p.role ?? "papel n/d"}
-                      {p.entryDate ? ` · desde ${p.entryDate}` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <CompanyRelations cnpj={cpfCnpj} />
             </div>
           ) : null}
         </section>
@@ -195,6 +182,7 @@ export function EntityProfileView({
         </section>
       ) : null}
 
+      <EntityFinance document={cpfCnpj}/>
       {donationsGivenTotal.count > 0 ? (
         <FinanceTable
           title={`pra quem já doou · ${formatBRL(donationsGivenTotal.totalCents)} em ${donationsGivenTotal.count.toLocaleString("pt-BR")} doações`}
@@ -209,7 +197,7 @@ export function EntityProfileView({
 
       {paymentsReceivedTotal.count > 0 ? (
         <FinanceTable
-          title={`de quem já recebeu dinheiro · ${formatBRL(paymentsReceivedTotal.totalCents)} em ${paymentsReceivedTotal.count.toLocaleString("pt-BR")} pagamentos`}
+          title={`Despesas contratadas com este fornecedor · ${formatBRL(paymentsReceivedTotal.totalCents)} em ${paymentsReceivedTotal.count.toLocaleString("pt-BR")} despesas contratadas`}
           scope="entity"
           id={cpfCnpj}
           dir="received"
@@ -221,7 +209,7 @@ export function EntityProfileView({
 
       {year && donationsGivenTotal.count === 0 && paymentsReceivedTotal.count === 0 ? (
         <div className="pt-4">
-          <EmptyState icon="◌" title={`Nenhuma doação ou pagamento registrado em ${year}.`} compact />
+          <EmptyState icon="◌" title={`Nenhuma doação ou despesa contratada registrada em ${year}.`} compact />
         </div>
       ) : null}
     </main>

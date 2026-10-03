@@ -182,31 +182,43 @@ def refresh_year(con: sqlite3.Connection, year: int, *, tmp_dir: str | Path = "d
     rejected_cpf = {r[0] for r in con.execute("SELECT cpf FROM rejected_cpf")}
     cpf_to_person = dict(con.execute("SELECT cpf, id FROM people WHERE cpf IS NOT NULL"))
     source_id = get_source(con, **SOURCE)
-    result = _ingest_year(
-        con, year, Path(tmp_dir), source_id, rejected_cpf, cpf_to_person, {}, upsert=True,
-    )
-    if result.get("rows", 0) == 0:
-        raise RuntimeError(f"TSE returned no finance rows for {year}; existing data was kept")
-    if con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pessoa_fisica_search'").fetchone():
-        con.execute("DELETE FROM pessoa_fisica_search")
-        con.execute(
-            "INSERT INTO pessoa_fisica_search (cpf, name) "
-            "SELECT cpf, max(name) FROM ("
-            " SELECT donor_cpf_cnpj AS cpf, donor_name AS name FROM campaign_donation "
-            " WHERE donor_company_id IS NULL AND donor_cpf_cnpj IS NOT NULL "
-            " AND length(donor_cpf_cnpj) = 11 AND donor_name IS NOT NULL "
-            " UNION ALL "
-            " SELECT supplier_cpf_cnpj AS cpf, supplier_name AS name FROM campaign_expense "
-            " WHERE supplier_company_id IS NULL AND supplier_cpf_cnpj IS NOT NULL "
-            " AND length(supplier_cpf_cnpj) = 11 AND supplier_name IS NOT NULL "
-            ") GROUP BY cpf"
+    from .derived import AtomicConnection
+    con.commit()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        atomic=AtomicConnection(con)
+        result = _ingest_year(
+            atomic, year, Path(tmp_dir), source_id, rejected_cpf, cpf_to_person, {}, upsert=True,
         )
+        if result.get("rows", 0) == 0:
+            raise RuntimeError(f"TSE returned no finance rows for {year}; existing data was kept")
+        con.execute("UPDATE campaign_expense_payment SET campaign_expense_id=NULL WHERE year=? AND campaign_expense_id IN (SELECT e.id FROM campaign_expense e JOIN parse p ON p.id=e.provenance_id WHERE e.year=? AND p.collection_id<>?)",(year,year,result["collection_id"]))
+        withdrawn={}
+        for table in ("campaign_expense_payment","campaign_donation","campaign_expense"):
+            withdrawn[table]=con.execute(f"DELETE FROM {table} WHERE year=? AND provenance_id IN (SELECT p.id FROM parse p WHERE p.collection_id<>?)",(year,result["collection_id"])).rowcount
+        result["withdrawn_rows"]=withdrawn
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pessoa_fisica_search'").fetchone():
+            con.execute("DELETE FROM pessoa_fisica_search")
+            con.execute(
+                "INSERT INTO pessoa_fisica_search (cpf, name) "
+                "SELECT cpf, max(name) FROM ("
+                " SELECT donor_cpf_cnpj AS cpf, donor_name AS name FROM campaign_donation "
+                " WHERE donor_company_id IS NULL AND donor_cpf_cnpj IS NOT NULL "
+                " AND length(donor_cpf_cnpj) = 11 AND donor_name IS NOT NULL "
+                " UNION ALL "
+                " SELECT supplier_cpf_cnpj AS cpf, supplier_name AS name FROM campaign_expense "
+                " WHERE supplier_company_id IS NULL AND supplier_cpf_cnpj IS NOT NULL "
+                " AND length(supplier_cpf_cnpj) = 11 AND supplier_name IS NOT NULL "
+                ") GROUP BY cpf"
+            )
+            result["person_search_index_rows"] = con.execute(
+                "SELECT count(*) FROM pessoa_fisica_search"
+            ).fetchone()[0]
+        result.update({"year": year, "kept_other_years": True, "kept_people_and_companies": True})
         con.commit()
-        result["person_search_index_rows"] = con.execute(
-            "SELECT count(*) FROM pessoa_fisica_search"
-        ).fetchone()[0]
-    result.update({"year": year, "kept_other_years": True, "kept_people_and_companies": True})
-    return result
+        return result
+    except BaseException:
+        con.rollback();raise
 
 
 def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: int,
@@ -244,6 +256,10 @@ def _ingest_year(con: sqlite3.Connection, year: int, tmp_dir: Path, source_id: i
             receitas = _members(zf, "receitas_candidatos_")
             despesas = _members(zf, "despesas_contratadas_candidatos_")
             pagas = _members(zf, "despesas_pagas_candidatos_")
+            if upsert:
+                for table, members in (("campaign_donation", receitas), ("campaign_expense", despesas), ("campaign_expense_payment", pagas)):
+                    if not members and con.execute(f"SELECT 1 FROM {table} WHERE year=? LIMIT 1", (year,)).fetchone():
+                        raise RuntimeError(f"TSE archive for {year} is missing {table}; existing data was kept")
             if not receitas:
                 log.warning("  no receitas_candidatos file in the zip for %d", year)
                 if not keep:

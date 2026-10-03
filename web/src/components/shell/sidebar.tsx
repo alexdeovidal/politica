@@ -94,15 +94,21 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
   const top: NavLink[] = [
     { href: "/", label: "Visão geral", icon: Home, description: "Resumo do portal, dados disponíveis, atualização das fontes e acesso à pesquisa completa." },
     { href: "#pesquisar", label: "Pesquisar dados públicos", icon: Search, action: "search", description: "Pesquise candidatos, empresas e pessoas físicas por nome, CPF ou CNPJ, incluindo doadores e fornecedores de campanhas." },
-    { href: "/grafo", label: "Relações entre pessoas e empresas", icon: Network, description: "Explore relações encontradas nos registros públicos, como doações, pagamentos e vínculos empresariais." },
+    { href: "/grafo", label: "Relações entre pessoas e empresas", icon: Network, description: "Explore relações encontradas nos registros públicos, como doações, despesas contratadas e vínculos empresariais." },
     { href: "/ranking", label: "Patrimônio declarado", icon: FileText, description: "Consulte bens declarados por candidatos nas eleições disponíveis na base." },
     { href: "/emendas", label: "Emendas parlamentares", icon: HandCoins, description: "Consulte emendas atribuídas a parlamentares e os valores registrados nas fontes públicas." },
   ];
   const ferramentas: NavLink[] = [
+    {href:"/conexoes",label:"Como se conectam?",icon:Network,description:"Encontre um caminho entre duas pessoas ou empresas e confira os registros que compõem as relações."},
+    {href:"/redes",label:"Publicações e temas",icon:MessageSquareText,description:"Pesquise textos públicos coletados, com data, tema e acesso ao contexto original."},
+    {href:"/ficha-publica",label:"Minha ficha pública",icon:FileText,description:"Solicite correção com evidência ou publique esclarecimento a partir de um domínio declarado ao TSE."},
+    {href:"/explorar",label:"Minha cidade e candidaturas",icon:Search,description:"Encontre candidaturas por estado, município, cargo e eleição."},
+    {href:"/acompanhar",label:"Minhas consultas",icon:Home,description:"Guarde perfis, consultas e comparações neste navegador para voltar depois."},
+    {href:"/fontes",label:"Fontes e atualização",icon:Info,description:"Veja a coleta de cada fonte e a cobertura disponível."},
     { href: "/comparar", label: "Comparar candidaturas", icon: GitCompareArrows, description: "Compare até três candidaturas, incluindo votos, bens declarados, doações e despesas registradas." },
   ];
   const sinais: NavLink[] = [
-    { href: "/sinais/doacao-circular", label: "Ciclos de doações", icon: CircleDollarSign, description: "Mostra ciclos de doações identificados entre candidaturas e pessoas ou organizações. É um sinal para consulta, não prova de irregularidade.", count: counts.circularDonations, alert: true },
+    { href: "/sinais/doacao-circular", label: "Ciclos de recursos eleitorais", icon: CircleDollarSign, description: "Mostra ciclos entre doações e despesas contratadas identificados entre candidaturas e pessoas ou organizações. É um sinal para consulta, não prova de irregularidade.", count: counts.circularDonations, alert: true },
     { href: "/sinais/despesa-desproporcional", label: "Despesas fora do padrão", icon: ReceiptText, description: "Aponta despesas com valores atípicos para a categoria informada. Cada caso precisa ser conferido na fonte oficial.", count: counts.disproportionateExpense },
     { href: "/sinais/socio-fornecedor", label: "Sócios de fornecedores", icon: Building2, description: "Relaciona fornecedores de campanhas a informações públicas de quadro societário. Coincidências de nome podem exigir verificação.", count: counts.supplierPartner },
     ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise automatizada de sinais", icon: BrainCircuit, description: "Apresenta uma leitura automatizada de sinais já encontrados nos dados. Não constitui conclusão nem acusação.", count: counts.aiReview }] : []),

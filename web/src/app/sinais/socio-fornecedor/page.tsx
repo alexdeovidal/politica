@@ -1,3 +1,4 @@
+import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import Link from "next/link";
 import {
   getSupplierPartnerCount,
@@ -15,11 +16,12 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 40;
 const FILTERS: Array<{ value: SupplierPartnerFilter; label: string }> = [
   { value: "all", label: "todos" },
-  { value: "self", label: "pagou a própria empresa" },
-  { value: "others", label: "outra campanha pagou" },
+  { value: "self", label: "contratou empresa com possível vínculo societário" },
+  { value: "others", label: "outra campanha contratou" },
 ];
 
 export default async function SocioFornecedorPage({ searchParams }: PageProps<"/sinais/socio-fornecedor">) {
+  if(getTseUpdateStatus().derivedRefreshPending)return <main><h1>Análises em atualização</h1><p>As bases oficiais foram alteradas. As análises financeiras estão sendo recalculadas para preservar a coerência das evidências. Consulte os registros originais enquanto o processamento termina.</p><a className="source-link" href="/fontes">Ver atualização e fontes</a></main>;
   const sp = await searchParams;
   const filterParam = typeof sp.filtro === "string" ? sp.filtro : undefined;
   const filter = FILTERS.some((f) => f.value === filterParam)
@@ -48,11 +50,11 @@ export default async function SocioFornecedorPage({ searchParams }: PageProps<"/
 
       <section>
         <h1 className="text-[26px] leading-tight font-medium tracking-tight">
-          Candidato sócio de uma empresa que recebeu dinheiro de campanha
+          Candidato sócio de uma empresa contratada por campanha
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
           O candidato aparece no <strong style={{ color: "var(--fg-2)" }}>quadro societário</strong> (Receita, via
-          BrasilAPI) de uma empresa que recebeu pagamento de alguma campanha.{" "}
+          BrasilAPI) de uma empresa registrada como fornecedora em despesas contratadas de campanha.{" "}
           <strong style={{ color: "var(--fg-2)" }}>A correspondência NÃO é confirmada</strong> — a fonte
           mascara o CPF do sócio, então isso casa o nome normalizado com um candidato E os 6 dígitos
           visíveis do CPF. Pode ser coincidência (duas pessoas, mesmo nome, mesmos 6 dígitos). Casos
@@ -65,10 +67,10 @@ export default async function SocioFornecedorPage({ searchParams }: PageProps<"/
               <span style={{ color: "var(--fg-1)" }}>{summary.total.toLocaleString("pt-BR")}</span> vínculos possíveis
             </span>
             <span>
-              <span style={{ color: "var(--red)" }}>{summary.self.toLocaleString("pt-BR")}</span> pagaram a própria empresa
+              <span style={{ color: "var(--red)" }}>{summary.self.toLocaleString("pt-BR")}</span> contrataram empresa com possível vínculo
             </span>
             <span>
-              <span style={{ color: "var(--accent-2)" }}>{summary.others.toLocaleString("pt-BR")}</span> pagas por outra campanha
+              <span style={{ color: "var(--accent-2)" }}>{summary.others.toLocaleString("pt-BR")}</span> contratadas por outra campanha
             </span>
             <span>
               <span style={{ color: "var(--fg-1)" }}>{formatBRL(summary.totalCents)}</span> movimentados nessas empresas
@@ -113,7 +115,7 @@ export default async function SocioFornecedorPage({ searchParams }: PageProps<"/
                   <th>empresa</th>
                   <th>papel · desde</th>
                   <th className="text-right">recebeu de campanhas</th>
-                  <th className="text-right">quem pagou</th>
+                  <th className="text-right">quem contratou</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,7 +141,7 @@ export default async function SocioFornecedorPage({ searchParams }: PageProps<"/
                     <td className="num" style={{ color: "var(--accent-2)" }}>
                       {formatBRL(r.paymentsTotalCents)}
                       <div style={{ fontSize: 9.5, color: "var(--muted-2)" }}>
-                        {r.paymentsCount.toLocaleString("pt-BR")} pagamentos
+                        {r.paymentsCount.toLocaleString("pt-BR")} despesas contratadas
                       </div>
                     </td>
                     <td className="num">

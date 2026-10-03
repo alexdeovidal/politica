@@ -1,5 +1,6 @@
 "use client";
 
+import { VoteMap } from "@/components/platform/vote-map";
 import { useEffect, useState } from "react";
 import { ChevronDown, MapPin, Search } from "lucide-react";
 import type { CandidateVoteSection, PersonVoteResult } from "@/lib/queries";
@@ -108,6 +109,7 @@ function ElectionVote({ result, initiallyOpen }: { result: PersonVoteResult; ini
       </summary>
 
       <div className="border-t border-[var(--border-1)] px-3 py-3 sm:px-4">
+        <VoteMap historyId={result.historyId}/>
         <label className="input mb-3 min-h-10 w-full sm:max-w-md">
           <Search className="h-4 w-4 shrink-0 text-[var(--muted-2)]" aria-hidden="true" />
           <span className="sr-only">Filtrar município, local ou seção</span>

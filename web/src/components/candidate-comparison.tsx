@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {OfficialRecords} from "@/components/platform/official-records";
+import {Proposals} from "@/components/platform/proposals";
 import { Search, X } from "lucide-react";
 import type { SearchResult, CandidateComparisonRecord } from "@/lib/queries";
 import { formatBRL, formatCpf } from "@/lib/format";
 import { SearchAvatar } from "@/components/search-avatar";
 
-export function CandidateComparison() {
+export function CandidateComparison({initialIds=[],initialYear="",initialCompatible=false}:{initialIds?:number[];initialYear?:string;initialCompatible?:boolean}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>(initialIds);
+  const [year,setYear]=useState(initialYear);
+  const [compatibleOnly,setCompatibleOnly]=useState(initialCompatible);
+  useEffect(()=>{const p=new URLSearchParams(window.location.search);if(selectedIds.length)p.set("ids",selectedIds.join(","));else p.delete("ids");if(year)p.set("ano",year);else p.delete("ano");if(compatibleOnly)p.set("compativeis","1");else p.delete("compativeis");window.history.replaceState(null,"",`${window.location.pathname}?${p}`);},[selectedIds,year,compatibleOnly]);
   const [selectedNames, setSelectedNames] = useState<Record<number, string>>({});
   const [records, setRecords] = useState<CandidateComparisonRecord[]>([]);
   const [searching, setSearching] = useState(false);
@@ -24,7 +29,7 @@ export function CandidateComparison() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       setSearching(true);
-      fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
+      fetch(`/api/search?q=${encodeURIComponent(trimmed)}${year?`&ano=${year}`:""}${compatibleOnly&&records[0]?.latestCandidacy?`&cargo=${encodeURIComponent(records[0].latestCandidacy.office||"")}&uf=${encodeURIComponent(records[0].latestCandidacy.state||"")}&cidade=${encodeURIComponent(records[0].latestCandidacy.municipality||"")}`:""}`, { signal: controller.signal })
         .then((response) => response.json())
         .then((data: { results: SearchResult[] }) => setResults(data.results ?? []))
         .catch(() => {
@@ -39,7 +44,7 @@ export function CandidateComparison() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [trimmed]);
+  }, [trimmed,year,compatibleOnly,records]);
 
   useEffect(() => {
     if (!selectedKey) return;
@@ -48,7 +53,7 @@ export function CandidateComparison() {
     const request = window.setTimeout(() => {
       setLoadingComparison(true);
       setError(false);
-      fetch(`/api/compare-candidates?ids=${encodeURIComponent(selectedKey)}`, { signal: controller.signal })
+      fetch(`/api/compare-candidates?ids=${encodeURIComponent(selectedKey)}${year ? `&ano=${encodeURIComponent(year)}` : ""}`, { signal: controller.signal })
         .then((response) => {
           if (!response.ok) throw new Error("Não foi possível carregar a comparação.");
           return response.json();
@@ -66,7 +71,7 @@ export function CandidateComparison() {
       window.clearTimeout(request);
       controller.abort();
     };
-  }, [selectedKey]);
+  }, [selectedKey,year]);
 
   function addCandidate(candidate: Extract<SearchResult, { kind: "candidato" }>) {
     if (selectedIds.includes(candidate.personId) || selectedIds.length >= 3) return;
@@ -97,6 +102,9 @@ export function CandidateComparison() {
 
   return (
     <div className="candidate-compare">
+      <label className="platform-form">Eleição para comparar<select value={year} onChange={e=>setYear(e.target.value)}><option value="">Todas as eleições (totais agregados)</option>{Array.from({length:7},(_,i)=>2026-i*2).map(y=><option key={y}>{y}</option>)}</select></label>
+      <label><input type="checkbox" checked={compatibleOnly} onChange={e=>setCompatibleOnly(e.target.checked)}/> Buscar candidatos do mesmo cargo, UF e município do primeiro selecionado</label>
+      {year && <p>Comparação em {year}. Confira cargo, estado e município: candidaturas de contextos diferentes não representam disputa direta.</p>}
       <section className="candidate-compare__picker" aria-label="Adicionar candidatura à comparação">
         <label className="candidate-compare__label" htmlFor="compare-candidate-search">
           Adicione até três candidatos
@@ -121,7 +129,7 @@ export function CandidateComparison() {
           />
         </div>
         <p id="compare-candidate-help" className="candidate-compare__help">
-          Compare dados públicos de campanhas. Os valores financeiros somam as eleições disponíveis na base.
+          Compare dados públicos de campanhas. Selecione uma eleição para comparar o mesmo período. Sem filtro, os valores somam a base disponível.
         </p>
         {trimmed.length >= 2 ? (
           <div className="candidate-compare__results" role="listbox" aria-label="Candidatos encontrados">
@@ -180,6 +188,7 @@ export function CandidateComparison() {
 
       {loadingComparison ? <p className="candidate-compare__empty">Carregando dados para comparar…</p> : null}
       {error ? <p className="candidate-compare__empty" role="alert">Não foi possível carregar os dados. Tente novamente.</p> : null}
+      {visibleRecords.length>1&&<p className="card" role="status">{year&&visibleRecords.every(r=>r.latestCandidacy)&&new Set(visibleRecords.map(r=>JSON.stringify([r.latestCandidacy?.year,r.latestCandidacy?.office,r.latestCandidacy?.state,r.latestCandidacy?.municipality,r.latestCandidacy?.round]))).size===1?"As candidaturas selecionadas têm eleição, cargo, UF, município e turno compatíveis.":"Os contextos selecionados são diferentes ou incompletos. Os valores não constituem comparação de concorrentes na mesma disputa."}</p>}
       {visibleRecords.length ? (
         <section className="candidate-compare__grid" aria-label="Comparação das candidaturas">
           {visibleRecords.map((record) => (
@@ -198,7 +207,7 @@ export function CandidateComparison() {
               </header>
               <dl className="candidate-compare__metrics">
                 <div>
-                  <dt>Doações recebidas · total na base</dt>
+                  <dt>Doações recebidas · período selecionado</dt>
                   <dd>{formatBRL(record.donationsTotalCents)}</dd>
                 </div>
                 <div>
@@ -206,10 +215,11 @@ export function CandidateComparison() {
                   <dd>{formatBRL(record.electoralFundsTotalCents)}</dd>
                 </div>
                 <div>
-                  <dt>Despesas contratadas · total na base</dt>
+                  <dt>Despesas contratadas · período selecionado</dt>
                   <dd>{formatBRL(record.expensesTotalCents)}</dd>
                 </div>
                 <div>
+                  <dt>Despesas efetivamente pagas · período selecionado</dt><dd>{formatBRL(record.paymentsTotalCents)}</dd></div><div>
                   <dt>Votos · eleição mais recente com dados</dt>
                   <dd>{record.latestVote
                     ? `${record.latestVote.totalVotes.toLocaleString("pt-BR")} (${record.latestVote.year})`
@@ -218,10 +228,11 @@ export function CandidateComparison() {
                 <div>
                   <dt>Bens declarados · declaração mais recente</dt>
                   <dd>{record.latestAssets
-                    ? `${formatBRL(record.latestAssets.totalCents)} (${record.latestAssets.year})`
+                    ? `${formatBRL(record.latestAssets.totalCents)} (${record.latestAssets.year})${record.latestAssets.missingValues ? ` · soma parcial: ${record.latestAssets.missingValues} bens sem valor informado` : ""}`
                     : "Sem declaração disponível"}</dd>
                 </div>
               </dl>
+              <details className="my-3"><summary>Comparar propostas e atividade parlamentar</summary><Proposals personId={record.personId}/><OfficialRecords personId={record.personId}/></details><a className="source-link" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/candidatos-${record.latestCandidacy?.year||year||2026}`} target="_blank" rel="noopener noreferrer">Fonte oficial desta candidatura · TSE</a>
               <p className="candidate-compare__history">
                 {record.candidacyCount.toLocaleString("pt-BR")} candidatura{record.candidacyCount === 1 ? "" : "s"} na base
               </p>
@@ -235,7 +246,7 @@ export function CandidateComparison() {
       ) : null}
 
       <p className="candidate-compare__notice">
-        Comparação informativa baseada nos registros públicos disponíveis. Totais financeiros agregam eleições distintas;
+        Comparação informativa baseada nos registros públicos disponíveis. Sem eleição selecionada, os totais financeiros agregam eleições distintas;
         confira os anos, detalhes e fontes oficiais no perfil de cada pessoa.
       </p>
     </div>

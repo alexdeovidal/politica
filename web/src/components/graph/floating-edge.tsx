@@ -53,7 +53,7 @@ export function FloatingEdge(props: EdgeProps & { data?: GraphEdgeData }) {
             }}
             className="rounded-sm border border-[var(--border-2)] bg-[var(--card-tone)] px-1.5 py-0.5 font-mono text-[8.5px] whitespace-nowrap text-[var(--fg-2)]"
           >
-            {formatBRL(data.amountCents)}
+            {data.kind==="possibleidentity"?"identidade possível":data.kind==="administration"?"administrador":data.kind==="ownership"?"sócio":formatBRL(data.amountCents)}
           </div>
         </EdgeLabelRenderer>
       ) : null}

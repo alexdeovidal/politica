@@ -1,4 +1,6 @@
+import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import Link from "next/link";
+import {SignalMethodology} from "@/components/platform/signal-methodology";
 import { getCircularDonationSignals, getCircularDonationSummary, type CircularDonationSort } from "@/lib/queries";
 import { entityHref, formatBRL, formatCpfCnpj } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -21,6 +23,7 @@ const SORTS: Array<{ value: CircularDonationSort; label: string }> = [
 export default async function CircularDonationsPage({
   searchParams,
 }: PageProps<"/sinais/doacao-circular">) {
+  if(getTseUpdateStatus().derivedRefreshPending)return <main><h1>Análises em atualização</h1><p>As bases oficiais foram alteradas. As análises financeiras estão sendo recalculadas para preservar a coerência das evidências. Consulte os registros originais enquanto o processamento termina.</p><a className="source-link" href="/fontes">Ver atualização e fontes</a></main>;
   const sp = await searchParams;
   const severityParam = typeof sp.severity === "string" ? sp.severity : undefined;
   const severity = SEVERITIES.includes(severityParam as (typeof SEVERITIES)[number])
@@ -56,7 +59,7 @@ export default async function CircularDonationsPage({
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
           Cada sinal abaixo é um ciclo real de movimentação encontrado na base inteira: dinheiro
-          que saiu de uma campanha e, seguindo doações e despesas, voltou pra mesma cadeia.{" "}
+          registrado em doações e despesas contratadas que formam uma cadeia fechada. A soma pode reunir eleições diferentes; não comprova circulação dos mesmos recursos nem pagamento.{" "}
           <strong style={{ color: "var(--fg-2)" }}>Isso é indício, não prova</strong> — pode ser
           coincidência entre campanhas de coligação, ressarcimento, ou merecer uma checagem manual
           mais de perto.
@@ -165,6 +168,7 @@ export default async function CircularDonationsPage({
                       </Link>
                     </div>
                   ) : null}
+                  <SignalMethodology signalId={s.id}/>
                 </article>
               );
             })}

@@ -112,7 +112,7 @@ def record_file(con: sqlite3.Connection, *, collection_id: int, filename: str,
         "VALUES (?, ?, ?, ?)",
         (collection_id, filename, sha256, size),
     )
-    if cur.lastrowid:
+    if cur.rowcount == 1:
         return int(cur.lastrowid)
     row = con.execute(
         "SELECT id FROM collection_file WHERE collection_id = ? AND filename = ?",

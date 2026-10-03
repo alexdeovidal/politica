@@ -343,3 +343,31 @@ def test_refresh_year_updates_finance_and_keeps_other_people_and_years(db, tmp_p
     ).fetchone()[0] == 1
     assert report["kept_people_and_companies"] is True
     con.close()
+
+
+def test_refresh_withdraws_rows_and_preserves_data_when_archive_incomplete(db, tmp_path, monkeypatch):
+    con = connect(db, write=True)
+    _seed_other_candidate(con)
+    accounts.run(con, years=[2022], tmp_dir=tmp_path)
+    changed = io.BytesIO()
+    with zipfile.ZipFile(changed, "w") as z:
+        z.writestr("receitas_candidatos_2022_BRASIL.csv", (DON_HEADER+"\n"+DON_LINES[0]+"\n").encode("latin-1"))
+        z.writestr("despesas_contratadas_candidatos_2022_BRASIL.csv", (EXP_HEADER+"\n"+EXP_LINES[0]+"\n").encode("latin-1"))
+        z.writestr("despesas_pagas_candidatos_2022_BRASIL.csv", (PAY_HEADER+"\n"+PAY_LINES[0]+"\n").encode("latin-1"))
+    def download(url, dest):
+        Path(dest).write_bytes(changed.getvalue())
+        return 200, "application/zip"
+    monkeypatch.setattr(accounts, "download", download)
+    result = accounts.refresh_year(con, 2022, tmp_dir=tmp_path)
+    assert result["withdrawn_rows"]["campaign_donation"] == 2
+    assert con.execute("SELECT count(*) FROM campaign_expense WHERE year=2022").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM campaign_expense_payment WHERE year=2022").fetchone()[0] == 1
+    broken = io.BytesIO()
+    with zipfile.ZipFile(broken, "w") as z:
+        z.writestr("receitas_candidatos_2022_BRASIL.csv", (DON_HEADER+"\n"+DON_LINES[1]+"\n").encode("latin-1"))
+    changed = broken
+    with pytest.raises(RuntimeError, match="missing campaign_expense"):
+        accounts.refresh_year(con, 2022, tmp_dir=tmp_path)
+    assert con.execute("SELECT donor_cpf_cnpj FROM campaign_donation WHERE year=2022").fetchone()[0] == _DONOR_CPF
+    assert con.execute("SELECT count(*) FROM campaign_expense WHERE year=2022").fetchone()[0] == 1
+    con.close()

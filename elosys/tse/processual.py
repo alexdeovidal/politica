@@ -397,8 +397,8 @@ def _cases_for_year(con: sqlite3.Connection, year: int) -> dict[str, int]:
     return {
         str(row["case_number"]): int(row["id"])
         for row in con.execute(
-            "SELECT id, case_number FROM electoral_case WHERE source_dataset_year = ?",
-            (year,),
+            "SELECT ec.id, ec.case_number FROM electoral_case ec WHERE ec.case_number IN "
+            "(SELECT case_number FROM stg_electoral_case_candidate)",
         )
     }
 
@@ -526,3 +526,35 @@ def run(
              f"{report['electoral_case']:,}", f"{report['electoral_case_candidate']:,}",
              f"{report['linked_people']:,}")
     return report
+
+
+def refresh_year(con:sqlite3.Connection,year:int,*,tmp_dir:str|Path="dados_tmp")->dict:
+    """Replace only this election's process provenance in one atomic transaction."""
+    from .derived import AtomicConnection
+    if year not in SUPPORTED_YEARS:raise ValueError("Pleito processual não suportado")
+    temp=Path(tmp_dir);temp.mkdir(parents=True,exist_ok=True)
+    urls=[]
+    # Complete every inbound download before changing the published records.
+    for template in _RESOURCES.values():
+        filename=template.format(year=year);url=BASE_URL+filename;urls.append(url)
+        file=temp/filename
+        file.unlink(missing_ok=True)
+        download(url,file)
+        with zipfile.ZipFile(file) as archive:_csv_member(archive)
+    source_id=get_source(con,**SOURCE);con.executescript(_STAGING_DDL);con.commit()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        placeholders=",".join("?" for _ in urls)
+        for table in _OWNED_TABLES[:-1]:
+            con.execute(f"DELETE FROM {table} WHERE provenance_id IN (SELECT p.id FROM parse p JOIN collection c ON c.id=p.collection_id WHERE c.url IN ({placeholders}))",urls)
+        result=_ingest_year(AtomicConnection(con),year,temp,source_id)
+        if not result.get("parties_rows") or not result.get("cases_for_candidates"):raise ValueError("Atualização processual sem registros verificáveis")
+        con.execute("DELETE FROM electoral_case WHERE source_dataset_year=? AND NOT EXISTS(SELECT 1 FROM electoral_case_candidate cc WHERE cc.case_id=electoral_case.id)",(year,))
+        con.commit()
+        result["rows"]=result["cases_for_candidates"]
+        result["collection_id"]=con.execute("SELECT id FROM collection WHERE url=? ORDER BY id DESC LIMIT 1",(BASE_URL+_RESOURCES["processos"].format(year=year),)).fetchone()[0]
+        return result
+    except BaseException:
+        con.rollback();raise
+    finally:
+        for template in _RESOURCES.values():(temp/template.format(year=year)).unlink(missing_ok=True)

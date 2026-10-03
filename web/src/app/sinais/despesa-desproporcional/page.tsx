@@ -1,3 +1,4 @@
+import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import {
   getExpenseCategoryRanking,
   getExpenseYears,
@@ -19,6 +20,7 @@ const ALL = "TODAS";
 export default async function DespesaDesproporcionalPage({
   searchParams,
 }: PageProps<"/sinais/despesa-desproporcional">) {
+  if(getTseUpdateStatus().derivedRefreshPending)return <main><h1>Análises em atualização</h1><p>As bases oficiais foram alteradas. As análises financeiras estão sendo recalculadas para preservar a coerência das evidências. Consulte os registros originais enquanto o processamento termina.</p><a className="source-link" href="/fontes">Ver atualização e fontes</a></main>;
   const sp = await searchParams;
   const years = getExpenseYears();
 

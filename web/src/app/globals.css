@@ -2206,3 +2206,22 @@ tr.source-zone--hover::before {
   .graph-share-message { margin-right: 12px; margin-left: 12px; }
   .graph-share-domain { padding-right: 12px; padding-left: 12px; }
 }
+
+/* Public network platform: wrap long names, accessible controls and responsive cards. */
+.platform-page{width:100%;max-width:1100px;margin:auto;padding:24px 0;display:flex;flex-direction:column;gap:24px;min-width:0}
+.platform-page h1{font-size:clamp(25px,4vw,38px);font-weight:600;line-height:1.2;overflow-wrap:anywhere}
+.platform-page h2{font-size:20px;font-weight:500;margin:12px 0}
+.platform-page p{color:var(--muted);font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.platform-relations,.platform-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:16px}
+.platform-relations article,.platform-grid>*{min-width:0;overflow-wrap:anywhere}
+.platform-form{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.platform-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;min-width:0;flex:1 1 160px}
+.platform-form input,.platform-form select,.platform-form textarea{padding:12px;border:1px solid var(--border-2);border-radius:8px;background:var(--card-tone);color:var(--fg-1);width:100%;min-width:0}
+.platform-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0;margin-bottom:14px}
+.platform-toolbar .btn{min-height:40px}
+.platform-share-preview{max-height:300px;max-width:100%;object-fit:contain}
+.platform-tabs{display:flex;gap:8px;overflow:auto;padding:8px 0;position:sticky;top:var(--topbar-height,64px);z-index:15;background:var(--bg)}
+.platform-tabs a{flex-shrink:0;padding:10px;border:1px solid var(--border-1);border-radius:8px;font-size:12px}
+.platform-stat{font-size:clamp(20px,3vw,28px);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.platform-source-row{border-bottom:1px solid var(--border-1);padding:16px 0}
+@media(max-width:640px){.platform-form label{flex-basis:100%}.platform-toolbar .btn{flex:1 1 auto}.platform-page{padding-top:12px;gap:18px}.platform-page .table{min-width:0}.platform-relations{grid-template-columns:1fr}}

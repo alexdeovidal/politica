@@ -1,5 +1,6 @@
 "use client";
 
+import { metric } from "@/components/platform/metrics";
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, Download, LoaderCircle, Share2, X } from "lucide-react";
@@ -44,6 +45,10 @@ type GraphShareButtonProps = {
 
 export function GraphShareButton({ targetRef, title, className = "" }: GraphShareButtonProps) {
   const [open, setOpen] = useState(false);
+  const [format,setFormat]=useState("original");
+  const [section,setSection]=useState("");
+  const [sections,setSections]=useState<{id:string;title:string}[]>([]);
+  const [summary,setSummary]=useState(`Consulte ${title} no Politica007. Dados públicos com fontes identificadas.`);
   const [generating, setGenerating] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -58,22 +63,34 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
   }, [previewUrl]);
   useEffect(() => {
     if (!open) return;
+    const previousFocus=document.activeElement as HTMLElement|null;
+    const previousOverflow=document.body.style.overflow;document.body.style.overflow="hidden";
+    const timer=window.setTimeout(()=>document.querySelector<HTMLElement>(".graph-share-dialog button")?.focus(),0);
     const closeOnEscape = (event: KeyboardEvent) => {
+      if(event.key==="Tab"){
+        const controls=Array.from(document.querySelectorAll<HTMLElement>(".graph-share-dialog button:not([disabled]),.graph-share-dialog input,.graph-share-dialog select,.graph-share-dialog textarea,.graph-share-dialog a[href]"));
+        const first=controls[0],last=controls.at(-1);
+        if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+      }
       if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    return () => {window.clearTimeout(timer);document.body.style.overflow=previousOverflow;document.removeEventListener("keydown", closeOnEscape);previousFocus?.focus();};
   }, [open]);
 
   const shareUrl = typeof window === "undefined"
     ? SITE_ORIGIN
-    : new URL(`${window.location.pathname}${window.location.search}`, SITE_ORIGIN).toString();
-  const shareText = `Veja este grafo de dados públicos no Politica007.`;
+    : (()=>{const u=new URL(`${window.location.pathname}${window.location.search}`,SITE_ORIGIN);u.searchParams.set("ref","compartilhamento");return u.toString();})();
+  const shareText = summary;
 
+  function openDialog(){const root=targetRef.current||document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");if(root){setSections([...Array.from(root.querySelectorAll<HTMLElement>("section[id],[data-toc-title][id]")).map(n=>({id:n.id,title:n.dataset.tocTitle||n.querySelector("h2,h3,.section-title")?.textContent||n.id})),...Array.from(root.querySelectorAll<HTMLElement>("article,.kpi")).map((n,i)=>({id:`card:${i}`,title:`Dado: ${(n.querySelector("h2,h3,strong,.kpi__label")?.textContent||n.textContent||"Registro").trim().slice(0,90)}`}))]);}setSummary(`Consulte ${title} no Politica007. Dados públicos com fontes identificadas.`);setOpen(true);}
   async function prepareImage() {
-    const target = targetRef.current;
+    const root=targetRef.current||document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");
+    const target = section.startsWith("card:") ? root?.querySelectorAll<HTMLElement>("article,.kpi")[Number(section.slice(5))] : section ? document.getElementById(section) : root;
+    if(root)setSections([...Array.from(root.querySelectorAll<HTMLElement>("section[id],[data-toc-title][id]")).map(n=>({id:n.id,title:n.dataset.tocTitle||n.querySelector("h2,h3,.section-title")?.textContent||n.id})),...Array.from(root.querySelectorAll<HTMLElement>("article,.kpi")).map((n,i)=>({id:`card:${i}`,title:`Dado: ${(n.querySelector("h2,h3,strong,.kpi__label")?.textContent||n.textContent||"Registro").trim().slice(0,90)}`}))]);
     if (!target) {
-      setMessage("Não foi possível localizar o grafo para gerar a imagem.");
+      setMessage("Não foi possível localizar os dados para gerar a imagem.");
       setOpen(true);
       return;
     }
@@ -83,6 +100,7 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
     try {
       const { toCanvas } = await import("html-to-image");
       const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const pixelRatio=Math.min(2,8000/Math.max(1,target.scrollHeight));
       const backgroundColor = isDark ? "#101820" : "#f3f6f8";
       const includeNode = (node: HTMLElement) => {
         if (typeof node.closest !== "function") return true;
@@ -94,49 +112,65 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
 
       let graphCanvas: HTMLCanvasElement;
       try {
-        graphCanvas = await toCanvas(target, { backgroundColor, cacheBust: true, pixelRatio: 2, filter: includeNode });
+        graphCanvas = await toCanvas(target, { backgroundColor, cacheBust: true, pixelRatio, filter: includeNode });
       } catch {
         // Some public photo hosts block canvas export; keep the graph and retry without photos.
         graphCanvas = await toCanvas(target, {
           backgroundColor,
           cacheBust: true,
-          pixelRatio: 2,
+          pixelRatio,
           filter: (node) => includeNode(node) && node.tagName !== "IMG",
         });
       }
 
-      const scale = graphCanvas.width / Math.max(1, target.getBoundingClientRect().width);
-      const padding = Math.round(24 * scale);
-      const footerHeight = Math.round(68 * scale);
       const output = document.createElement("canvas");
-      output.width = graphCanvas.width;
-      output.height = graphCanvas.height + footerHeight;
+      const sizes:Record<string,[number,number]>={quadrado:[1080,1080],retrato:[1080,1350],paisagem:[1600,900]};
+      const dimensions=sizes[format];
+      output.width = dimensions?.[0] ?? Math.max(1080,graphCanvas.width);
+      const scale=output.width/540;
+      const padding=Math.round(24*scale),footerHeight=Math.round(132*scale);
+      output.height = dimensions?.[1] ?? graphCanvas.height + footerHeight;
+      const footerTop=output.height-footerHeight;
       const context = output.getContext("2d");
       if (!context) throw new Error("Canvas indisponível");
 
       context.fillStyle = backgroundColor;
       context.fillRect(0, 0, output.width, output.height);
-      context.drawImage(graphCanvas, 0, 0);
+      const ratio=Math.min(output.width/graphCanvas.width,Math.max(1,footerTop)/graphCanvas.height);
+      context.drawImage(graphCanvas,(output.width-graphCanvas.width*ratio)/2,0,graphCanvas.width*ratio,graphCanvas.height*ratio);
       context.fillStyle = isDark ? "#18242d" : "#ffffff";
-      context.fillRect(0, graphCanvas.height, output.width, footerHeight);
+      context.fillRect(0, footerTop, output.width, footerHeight);
       context.strokeStyle = isDark ? "#344752" : "#d8e2e7";
       context.lineWidth = Math.max(1, scale);
       context.beginPath();
-      context.moveTo(0, graphCanvas.height);
-      context.lineTo(output.width, graphCanvas.height);
+      context.moveTo(0, footerTop);
+      context.lineTo(output.width, footerTop);
       context.stroke();
 
       context.textBaseline = "middle";
       context.fillStyle = isDark ? "#f1f6f8" : "#183447";
       context.font = `600 ${Math.round(16 * scale)}px Arial, sans-serif`;
-      context.fillText("Politica007", padding, graphCanvas.height + Math.round(24 * scale));
+      context.fillText("Politica007", padding, footerTop + Math.round(24 * scale));
       context.fillStyle = isDark ? "#a8bac4" : "#526b78";
       context.font = `${Math.round(9 * scale)}px Arial, sans-serif`;
-      context.fillText("DADOS PÚBLICOS · PORTAL INDEPENDENTE", padding, graphCanvas.height + Math.round(47 * scale));
+      context.fillText("DADOS PÚBLICOS · PORTAL INDEPENDENTE", padding, footerTop + Math.round(47 * scale));
       context.fillStyle = isDark ? "#dce8ed" : "#174f68";
       context.textAlign = "right";
       context.font = `600 ${Math.round(13 * scale)}px Arial, sans-serif`;
-      context.fillText("politica007.com.br", output.width - padding, graphCanvas.height + Math.round(35 * scale));
+      context.fillText("politica007.com.br", output.width - padding, footerTop + Math.round(35 * scale));
+
+      context.textAlign="left";
+      context.font=`${Math.round(10*scale)}px Arial, sans-serif`;
+      const collectionDates=Array.from(target.querySelectorAll<HTMLAnchorElement>("a[data-source-date]")).map(a=>a.dataset.sourceDate!).filter(d=>!Number.isNaN(Date.parse(d))).sort((a,b)=>Date.parse(b)-Date.parse(a));
+      const sources=[...new Set(Array.from(target.querySelectorAll<HTMLAnchorElement>("a.source-link")).map(a=>{try{return new URL(a.href).hostname;}catch{return "";}}).filter(Boolean))].slice(0,3);
+      const params=new URLSearchParams(window.location.search);
+      const collected=collectionDates[0]?new Date(collectionDates[0]).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"}):"indicada nos registros";
+      context.fillText(`Fonte(s): ${sources.join(" · ") || "consulte as fontes no portal"}`,padding,footerTop+Math.round(72*scale),output.width-padding*2-110);
+      context.fillText(`Período: ${params.get("ano")||params.get("year")||"indicado na consulta"} · coleta: ${collected}`,padding,footerTop+Math.round(94*scale),output.width-padding*2-110);
+      const QRCode=await import("qrcode");
+      context.fillText(`Imagem: ${new Date().toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})} · horários de Brasília`,padding,footerTop+Math.round(114*scale),output.width-padding*2-110);
+      const qr=document.createElement("canvas");await QRCode.toCanvas(qr,shareUrl,{width:100,margin:1});
+      context.drawImage(qr,output.width-padding-100,footerTop+Math.round(52*scale),90,90);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
         output.toBlob((value) => value ? resolve(value) : reject(new Error("Não foi possível criar o PNG")), "image/png");
@@ -152,6 +186,7 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
         supportsImageShare = false;
       }
 
+      metric("share");
       setFile(image);
       setPreviewUrl(URL.createObjectURL(image));
       setCanShareFile(supportsImageShare);
@@ -199,9 +234,9 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
     <>
       <button
         type="button"
-        onClick={prepareImage}
+        onClick={openDialog}
         disabled={generating}
-        aria-label="Gerar imagem e compartilhar este grafo"
+        aria-label="Gerar imagem e compartilhar estes dados"
         className={`graph-share-trigger ${className}`}
         data-graph-share-ignore
       >
@@ -222,14 +257,19 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
             <header className="graph-share-dialog__header">
               <div>
                 <div className="mono-label">Politica007</div>
-                <h2 id="graph-share-title">Compartilhe este grafo</h2>
-                <p>A imagem inclui a marca e o endereço politica007.com.br.</p>
+                <h2 id="graph-share-title">Compartilhe dados públicos</h2>
+                <p>A imagem inclui o domínio, o período, as fontes disponíveis e um QR para explorar os dados.</p>
               </div>
               <button type="button" className="graph-share-close" aria-label="Fechar" onClick={() => setOpen(false)}>
                 <X size={18} />
               </button>
             </header>
 
+            {sections.length>0&&<label className="platform-form">Conteúdo<select value={section} onChange={e=>setSection(e.target.value)}><option value="">Consulta completa</option>{sections.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
+            <label className="platform-form">Formato<select value={format} onChange={e=>setFormat(e.target.value)}><option value="original">Conteúdo completo</option><option value="quadrado">Quadrado · 1080 × 1080</option><option value="retrato">Retrato · 1080 × 1350</option><option value="paisagem">Paisagem · 1600 × 900</option></select></label>
+            <label className="platform-form">Texto da publicação<textarea value={summary} onChange={e=>setSummary(e.target.value)} maxLength={1000}/></label>
+            <p className="text-sm">Para manter os textos legíveis nas redes, escolha uma seção ou um dado. Uma consulta inteira pode ficar muito longa.</p>
+            <button className="btn" disabled={generating} onClick={prepareImage}>{generating?"Gerando imagem…":file?"Atualizar imagem":"Gerar imagem"}</button>
             {previewUrl ? (
               <div className="graph-share-preview">
                 {/* Generated locally in the browser from the graph the person is sharing. */}

@@ -17,7 +17,7 @@ import {
   type NodeMouseHandler,
 } from "@xyflow/react";
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX } from "d3-force";
-import type { GraphEdgeKind, GraphNodeInfo, GraphSearchResult } from "@/lib/queries";
+import type { GraphEdge, GraphEdgeKind, GraphNodeInfo, GraphSearchResult } from "@/lib/queries";
 import { findCircularEdgeKeys } from "@/lib/graph-cycles";
 import { formatBRL } from "@/lib/format";
 import { EntityNode } from "./graph/entity-node";
@@ -59,7 +59,7 @@ async function safeFetchJson<T = Record<string, unknown>>(
   }
 }
 
-type GraphEdgeRow = { source: string; target: string; kind: GraphEdgeKind; amountCents: number };
+type GraphEdgeRow = { source: string; target: string; kind: GraphEdgeKind; amountCents: number; evidence?:GraphEdge["evidence"] };
 type GraphQueryResponse = { nodes?: GraphNodeInfo[]; edges?: GraphEdgeRow[] };
 
 function edgeId(source: string, target: string, kind: string): string {
@@ -77,6 +77,10 @@ function toFlowNode(n: GraphNodeInfo, x: number, y: number, loading = false): Fl
 
 function GraphCanvasInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [year,setYear]=useState(searchParams.get("ano")||"");
+  const [relation,setRelation]=useState(searchParams.get("relacao")||"");
+  const [relationLimit,setRelationLimit]=useState(80);
   const colorMode = useColorMode();
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
@@ -84,13 +88,13 @@ function GraphCanvasInner() {
   const [results, setResults] = useState<GraphSearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [minReais, setMinReais] = useState("");
-  const [maxReais, setMaxReais] = useState("");
+  const [minReais, setMinReais] = useState(searchParams.get("minimo")||"");
+  const [maxReais, setMaxReais] = useState(searchParams.get("maximo")||"");
   const [roots, setRoots] = useState<Set<string>>(new Set());
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<HTMLDivElement>(null);
 
-  const [expandFull, setExpandFull] = useState(false);
+  const [expandFull, setExpandFull] = useState(searchParams.get("rede")==="1");
   const [truncatedNotice, setTruncatedNotice] = useState<string | null>(null);
 
   const [searching, setSearching] = useState(false);
@@ -125,18 +129,19 @@ function GraphCanvasInner() {
   function applyCircularStyling(edgeList: FlowEdge[], nodeIds: string[]): FlowEdge[] {
     const circular = findCircularEdgeKeys(
       nodeIds,
-      edgeList.map((e) => ({ source: e.source, target: e.target }))
+      edgeList.filter(e=>e.data?.kind==="donation").map((e) => ({ source: e.source, target: e.target }))
     );
     return edgeList.map((e) => {
-      const isCircular = circular.has(`${e.source}|${e.target}`);
+      const isCircular = e.data?.kind === "donation" && circular.has(`${e.source}|${e.target}`);
       const kind = e.data!.kind;
-      const color = isCircular ? "var(--red)" : kind === "donation" ? "var(--green)" : "var(--accent-2)";
+      const color = isCircular ? "var(--red)" : kind === "donation" ? "var(--green)" : kind === "payment" ? "var(--accent-2)" : "var(--gold)";
       return {
         ...e,
         data: { ...e.data!, circular: isCircular },
         style: {
           stroke: color,
-          strokeWidth: Math.min(2.6, 0.6 + Math.log10(Math.max(1, e.data!.amountCents) / 100) * 0.4),
+          strokeDasharray: kind === "possibleidentity" ? "6 5" : undefined,
+          strokeWidth: Math.max(1, Math.min(2.6, 0.6 + Math.log10(Math.max(1, e.data!.amountCents) / 100) * 0.4)),
           opacity: isCircular ? 0.95 : 0.55,
         },
         animated: isCircular,
@@ -236,7 +241,7 @@ function GraphCanvasInner() {
         if (existingIds.length === 0) return current;
         const onCanvas = new Set(current.map((n) => n.id));
 
-        safeFetchJson<GraphQueryResponse>("/api/graph-paths", { newId, existingIds }).then((data) => {
+        safeFetchJson<GraphQueryResponse>("/api/graph-paths", { newId, existingIds,year:Number(year)||undefined }).then((data) => {
           if (!data) return;
           const infos: GraphNodeInfo[] = data.nodes ?? [];
           const edgeRows: GraphEdgeRow[] = data.edges ?? [];
@@ -269,7 +274,7 @@ function GraphCanvasInner() {
               if (!byId.has(id)) {
                 byId.set(id, {
                   id, source: e.source, target: e.target, type: "floating",
-                  data: { amountCents: e.amountCents, kind: e.kind, circular: false, showLabel: true },
+                  data: { amountCents: e.amountCents, evidence:e.evidence, kind: e.kind, circular: false, showLabel: true },
                 });
               }
             }
@@ -279,13 +284,13 @@ function GraphCanvasInner() {
         return current;
       });
     },
-    [runLayout, setNodes, setEdges]
+    [runLayout, setNodes, setEdges,year,relationLimit,relation]
   );
 
   const expandNode = useCallback(
-    (newId: string) => {
+    (newId: string,requestedLimit=relationLimit) => {
       setNodes((current) => {
-        safeFetchJson<GraphQueryResponse & { truncated?: boolean }>("/api/graph-expand", { cpfCnpj: newId })
+        safeFetchJson<GraphQueryResponse & { truncated?: boolean }>("/api/graph-expand", { cpfCnpj: newId,year:Number(year)||undefined,limit:requestedLimit,relation })
           .then((data) => {
             if (!data) return;
             const infos: GraphNodeInfo[] = data.nodes ?? [];
@@ -300,7 +305,7 @@ function GraphCanvasInner() {
                 if (!byId.has(id)) {
                   byId.set(id, {
                     id, source: e.source, target: e.target, type: "floating",
-                    data: { amountCents: e.amountCents, kind: e.kind, circular: false, showLabel: true },
+                    data: { amountCents: e.amountCents, evidence:e.evidence, kind: e.kind, circular: false, showLabel: true },
                   });
                 }
               }
@@ -308,13 +313,13 @@ function GraphCanvasInner() {
             });
             if (data.truncated) {
               const label = infos.find((n) => n.cpfCnpj === newId)?.label ?? newId;
-              setTruncatedNotice(`${label}: mostrando só os 400 maiores vínculos.`);
+              setTruncatedNotice(`${label}: mostrando até ${requestedLimit} vínculos. Selecione o nó e carregue mais.`);
             }
           });
         return current;
       });
     },
-    [runLayout, setNodes, setEdges]
+    [runLayout, setNodes, setEdges,year,relationLimit,relation]
   );
 
   const addNode = useCallback(
@@ -349,7 +354,6 @@ function GraphCanvasInner() {
     [runLayout, findPaths, expandNode, expandFull, setNodes]
   );
 
-  const searchParams = useSearchParams();
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
@@ -364,6 +368,8 @@ function GraphCanvasInner() {
       }
     });
   }, [searchParams, addNode]);
+
+  useEffect(()=>{const p=new URLSearchParams(location.search);if(roots.size)p.set("add",[...roots].join(","));else p.delete("add");window.history.replaceState(null,"",`/grafo?${p}`);},[roots]);
 
   const onNodeClick: NodeMouseHandler<FlowNode> = useCallback((_evt, node) => {
     setSelected(node.id);
@@ -401,17 +407,19 @@ function GraphCanvasInner() {
     (minCents != null && !Number.isNaN(minCents)) || (maxCents != null && !Number.isNaN(maxCents));
 
   const visibleEdges = useMemo(() => {
-    if (!amountFilterActive) return edges;
     return edges.filter((e) => {
+      if(relation&&e.data?.kind!==relation)return false;
+      if(!amountFilterActive)return true;
+      if(e.data?.kind!=="donation"&&e.data?.kind!=="payment")return true;
       const amt = e.data?.amountCents ?? 0;
       if (minCents != null && !Number.isNaN(minCents) && amt < minCents) return false;
       if (maxCents != null && !Number.isNaN(maxCents) && amt > maxCents) return false;
       return true;
     });
-  }, [edges, amountFilterActive, minCents, maxCents]);
+  }, [edges, amountFilterActive, minCents, maxCents,relation]);
 
   const visibleNodes = useMemo(() => {
-    if (!amountFilterActive) return nodes;
+    if (!amountFilterActive&&!relation) return nodes;
     const keep = new Set<string>(roots);
     if (selected) keep.add(selected);
     for (const e of visibleEdges) {
@@ -419,7 +427,7 @@ function GraphCanvasInner() {
       keep.add(e.target);
     }
     return nodes.filter((n) => keep.has(n.id));
-  }, [nodes, visibleEdges, amountFilterActive, selected, roots]);
+  }, [nodes, visibleEdges, amountFilterActive, selected, roots,relation]);
 
   return (
     <div className="graph-canvas-shell flex min-h-0 flex-1 flex-col">
@@ -459,23 +467,25 @@ function GraphCanvasInner() {
         </div>
         <label
           className="graph-expand-toggle flex items-center gap-1.5 cursor-pointer select-none"
-          title="Ao adicionar, traz TODOS os vínculos diretos desse nó (doadores, fornecedores, candidatos), não só os que conectam com o que já está na tela."
+          title="Ao adicionar, carrega uma etapa dos vínculos diretos deste nó. Selecione o nó para carregar mais relações."
         >
           <input
             type="checkbox"
             checked={expandFull}
-            onChange={(e) => setExpandFull(e.target.checked)}
+            onChange={(e) => {setExpandFull(e.target.checked);const p=new URLSearchParams(location.search);p.set("rede",e.target.checked?"1":"0");window.history.replaceState(null,"",`/grafo?${p}`);}}
             className="accent-[var(--accent)]"
           />
-          <span className="mono-label !text-[var(--muted-2)]">trazer rede inteira</span>
+          <span className="mono-label !text-[var(--muted-2)]">expandir relações (em etapas)</span>
         </label>
+        <label className="mono-label">Relação<select className="btn" value={relation} onChange={e=>{setRelation(e.target.value);const p=new URLSearchParams(location.search);if(e.target.value)p.set("relacao",e.target.value);else p.delete("relacao");location.assign(`/grafo?${p}`);}}><option value="">Todas</option><option value="donation">Doações</option><option value="payment">Despesas contratadas</option><option value="ownership">Sócios</option><option value="administration">Administradores</option><option value="possibleidentity">Identidade possível</option></select></label>
+        <label className="mono-label">Eleição (movimentações)<select className="btn" value={year} onChange={e=>{setYear(e.target.value);const p=new URLSearchParams(location.search);if(e.target.value)p.set("ano",e.target.value);else p.delete("ano");location.assign(`/grafo?${p}`);}}><option value="">Todas</option>{Array.from({length:7},(_,i)=>2026-2*i).map(y=><option key={y}>{y}</option>)}</select></label>
         <div className="graph-amount-filter flex items-center gap-1.5">
           <span className="mono-label !text-[var(--muted-2)]">movimentação</span>
           <input
             type="number"
             inputMode="decimal"
             value={minReais}
-            onChange={(e) => setMinReais(e.target.value)}
+            onChange={(e) => {setMinReais(e.target.value);const p=new URLSearchParams(location.search);if(e.target.value)p.set("minimo",e.target.value);else p.delete("minimo");history.replaceState(null,"",`/grafo?${p}`);}}
             placeholder="mín. R$"
             className="w-24 rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] px-2 py-1.5 font-mono text-[11px] text-foreground placeholder:text-[var(--muted-2)] outline-none focus:border-[var(--border-2)]"
           />
@@ -484,13 +494,13 @@ function GraphCanvasInner() {
             type="number"
             inputMode="decimal"
             value={maxReais}
-            onChange={(e) => setMaxReais(e.target.value)}
+            onChange={(e) => {setMaxReais(e.target.value);const p=new URLSearchParams(location.search);if(e.target.value)p.set("maximo",e.target.value);else p.delete("maximo");history.replaceState(null,"",`/grafo?${p}`);}}
             placeholder="máx. R$"
             className="w-24 rounded-sm border border-[var(--border-1)] bg-[var(--card-tone)] px-2 py-1.5 font-mono text-[11px] text-foreground placeholder:text-[var(--muted-2)] outline-none focus:border-[var(--border-2)]"
           />
           {amountFilterActive ? (
             <button
-              onClick={() => { setMinReais(""); setMaxReais(""); }}
+              onClick={() => {setMinReais("");setMaxReais("");const p=new URLSearchParams(location.search);p.delete("minimo");p.delete("maximo");history.replaceState(null,"",`/grafo?${p}`);}}
               className="mono-label !text-[var(--muted-2)] hover:!text-[var(--fg-2)]"
             >
               limpar filtro
@@ -591,19 +601,23 @@ function GraphCanvasInner() {
                     className={`font-mono text-[10px] ${e.data?.circular ? "text-elo-red" : "text-[var(--muted)]"}`}
                   >
                     {e.source === selectedNode.id ? "→" : "←"}{" "}
-                    {e.data?.kind === "donation" ? "doou pra" : "pagou"}{" "}
+                    {e.data?.kind === "donation" ? "doou para" : e.data?.kind === "payment" ? "contratou despesa com" : e.data?.kind === "possibleidentity" ? "possível identidade de" : e.data?.kind === "administration" ? "administra" : "participação em"}{" "}
                     {labelFor(e.source === selectedNode.id ? e.target : e.source)}
-                    <span className="text-[var(--muted-2)]"> · {formatBRL(e.data?.amountCents ?? 0)}</span>
+                    {(e.data?.kind==="donation"||e.data?.kind==="payment")&&<span className="text-[var(--muted-2)]"> · {formatBRL(e.data?.amountCents ?? 0)}</span>}
+                    {(e.data?.kind==="donation"||e.data?.kind==="payment")&&<a className="source-link" href={`/relacao?de=${e.source}&para=${e.target}&tipo=${e.data.kind}${year?`&ano=${year}`:""}`}>Ver registros e fontes desta ligação</a>}
+                    {e.data?.evidence&&<p>{e.data.evidence.role} · ingresso {e.data.evidence.entryDate||"não informado"} · coleta {e.data.evidence.collectedAt}<a href={`/socios/${e.data.evidence.partnerId}`} className="source-link">Critério e fonte do vínculo</a></p>}
                     {e.data?.circular ? " ⚠ circular" : ""}
                   </div>
                 ))}
               </div>
             ) : null}
 
+            <p className="mt-3 text-xs">Vínculos societários são registros da coleta indicada e não comprovam participação durante todas as eleições. Despesas representam contratação.</p>
+            <button className="btn mt-3" onClick={()=>{const limit=Math.min(400,relationLimit+80);setRelationLimit(limit);expandNode(selectedNode.id,limit);}}>Carregar mais relações deste nó</button>
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() =>
-                  router.push(selectedNode.id.length === 14 ? `/cnpj/${selectedNode.id}` : `/cpf/${selectedNode.id}`)
+                  router.push(selectedNode.id.startsWith("soc:") ? `/socios/${selectedNode.id.slice(4)}` : selectedNode.id.length === 14 ? `/cnpj/${selectedNode.id}` : `/cpf/${selectedNode.id}`)
                 }
                 className="flex-1 rounded-sm bg-foreground py-2 font-mono text-[10px] tracking-[0.1em] text-background uppercase hover:bg-elo-amber"
               >
@@ -634,8 +648,9 @@ function GraphCanvasInner() {
           <span className="inline-block h-[2px] w-4 bg-elo-green" /> doação
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-[2px] w-4" style={{ background: "var(--accent-2)" }} /> pagamento
+          <span className="inline-block h-[2px] w-4" style={{ background: "var(--accent-2)" }} /> despesa contratada
         </span>
+        <span>◇ participação / administração · - - possível identidade</span>
         <span className="flex items-center gap-1.5 !text-elo-red">
           <span className="inline-block h-[2px] w-4 bg-elo-red" /> caminho de doação circular
         </span>
