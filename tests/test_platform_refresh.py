@@ -78,6 +78,18 @@ def test_archive_uses_only_existing_df_elections():
     assert 'votes_2022_DF' in names
     assert not names.intersection({'votes_2016_DF','votes_2020_DF','votes_2024_DF'})
 
+def test_archive_retries_failed_source_before_advancing_cursor(tmp_path,monkeypatch):
+    from elosys.tse import archive_monitor
+    primary=tmp_path/'primary.db';create_schema(primary);state=tmp_path/'state.json'
+    state.write_text(json.dumps({'archive_cursor':0,'sources':{'assets_B':{'status':'failed'}}}))
+    called=[]
+    def update(con,year,**kwargs):called.append(year);return {'rows':1}
+    monkeypatch.setattr(archive_monitor,'sources',lambda:[('assets_A',2022,['https://fixture/A'],update,None),('assets_B',2024,['https://fixture/B'],update,None)])
+    monkeypatch.setattr(archive_monitor,'remote_signature',lambda url:{'etag':'fixture'})
+    monkeypatch.setattr(archive_monitor,'write_manifest',lambda *args:None)
+    rows=archive_monitor.run(primary,state,tmp_path/'tmp',tmp_path/'manifest',1)
+    assert called==[2024] and rows[0]['source']=='assets_B' and rows[0]['status']=='updated'
+
 def test_process_failed_download_does_not_reset_other_elections(tmp_path,monkeypatch):
     path=tmp_path/'test.db';create_schema(path);con=connect(path,write=True)
     con.execute("INSERT INTO source(name,agency,type,base_url,created_at) VALUES('fixture','TSE','csv','https://tse.example','now')")

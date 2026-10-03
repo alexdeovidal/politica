@@ -30,7 +30,10 @@ def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
     state=_read_state(state_path);known=state.setdefault("sources",{})
     # The Federal District has no municipal elections or corresponding section archives.
     for year in (2016,2020,2024):known.pop(f"votes_{year}_DF",None)
-    items=sources();cursor=int(state.get("archive_cursor",0))%len(items);updated=0;results=[]
+    items=sources();cursor=int(state.get("archive_cursor",0))%len(items)
+    failed=[index for index,item in enumerate(items) if known.get(item[0],{}).get('status')=='failed']
+    if failed:cursor=failed[0]
+    updated=0;results=[]
     tmp.mkdir(parents=True,exist_ok=True)
     urls_to_check=list(dict.fromkeys(url for item in items for url in item[2]))
     def signature_result(url):
