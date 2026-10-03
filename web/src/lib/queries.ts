@@ -61,7 +61,48 @@ export type SearchResult =
       kind: "pessoa_fisica";
       cpf: string;
       canonicalName: string;
+    }
+  | {
+      kind: "empresa";
+      cnpj: string;
+      canonicalName: string;
     };
+
+function searchCompanies(rawQuery: string, limit: number): Extract<SearchResult, { kind: "empresa" }>[] {
+  const query = rawQuery.trim();
+  const digits = digitsOnly(query);
+  const documentQuery = digits.length >= 6 && digits.length <= 14 && /^[\d./\-\s]+$/.test(query);
+  const nameTokens = [...new Set(normalizeName(query).split(" ").filter(Boolean))];
+  if (!documentQuery && nameTokens.length === 0) return [];
+
+  const companyName = "COALESCE(NULLIF(cr.trade_name, ''), NULLIF(cr.legal_name, ''), c.legal_name, '')";
+  const companySearchName = "COALESCE(cr.trade_name, '') || ' ' || COALESCE(cr.legal_name, c.legal_name, '')";
+  const rows = documentQuery
+    ? db().prepare(
+      `SELECT c.cnpj, ${companyName} AS canonicalName
+       FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
+       WHERE c.cnpj LIKE ?
+       ORDER BY CASE WHEN c.cnpj = ? THEN 0 ELSE 1 END, c.cnpj
+       LIMIT ?`
+    ).all(`${digits}%`, digits, limit)
+    : db().prepare(
+      `SELECT c.cnpj, ${companyName} AS canonicalName
+       FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
+       WHERE ${nameTokens.map(() => `instr(upper(${companySearchName}), ?) > 0`).join(" AND ")}
+       ORDER BY CASE
+         WHEN upper(${companySearchName}) = ? THEN 0
+         WHEN substr(upper(${companySearchName}), 1, length(?)) = ? THEN 1
+         ELSE 2
+       END, length(canonicalName), canonicalName
+       LIMIT ?`
+    ).all(...nameTokens, normalizeName(query), normalizeName(query), normalizeName(query), limit);
+
+  return (rows as Array<{ cnpj: string; canonicalName: string | null }>).map((row) => ({
+    kind: "empresa",
+    cnpj: row.cnpj,
+    canonicalName: row.canonicalName ?? row.cnpj,
+  }));
+}
 
 export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
   const query = rawQuery.trim();
@@ -69,6 +110,7 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
 
   const digits = digitsOnly(query);
   const looksLikeCpf = digits.length >= 6 && digits.length <= 11;
+  const looksLikeCnpj = digits.length >= 6 && digits.length <= 14 && !/[a-z]/i.test(query);
   const normalizedQuery = normalizeName(query).replace(/[^A-Z0-9]+/g, " ").trim();
   const nameTokens = [...new Set(normalizedQuery.split(" ").filter(Boolean))];
   if (!looksLikeCpf && nameTokens.length === 0) return [];
@@ -113,8 +155,9 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
     )
     ORDER BY m.nameRank ASC, l.year DESC, m.canonical_name ASC
   `;
-  const candidateRows = (db().prepare(sql).all(...matchParams) as Array<Record<string, unknown>>)
-    .slice(0, limit);
+  const candidateRows = looksLikeCnpj && !looksLikeCpf
+    ? []
+    : (db().prepare(sql).all(...matchParams) as Array<Record<string, unknown>>).slice(0, limit);
   const candidatePhotoUrls = batchPhotoUrls(candidateRows.map((r) => r.personId as number));
   const candidates: SearchResult[] = candidateRows.map((r) => ({
     kind: "candidato",
@@ -130,13 +173,13 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
     latestResult: (r.latestResult as string) ?? null,
     photoUrl: candidatePhotoUrls.get(r.personId as number) ?? null,
   }));
-  if (candidates.length >= limit) return candidates;
-
   // Donors/suppliers have no `people` row; names go through FTS5 (LIKE over ~14M rows took 100s+)
   const known = new Set(candidates.map((c) => (c.kind === "candidato" ? c.cpf : null)).filter(Boolean));
-  const remaining = limit - candidates.length;
+  const remaining = limit;
   let personRows: Array<{ cpf: string; name: string | null }>;
-  if (looksLikeCpf) {
+  if (looksLikeCnpj && !looksLikeCpf) {
+    personRows = [];
+  } else if (looksLikeCpf) {
     const cpfPattern = `${digits}%`;
     personRows = db()
       .prepare(
@@ -171,7 +214,19 @@ export function searchPeople(rawQuery: string, limit = 25): SearchResult[] {
     .slice(0, remaining)
     .map((r) => ({ kind: "pessoa_fisica", cpf: r.cpf, canonicalName: r.name ?? r.cpf }));
 
-  return [...candidates, ...persons];
+  const canSearchCompanyNames = normalizedQuery.replace(/\s/g, "").length >= 4;
+  const companies = looksLikeCnpj || canSearchCompanyNames
+    ? searchCompanies(query, Math.min(limit, 8))
+    : [];
+
+  // Interleave entity types so one large result group cannot hide the other searchable records.
+  const combined: SearchResult[] = [];
+  for (let i = 0; combined.length < limit && (i < candidates.length || i < companies.length || i < persons.length); i += 1) {
+    if (candidates[i]) combined.push(candidates[i]);
+    if (companies[i] && combined.length < limit) combined.push(companies[i]);
+    if (persons[i] && combined.length < limit) combined.push(persons[i]);
+  }
+  return combined.slice(0, limit);
 }
 
 export type Person = {
@@ -971,6 +1026,61 @@ export function getPersonAssets(
       }, {})
     ).sort((a, b) => a.year - b.year),
   };
+}
+
+export type CandidateComparisonRecord = {
+  personId: number;
+  name: string;
+  photoUrl: string | null;
+  latestCandidacy: {
+    year: number;
+    office: string | null;
+    partyAbbr: string | null;
+    state: string | null;
+    result: string | null;
+  } | null;
+  candidacyCount: number;
+  donationsTotalCents: number;
+  electoralFundsTotalCents: number;
+  expensesTotalCents: number;
+  latestVote: { year: number; totalVotes: number } | null;
+  latestAssets: { year: number; totalCents: number } | null;
+};
+
+export function getCandidateComparison(personIds: number[]): CandidateComparisonRecord[] {
+  const ids = [...new Set(personIds)].filter((id) => Number.isSafeInteger(id) && id > 0).slice(0, 3);
+
+  return ids.flatMap((personId) => {
+    const header = getPersonHeader(personId);
+    if (!header || header.candidacyCount === 0) return [];
+
+    const candidacies = getPersonCandidacies(personId);
+    const finance = getPersonFinance(personId);
+    const votes = getPersonVoteResults(personId);
+    const assetsByYear = getPersonAssets(personId).declaredAssetsByYear;
+    const latest = candidacies[0];
+    const latestVote = votes[0];
+    const latestAssets = assetsByYear[assetsByYear.length - 1];
+
+    return [{
+      personId,
+      name: header.person.canonicalName ?? "Nome não disponível",
+      photoUrl: getPersonPhotoUrl(personId),
+      latestCandidacy: latest ? {
+        year: latest.year,
+        office: latest.office,
+        partyAbbr: latest.partyAbbr,
+        state: latest.state,
+        result: latest.result,
+      } : null,
+      candidacyCount: header.candidacyCount,
+      donationsTotalCents: finance.donationsTotalCents,
+      electoralFundsTotalCents: finance.electoralFundTotalCents,
+      expensesTotalCents: finance.expensesTotalCents,
+      latestVote: latestVote ? { year: latestVote.year, totalVotes: latestVote.totalVotes } : null,
+      latestAssets: latestAssets ? { year: latestAssets.year, totalCents: latestAssets.totalCents } : null,
+    }];
+  });
 }
 
 export type ParliamentaryEarmark = {

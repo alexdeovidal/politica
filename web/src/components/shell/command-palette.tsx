@@ -90,9 +90,14 @@ export function CommandPalette() {
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar candidato, página, ação…"
+            placeholder="Nome, CPF ou CNPJ"
+            aria-label="Pesquisar candidatos, empresas ou pessoas físicas por nome ou documento"
           />
           <span className="input__kbd">Esc</span>
+        </div>
+        <div className="palette__guide">
+          <strong>Pesquise candidatos, empresas ou pessoas físicas.</strong>
+          <span>Encontre também quem doou ou recebeu pagamentos nas prestações de contas eleitorais.</span>
         </div>
         <div className="palette__list">
           {trimmed.length < 2 ? (
@@ -105,7 +110,7 @@ export function CommandPalette() {
           ) : loading ? (
             <div className="palette__empty">Buscando…</div>
           ) : shownResults.length === 0 && shortcuts.length === 0 ? (
-            <div className="palette__empty">Nada encontrado.</div>
+            <div className="palette__empty">Nada encontrado nos registros públicos pesquisados.</div>
           ) : (
             <>
               {shortcuts.map((s) => (
@@ -130,6 +135,20 @@ export function CommandPalette() {
                     <span className="palette__group">
                       {r.latestOffice ?? "candidato"} {r.latestYear}
                     </span>
+                  </button>
+                ) : r.kind === "empresa" ? (
+                  <button
+                    key={`e-${r.cnpj}`}
+                    type="button"
+                    className="palette__row"
+                    onClick={() => go(`/cnpj/${r.cnpj}`)}
+                  >
+                    <SearchAvatar photoUrl={null} name={r.canonicalName} />
+                    <span className="num" style={{ color: "var(--muted-2)", fontSize: 11 }}>
+                      {formatCpfCnpj(r.cnpj)}
+                    </span>
+                    {r.canonicalName}
+                    <span className="palette__group">empresa</span>
                   </button>
                 ) : (
                   <button

@@ -6,6 +6,8 @@ import { getHomeStats } from "@/lib/stats";
 import { getCandidacyYears, getExpenseYears } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
 import { ContributionCard } from "@/components/contribution-card";
+import { getTseUpdateStatus } from "@/lib/tse-update-status";
+import { TseUpdateStatus } from "@/components/tse-update-status";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const year = Number.isInteger(anoParam) && expenseYears.includes(anoParam) ? anoParam : undefined;
 
   const stats = getHomeStats(year);
+  const tseUpdateStatus = getTseUpdateStatus();
 
   const heroStats = [
     { label: "pessoas", value: stats.people.toLocaleString("pt-BR") },
@@ -30,7 +33,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     <div className="flex flex-col gap-10">
       <PageHeader
         group="Politica007"
-        current="Início"
+        current="Visão geral"
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
 
@@ -42,7 +45,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           </div>
           <h1 id="portal-title">Dados eleitorais organizados para consulta cidadã.</h1>
           <p>
-            Pesquise candidaturas, prestações de contas e informações relacionadas por nome, CPF ou CNPJ.
+            Pesquise candidatos, empresas e pessoas físicas por nome, CPF ou CNPJ. Consulte quem doou,
+            recebeu ou pagou recursos nas prestações de contas eleitorais.
             Os registros indicam suas fontes públicas para que você possa conferi-los.
           </p>
           <div className="portal-hero__search">
@@ -75,6 +79,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </div>
           ))}
         </div>
+        <TseUpdateStatus status={tseUpdateStatus} />
         <div className="flex flex-col gap-1 text-[10px] leading-relaxed text-[var(--muted-2)]">
           <p>
             Fontes oficiais de candidaturas TSE:{" "}

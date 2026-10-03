@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -8,8 +8,10 @@ import {
   Building2,
   CircleDollarSign,
   FileText,
+  GitCompareArrows,
   HandCoins,
   Home,
+  Info,
   MessageSquareText,
   Network,
   ReceiptText,
@@ -21,12 +23,21 @@ import type { SidebarCounts } from "@/lib/stats";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 import { useShell } from "./shell-context";
 
-type NavLink = { href: string; label: string; icon: LucideIcon; count?: number; alert?: boolean };
+type NavLink = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  description: string;
+  action?: "search";
+  count?: number;
+  alert?: boolean;
+};
 
 export function Sidebar({ counts }: { counts: SidebarCounts }) {
   const pathname = usePathname();
   const { aiReviewEnabled, setPaletteOpen, mobileNavOpen, setMobileNavOpen } = useShell();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -75,20 +86,27 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
     };
   }, [mobileNavOpen, setMobileNavOpen]);
 
-  const closeMobileNav = () => setMobileNavOpen(false);
+  const closeMobileNav = () => {
+    setOpenInfo(null);
+    setMobileNavOpen(false);
+  };
 
   const top: NavLink[] = [
-    { href: "/", label: "Início", icon: Home },
-    { href: "/grafo", label: "Grafo de correlações", icon: Network },
-    { href: "/ranking", label: "Bens declarados", icon: FileText },
-    { href: "/emendas", label: "Emendas parlamentares", icon: HandCoins },
+    { href: "/", label: "Visão geral", icon: Home, description: "Resumo do portal, dados disponíveis, atualização das fontes e acesso à pesquisa completa." },
+    { href: "#pesquisar", label: "Pesquisar dados públicos", icon: Search, action: "search", description: "Pesquise candidatos, empresas e pessoas físicas por nome, CPF ou CNPJ, incluindo doadores e fornecedores de campanhas." },
+    { href: "/grafo", label: "Relações entre pessoas e empresas", icon: Network, description: "Explore relações encontradas nos registros públicos, como doações, pagamentos e vínculos empresariais." },
+    { href: "/ranking", label: "Patrimônio declarado", icon: FileText, description: "Consulte bens declarados por candidatos nas eleições disponíveis na base." },
+    { href: "/emendas", label: "Emendas parlamentares", icon: HandCoins, description: "Consulte emendas atribuídas a parlamentares e os valores registrados nas fontes públicas." },
+  ];
+  const ferramentas: NavLink[] = [
+    { href: "/comparar", label: "Comparar candidaturas", icon: GitCompareArrows, description: "Compare até três candidaturas, incluindo votos, bens declarados, doações e despesas registradas." },
   ];
   const sinais: NavLink[] = [
-    { href: "/sinais/doacao-circular", label: "Doação circular", icon: CircleDollarSign, count: counts.circularDonations, alert: true },
-    { href: "/sinais/despesa-desproporcional", label: "Despesa desproporcional", icon: ReceiptText, count: counts.disproportionateExpense },
-    { href: "/sinais/socio-fornecedor", label: "Sócio de fornecedor", icon: Building2, count: counts.supplierPartner },
-    ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise de IA", icon: BrainCircuit, count: counts.aiReview }] : []),
-    { href: "/sinais/discurso", label: "Discurso em rede social", icon: MessageSquareText, count: counts.discourse, alert: true },
+    { href: "/sinais/doacao-circular", label: "Ciclos de doações", icon: CircleDollarSign, description: "Mostra ciclos de doações identificados entre candidaturas e pessoas ou organizações. É um sinal para consulta, não prova de irregularidade.", count: counts.circularDonations, alert: true },
+    { href: "/sinais/despesa-desproporcional", label: "Despesas fora do padrão", icon: ReceiptText, description: "Aponta despesas com valores atípicos para a categoria informada. Cada caso precisa ser conferido na fonte oficial.", count: counts.disproportionateExpense },
+    { href: "/sinais/socio-fornecedor", label: "Sócios de fornecedores", icon: Building2, description: "Relaciona fornecedores de campanhas a informações públicas de quadro societário. Coincidências de nome podem exigir verificação.", count: counts.supplierPartner },
+    ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise automatizada de sinais", icon: BrainCircuit, description: "Apresenta uma leitura automatizada de sinais já encontrados nos dados. Não constitui conclusão nem acusação.", count: counts.aiReview }] : []),
+    { href: "/sinais/discurso", label: "Atividade em redes sociais", icon: MessageSquareText, description: "Consulte publicações públicas associadas a candidatos e aos temas acompanhados pelo portal.", count: counts.discourse, alert: true },
   ];
 
   return (
@@ -119,8 +137,8 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
                 closeMobileNav();
                 setPaletteOpen(true);
               }}
-              aria-label="Buscar"
-              title="Buscar (Ctrl K)"
+              aria-label="Pesquisar candidatos, empresas e pessoas físicas"
+              title="Pesquisar dados públicos (Ctrl K)"
             >
               <Search size={16} strokeWidth={1.9} aria-hidden="true" />
             </button>
@@ -137,12 +155,13 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         </div>
 
         <nav className="app-sidebar__nav" aria-label="navegação principal">
-          <NavGroup title="Consulta" links={top} pathname={pathname} onNavigate={closeMobileNav} />
-          <NavGroup title="Sinais e análises" links={sinais} pathname={pathname} onNavigate={closeMobileNav} />
+          <NavGroup title="Consultar dados" links={top} pathname={pathname} onNavigate={closeMobileNav} onSearch={() => setPaletteOpen(true)} openInfo={openInfo} setOpenInfo={setOpenInfo} />
+          <NavGroup title="Ferramentas" links={ferramentas} pathname={pathname} onNavigate={closeMobileNav} onSearch={() => setPaletteOpen(true)} openInfo={openInfo} setOpenInfo={setOpenInfo} />
+          <NavGroup title="Sinais para conferir" links={sinais} pathname={pathname} onNavigate={closeMobileNav} onSearch={() => setPaletteOpen(true)} openInfo={openInfo} setOpenInfo={setOpenInfo} />
         </nav>
         <div className="app-sidebar__footer">
           <span className="app-sidebar__footer-dot" aria-hidden="true" />
-          <span>PLATAFORMA INDEPENDENTE</span>
+          <span>PLATAFORMA INDEPENDENTE · DADOS PÚBLICOS</span>
         </div>
       </aside>
     </>
@@ -154,32 +173,69 @@ function NavGroup({
   links,
   pathname,
   onNavigate,
+  onSearch,
+  openInfo,
+  setOpenInfo,
 }: {
   title: string;
   links: NavLink[];
   pathname: string;
   onNavigate: () => void;
+  onSearch: () => void;
+  openInfo: string | null;
+  setOpenInfo: (key: string | null) => void;
 }) {
   return (
     <div className="app-sidebar__group">
       <div className="app-sidebar__section-label">{title}</div>
       <div className="navmenu__items">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={`navitem${pathname === l.href ? " is-active" : ""}`}
-            onClick={onNavigate}
-          >
-            <l.icon size={16} strokeWidth={1.8} aria-hidden="true" />
-            <span className="navitem__label">{l.label}</span>
-            {l.count != null ? (
-              <span className={`navitem__count${l.alert && l.count > 0 ? " navitem__count--alert" : ""}`}>
-                {l.count.toLocaleString("pt-BR")}
-              </span>
-            ) : null}
-          </Link>
-        ))}
+        {links.map((l) => {
+          const infoId = `nav-info-${l.href.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}`;
+          const infoIsOpen = openInfo === l.href;
+          return (
+            <div key={l.href} className={`navitem-entry${infoIsOpen ? " is-info-open" : ""}`}>
+              <div className="navitem-entry__row">
+                <Link
+                  href={l.href}
+                  className={`navitem${pathname === l.href ? " is-active" : ""}`}
+                  onClick={(event) => {
+                    onNavigate();
+                    if (l.action === "search") {
+                      event.preventDefault();
+                      onSearch();
+                    }
+                  }}
+                >
+                  <l.icon size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span className="navitem__label">{l.label}</span>
+                  {l.count != null ? (
+                    <span className={`navitem__count${l.alert && l.count > 0 ? " navitem__count--alert" : ""}`}>
+                      {l.count.toLocaleString("pt-BR")}
+                    </span>
+                  ) : null}
+                </Link>
+                <button
+                  type="button"
+                  className="navitem__info"
+                  aria-label={`O que significa: ${l.label}`}
+                  aria-expanded={infoIsOpen}
+                  aria-controls={infoId}
+                  aria-describedby={infoIsOpen ? infoId : undefined}
+                  title={`Sobre: ${l.label}`}
+                  onClick={() => setOpenInfo(infoIsOpen ? null : l.href)}
+                >
+                  <Info size={15} aria-hidden="true" />
+                </button>
+              </div>
+              {infoIsOpen ? (
+                <div id={infoId} className="navitem__info-popover" role="tooltip">
+                  <strong>{l.label}</strong>
+                  <span>{l.description}</span>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
