@@ -768,9 +768,22 @@ a.card:hover, button.card:hover {
   box-shadow: inset 0 0 0 1.5px rgba(34, 197, 94, .55);
   transition: box-shadow .15s, background-color .15s, transform .15s;
 }
-.source-zone a, .source-zone button, .source-zone [role="button"] {
-  pointer-events: none;
+.source-zone a, .source-zone button, .source-zone [role="button"] { position: relative; z-index: 1; }
+.source-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--accent-rgb), .45);
+  text-underline-offset: 2px;
 }
+.source-link:hover { color: var(--accent); text-decoration-color: currentColor; }
+.source-link--inline { margin: 0 0 0 8px; white-space: nowrap; }
+.source-link-cell { width: 100px; white-space: nowrap; }
+.source-link-cell .source-link { margin: 0; }
 .source-zone--hover {
   z-index: 5;
   background: rgba(34, 197, 94, 0.24);
@@ -1190,6 +1203,100 @@ tr.source-zone--hover::before {
   border: 1px solid var(--border-1);
   border-radius: 4px;
   padding: 1px 5px;
+}
+
+.home-search { position: relative; width: 100%; text-align: left; }
+.home-search__label {
+  display: block;
+  margin: 0 0 8px 2px;
+  color: var(--fg-2);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.home-search__control {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 15px;
+  border: 2px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--card-tone);
+  box-shadow: 0 5px 16px rgba(var(--accent-rgb), .12);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.home-search__control:focus-within {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .12), 0 8px 22px rgba(var(--accent-rgb), .12);
+}
+.home-search__icon { flex: none; color: var(--accent-2); }
+.home-search__control input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg-1);
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: .025em;
+}
+.home-search__control input::placeholder { color: var(--muted-2); opacity: 1; }
+.home-search__shortcut {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--border-1);
+  border-radius: 5px;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.home-search__results {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  max-height: min(55vh, 390px);
+  overflow-y: auto;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--card-tone);
+  box-shadow: var(--shadow-modal);
+}
+.home-search__result {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 0;
+  border-bottom: 1px solid var(--border-1);
+  background: transparent;
+  color: var(--fg-1);
+  text-align: left;
+  cursor: pointer;
+}
+.home-search__result:last-child { border-bottom: 0; }
+.home-search__result:hover, .home-search__result:focus-visible { outline: 0; background: var(--hover); }
+.home-search__result-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.home-search__result-name { overflow: hidden; color: var(--fg-1); font-size: 13px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.home-search__result-detail { overflow: hidden; color: var(--muted-2); font-family: var(--font-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.home-search__result-kind { flex: none; color: var(--accent-2); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
+.home-search__empty { padding: 16px; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .home-search__label { font-size: 10px; }
+  .home-search__control { min-height: 50px; gap: 9px; padding: 0 12px; }
+  .home-search__control input { font-size: 12px; }
+  .home-search__shortcut { display: none; }
+  .home-search__result { gap: 8px; padding: 10px; }
+  .home-search__result-detail { max-width: 55vw; }
+  .home-search__result-kind { font-size: 8px; }
 }
 
 /* command palette */

@@ -358,7 +358,7 @@ async function EarmarksSection({ personId }: { personId: number }) {
       </div>
       <div className="table-wrap">
         <div className="overflow-x-auto">
-          <table className="table min-w-[640px]">
+          <table className="table min-w-[740px]">
             <thead>
               <tr>
                 <th>ano</th>
@@ -366,6 +366,7 @@ async function EarmarksSection({ personId }: { personId: number }) {
                 <th>ação</th>
                 <th className="text-right">empenhado</th>
                 <th className="text-right">pago</th>
+                <th>fonte</th>
               </tr>
             </thead>
             <tbody>

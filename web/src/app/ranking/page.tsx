@@ -73,6 +73,15 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
           </p>
         )}
 
+        <p className="mt-3 text-[10px] leading-relaxed text-[var(--muted-2)]">
+          Fontes oficiais das declarações no TSE:{" "}
+          {(year ? [year] : years).map((sourceYear, index) => (
+            <span key={sourceYear}>
+              {index ? ", " : ""}<a className="source-link source-link--inline" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/candidatos-${sourceYear}`} target="_blank" rel="noopener noreferrer">{sourceYear}</a>
+            </span>
+          ))}
+        </p>
+
         <div className="mt-6 flex flex-wrap items-center gap-2">
           {TIPOS.map((t) => (
             <Link

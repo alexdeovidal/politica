@@ -1330,6 +1330,17 @@ export type TopSupplier = {
   candidacyCount: number;
 };
 
+let cachedCandidacyYears: number[] | null = null;
+
+export function getCandidacyYears(): number[] {
+  if (cachedCandidacyYears) return cachedCandidacyYears;
+  const rows = db()
+    .prepare("SELECT DISTINCT year FROM politician_history ORDER BY year DESC")
+    .all() as Array<{ year: number }>;
+  cachedCandidacyYears = rows.map((row) => row.year);
+  return cachedCandidacyYears;
+}
+
 let cachedExpenseYears: number[] | null = null;
 
 export function getExpenseYears(): number[] {

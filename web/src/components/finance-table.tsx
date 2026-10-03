@@ -144,7 +144,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
     </th>
   );
 
-  const colCount = 3 + (showExpense ? 1 : 0);
+  const colCount = 5 + (showExpense ? 1 : 0);
   const amountLabel = `valor${showExpense ? " / pago" : ""}`;
 
   return (
@@ -283,7 +283,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
           </div>
           <div className="table-wrap">
             <div className="overflow-x-auto">
-              <table className="table min-w-[680px]">
+              <table className="table min-w-[760px]">
                 <thead>
                   <tr>
                     {th("name", counterpartyLabel)}
@@ -291,6 +291,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
                     {th("date", "data")}
                     {th("amount", "valor", "right")}
                     {showExpense ? th("paid", "pago", "right") : null}
+                    <th>fonte</th>
                   </tr>
                 </thead>
                 <tbody className={loading ? "opacity-40" : ""}>
@@ -302,6 +303,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
                           <td><Skeleton className="h-3 w-16" /></td>
                           <td><Skeleton className="ml-auto h-3 w-20" /></td>
                           {showExpense ? <td><Skeleton className="ml-auto h-3 w-20" /></td> : null}
+                          <td><Skeleton className="h-3 w-14" /></td>
                         </tr>
                       ))
                     : rows.map((r) => {

@@ -3,7 +3,7 @@ import { TopSuppliers } from "@/components/top-suppliers";
 import { PageHeader } from "@/components/shell/shell-context";
 import { YearSelect } from "@/components/ui/year-select";
 import { getHomeStats } from "@/lib/stats";
-import { getExpenseYears } from "@/lib/queries";
+import { getCandidacyYears, getExpenseYears } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
 import { ContributionCard } from "@/components/contribution-card";
 
@@ -13,6 +13,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;
   const anoParam = typeof sp.ano === "string" ? Number(sp.ano) : NaN;
   const expenseYears = getExpenseYears();
+  const candidacyYears = getCandidacyYears();
   const year = Number.isInteger(anoParam) && expenseYears.includes(anoParam) ? anoParam : undefined;
 
   const stats = getHomeStats(year);
@@ -73,6 +74,24 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               <div className={`kpi__value${s.tone === "green" ? " kpi__value--green" : ""}`}>{s.value}</div>
             </div>
           ))}
+        </div>
+        <div className="flex flex-col gap-1 text-[10px] leading-relaxed text-[var(--muted-2)]">
+          <p>
+            Fontes oficiais de candidaturas TSE:{" "}
+            {(year ? [year] : candidacyYears).map((sourceYear, index) => (
+              <span key={`candidate-${sourceYear}`}>
+                {index ? ", " : ""}<a className="source-link source-link--inline" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/candidatos-${sourceYear}`} target="_blank" rel="noopener noreferrer">{sourceYear}</a>
+              </span>
+            ))}
+          </p>
+          <p>
+            Fontes oficiais de prestação de contas TSE:{" "}
+            {(year ? [year] : expenseYears).map((sourceYear, index) => (
+              <span key={`finance-${sourceYear}`}>
+                {index ? ", " : ""}<a className="source-link source-link--inline" href={`https://dadosabertos.tse.jus.br/pt_BR/dataset/prestacao-de-contas-eleitorais-${sourceYear}`} target="_blank" rel="noopener noreferrer">{sourceYear}</a>
+              </span>
+            ))}
+          </p>
         </div>
       </section>
 
