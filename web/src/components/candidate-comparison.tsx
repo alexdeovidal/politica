@@ -202,24 +202,24 @@ export function CandidateComparison({initialIds=[],initialYear="",initialCompati
                       ? `${record.latestCandidacy.office ?? "Cargo não informado"} · ${record.latestCandidacy.partyAbbr ?? "Sem partido informado"}/${record.latestCandidacy.state ?? "—"} · ${record.latestCandidacy.year}`
                       : "Candidatura sem dados recentes"}
                   </p>
-                  <a href={`/politico/${record.personId}`} className="candidate-compare__profile-link">Ver perfil completo</a>
+                  <a href={`/politico/${record.personId}${year?`?ano=${year}`:""}`} className="candidate-compare__profile-link">Ver perfil completo</a>
                 </div>
               </header>
               <dl className="candidate-compare__metrics">
                 <div>
                   <dt>Doações recebidas · período selecionado</dt>
-                  <dd>{formatBRL(record.donationsTotalCents)}</dd>
+                  <dd>{record.donationsCount?formatBRL(record.donationsTotalCents):"Sem doações coletadas neste período"}</dd>
                 </div>
                 <div>
                   <dt>Fundos eleitoral e partidário recebidos</dt>
-                  <dd>{formatBRL(record.electoralFundsTotalCents)}</dd>
+                  <dd>{record.donationsCount?formatBRL(record.electoralFundsTotalCents):"Sem dados de doações neste período"}</dd>
                 </div>
                 <div>
                   <dt>Despesas contratadas · período selecionado</dt>
-                  <dd>{formatBRL(record.expensesTotalCents)}</dd>
+                  <dd>{record.expensesCount?formatBRL(record.expensesTotalCents):"Sem despesas coletadas neste período"}</dd>
                 </div>
                 <div>
-                  <dt>Despesas efetivamente pagas · período selecionado</dt><dd>{formatBRL(record.paymentsTotalCents)}</dd></div><div>
+                  <dt>Despesas efetivamente pagas · período selecionado</dt><dd>{record.paymentsCount?formatBRL(record.paymentsTotalCents):"Sem pagamentos coletados neste período"}</dd></div><div>
                   <dt>Votos · eleição mais recente com dados</dt>
                   <dd>{record.latestVote
                     ? `${record.latestVote.totalVotes.toLocaleString("pt-BR")} (${record.latestVote.year})`
