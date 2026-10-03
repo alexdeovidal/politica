@@ -18,10 +18,25 @@ class AtomicConnection:
     def __enter__(self):return self
     def __exit__(self,kind,value,traceback):return False
 
+def input_hashes(state):
+    return {key:{"payload_sha256":value.get("payload_sha256"),"signature":value.get("signature"),"synced_at":value.get("synced_at")} for key,value in state.get("sources",{}).items() if key.startswith(("candidates_","finance_")) and value.get("synced_at")}
+
+def previous_inputs(state):
+    return {key:value for key,value in state.get("derived_input_hashes",{}).items() if key.startswith(("candidates_","finance_")) and value.get("synced_at")}
+
 def run(db_path:Path,state_path:Path,force=False):
     state=_read_state(state_path)
     if not force and not state.get("derived_refresh_pending"):return {"status":"unchanged"}
-    inputs={key:{"payload_sha256":value.get("payload_sha256"),"signature":value.get("signature"),"synced_at":value.get("synced_at")} for key,value in state.get("sources",{}).items()}
+    inputs=input_hashes(state)
+    if not force and state.get("derived_synced_at") and inputs==previous_inputs(state):
+        # The monitor owns this lock while importing; never clear a pending import in flight.
+        with state_path.with_suffix(".lock").open("w") as state_lock:
+            fcntl.flock(state_lock,fcntl.LOCK_EX)
+            latest=_read_state(state_path)
+            if input_hashes(latest)==previous_inputs(latest):
+                latest["derived_refresh_pending"]=False;_write_state(state_path,latest)
+                return {"status":"unchanged","reason":"financial_inputs_unchanged"}
+            inputs=input_hashes(latest)
     with closing(connect(db_path,write=True)) as con:
         con.execute("PRAGMA busy_timeout=60000")
         try:
@@ -36,7 +51,7 @@ def run(db_path:Path,state_path:Path,force=False):
     with state_path.with_suffix(".lock").open("w") as state_lock:
         fcntl.flock(state_lock,fcntl.LOCK_EX)
         state=_read_state(state_path)
-        latest={key:{"payload_sha256":value.get("payload_sha256"),"signature":value.get("signature"),"synced_at":value.get("synced_at")} for key,value in state.get("sources",{}).items()}
+        latest=input_hashes(state)
         state["derived_refresh_pending"]=latest!=inputs
         state["derived_synced_at"]=now_utc()
         state["derived_input_hashes"]=inputs
@@ -51,8 +66,10 @@ def main():
     args=parser.parse_args()
     lock=args.state.with_suffix(".derived.lock")
     lock.parent.mkdir(parents=True,exist_ok=True)
-    with lock.open("w") as file:
-        try:fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with lock.open("w") as file,args.state.with_suffix(".ingest.lock").open("w") as ingest_lock:
+        try:
+            fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            fcntl.flock(ingest_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return 0
         print(json.dumps(run(args.db,args.state,args.force),ensure_ascii=False))
     return 0

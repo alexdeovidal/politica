@@ -21,13 +21,16 @@ def sources():
             for name,module,filename in (("candidates",candidates,"consulta_cand_{year}.zip"),("finance",accounts,"prestacao_contas_candidatos_{year}.zip"),("assets",assets,"bem_candidato_{year}.zip"),("social",social,"rede_social_candidato_{year}.zip")):
                 if year in module.SUPPORTED_YEARS:result.append((f"{name}_{year}",year,[module.URL_TEMPLATE.format(year=year)],module.refresh_year,filename.format(year=year)))
         if year in voting.SUPPORTED_YEARS:
-            units=list(voting.STATES)+(["BR"] if year in voting.PRESIDENTIAL_YEARS else [])
+            units=[unit for unit in voting.STATES if unit!='DF' or year in voting.PRESIDENTIAL_YEARS]+(["BR"] if year in voting.PRESIDENTIAL_YEARS else [])
             for unit in units:
                 result.append((f"votes_{year}_{unit}",year,[voting.URL_TEMPLATE.format(year=year,unit=unit)],unit,None))
     return result
 
 def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
-    state=_read_state(state_path);known=state.setdefault("sources",{});items=sources();cursor=int(state.get("archive_cursor",0))%len(items);updated=0;results=[]
+    state=_read_state(state_path);known=state.setdefault("sources",{})
+    # The Federal District has no municipal elections or corresponding section archives.
+    for year in (2016,2020,2024):known.pop(f"votes_{year}_DF",None)
+    items=sources();cursor=int(state.get("archive_cursor",0))%len(items);updated=0;results=[]
     tmp.mkdir(parents=True,exist_ok=True)
     urls_to_check=list(dict.fromkeys(url for item in items for url in item[2]))
     def signature_result(url):
@@ -68,8 +71,10 @@ def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("--db",type=Path,default=Path("/data/elosys.db"));p.add_argument("--state",type=Path,default=Path("/data/tse-source-monitor.json"));p.add_argument("--tmp",type=Path,default=Path("/data/tse-history-tmp"));p.add_argument("--manifest",type=Path,default=Path("/data/manifest.json"));p.add_argument("--max-updates",type=int,default=1);a=p.parse_args()
     a.state.parent.mkdir(parents=True,exist_ok=True)
-    with a.state.with_suffix(".lock").open("w") as lock:
-        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with a.state.with_suffix(".lock").open("w") as lock,a.state.with_suffix(".ingest.lock").open("w") as ingest_lock:
+        try:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            fcntl.flock(ingest_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return 0
         from .search_index import ensure
         ensure(a.db)

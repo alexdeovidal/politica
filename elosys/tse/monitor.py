@@ -151,9 +151,10 @@ def main() -> int:
     args = parser.parse_args()
 
     args.lock.parent.mkdir(parents=True, exist_ok=True)
-    with args.lock.open("w", encoding="utf-8") as lock_file:
+    with args.lock.open("w", encoding="utf-8") as lock_file,args.state.with_suffix(".ingest.lock").open("w") as ingest_lock:
         try:
             fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(ingest_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             log.info("uma sincronização TSE já está em execução; esta execução será ignorada")
             return 0

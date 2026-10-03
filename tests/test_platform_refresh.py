@@ -50,6 +50,34 @@ def test_derived_reset_is_rolled_back_on_error(tmp_path,monkeypatch):
     con=connect(path);assert con.execute('SELECT count(*) FROM people').fetchone()[0]==1;con.close()
     assert json.loads(state.read_text())['derived_refresh_pending']
 
+def test_nonfinancial_monitor_progress_does_not_reset_valid_signals(tmp_path,monkeypatch):
+    state=tmp_path/'state.json';source={'synced_at':'2026-01-01','signature':{'etag':'same'},'payload_sha256':'same'}
+    inputs={'finance_2026':source,'assets_2026':{'synced_at':'old'}}
+    state.write_text(json.dumps({'derived_refresh_pending':True,'derived_synced_at':'2026-01-02','derived_input_hashes':inputs,'sources':{'finance_2026':source,'assets_2026':{'synced_at':'new'},'votes_2024_SP':{'status':'pending'},'candidates_2024':{'status':'pending'}}}))
+    def forbidden(*args):raise AssertionError('unchanged financial data must not be recomputed')
+    monkeypatch.setattr(derived.candidate_supplier_partner,'run',forbidden)
+    assert derived.run(tmp_path/'unused.db',state)['status']=='unchanged'
+    assert not json.loads(state.read_text())['derived_refresh_pending']
+
+def test_workers_share_one_ingestion_lock(tmp_path,monkeypatch):
+    import fcntl,sys
+    from elosys.tse import archive_monitor,search_index
+    state=tmp_path/'state.json'
+    def forbidden(*args,**kwargs):raise AssertionError('must not run during another database writer')
+    monkeypatch.setattr(search_index,'ensure',forbidden);monkeypatch.setattr(derived,'run',forbidden)
+    with state.with_suffix('.ingest.lock').open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        for module in (monitor,archive_monitor,derived):
+            argv=['worker','--state',str(state),'--db',str(tmp_path/'unused.db')]
+            if module is monitor:argv+=['--lock',str(state.with_suffix('.lock'))]
+            monkeypatch.setattr(sys,'argv',argv);assert module.main()==0
+
+def test_archive_uses_only_existing_df_elections():
+    from elosys.tse.archive_monitor import sources
+    names={row[0] for row in sources()}
+    assert 'votes_2022_DF' in names
+    assert not names.intersection({'votes_2016_DF','votes_2020_DF','votes_2024_DF'})
+
 def test_process_failed_download_does_not_reset_other_elections(tmp_path,monkeypatch):
     path=tmp_path/'test.db';create_schema(path);con=connect(path,write=True)
     con.execute("INSERT INTO source(name,agency,type,base_url,created_at) VALUES('fixture','TSE','csv','https://tse.example','now')")
