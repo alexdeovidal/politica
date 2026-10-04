@@ -9,6 +9,26 @@ export type DailyNewsArticle={
 };
 export type DailyNewsFeed={day:string;generatedAt:string|null;trackedProfiles:number;articles:DailyNewsArticle[]};
 
+const openingEditionDay="2026-10-04";
+const openingArticleSlug="p28350-adesivos-estreia";
+
+function openingEditionArticle(publishedAt:string):DailyNewsArticle{
+  return {
+    slug:openingArticleSlug,personId:28350,personName:"Flávio Nantes Bolsonaro",
+    title:"TSE lista R$ 766 mil em dois lançamentos de adesivos da campanha de Flávio Bolsonaro",
+    summary:"Um registro descreve adesivo de vinil por R$ 396 mil e outro, adesivo perfurado por R$ 370 mil. Os seis lançamentos da categoria somam R$ 965,5 mil.",
+    category:"Pauta especial de estreia",publishedAt,
+    body:[
+      "Na prestação de contas de candidatos de 2026 publicada pelo Tribunal Superior Eleitoral, dois lançamentos associados à campanha de Flávio Nantes Bolsonaro descrevem materiais adesivos: R$ 396 mil para “adesivo para choque em vinil — presidente Flávio Bolsonaro — 100x300mm” e R$ 370 mil para “adesivo perfurado — Flavio Bolsonaro Presidente 22”. Juntos, os registros somam R$ 766 mil.",
+      "Nos dados classificados pelo Politica007 como adesivos, há seis lançamentos que totalizam R$ 965.496. Os dois citados representam cerca de 79,3% desse total. A categoria corresponde a 1,6% das receitas associadas à candidatura; a média calculada para nove candidaturas do mesmo cargo e unidade eleitoral, com receita informada, é 3,6%.",
+      "O sistema marca os valores individuais para conferência por comparação estatística. Essa diferença não comprova irregularidade: quantidade, dimensões, compra em lote, documentação fiscal e outros detalhes precisam ser analisados junto aos registros completos. Os valores são lançamentos declarados, não uma conclusão do TSE sobre a regularidade das despesas.",
+      "Esta pauta de estreia foi preparada a partir dos dados públicos do TSE e de cálculos comparativos do Politica007. Consulte o conjunto original e a ficha da candidatura antes de compartilhar conclusões.",
+    ],
+    highlights:[{label:"Dois lançamentos destacados",value:"R$ 766.000,00",detail:"R$ 396.000 em adesivo de vinil + R$ 370.000 em adesivo perfurado · 2026"}],
+    sources:[{label:"Prestação de contas eleitorais de 2026 · TSE",url:"https://dadosabertos.tse.jus.br/pt_BR/dataset/prestacao-de-contas-eleitorais-2026"}],
+  };
+}
+
 type PopularProfile={personId:number;views:number};
 type Candidate={id:number;name:string;historyId:number;year:number;office:string|null;party:string|null;state:string|null;municipality:string|null;result:string|null};
 type StoryFacts={candidate:Candidate;views:number;processCount:number;openProcessCount:number;recentProcess?:{number:string;year:number;filedAt:string|null;closedAt:string|null;className:string|null;subject:string|null;lastDecisionAt:string|null;lastDecisionType:string|null;pole:string|null;sourceUrl:string|null};signals:Array<{year:number;description:string|null;amountCents:number;explanation:string;sourceUrl:string|null}>;votes?:{year:number;votes:number;sections:number;municipalities:number};donations?:{year:number;count:number;amountCents:number};expenses?:{year:number;count:number;amountCents:number};assets?:{year:number;count:number;valuedCount:number;amountCents:number}};
@@ -138,13 +158,14 @@ export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
   const since=daysBefore(day,29);
   const popular=store.prepare("SELECT person_id AS personId,sum(views) AS views FROM candidate_profile_access_daily WHERE day>=? AND day<=? GROUP BY person_id ORDER BY views DESC,person_id LIMIT 40").all(since,day) as PopularProfile[];
   const trackedProfiles=popular.length;
-  if(!popular.length)return {day,generatedAt:null,trackedProfiles:0,articles:[]};
-  const candidates=popular.map(x=>getCandidateFacts(x.personId,x.views)).filter((x):x is StoryFacts=>x!==null);
   const generatedAt=new Date().toISOString();
-  const storyLists=candidates.map(x=>topicStories(x,generatedAt));const articles:DailyNewsArticle[]=[];
+  const openingEdition=day===openingEditionDay?[openingEditionArticle(generatedAt)]:[];
+  if(!popular.length&&!openingEdition.length)return {day,generatedAt:null,trackedProfiles:0,articles:[]};
+  const candidates=popular.map(x=>getCandidateFacts(x.personId,x.views)).filter((x):x is StoryFacts=>x!==null);
+  const storyLists=candidates.map(x=>topicStories(x,generatedAt));const articles:DailyNewsArticle[]=[...openingEdition];
   for(let topic=0;articles.length<5;topic++){
     let added=false;
-    for(const list of storyLists){if(list[topic]){articles.push(list[topic]);added=true;if(articles.length===5)break;}}
+    for(const list of storyLists){if(list[topic]&& !openingEdition.some(article=>article.personId===list[topic].personId)){articles.push(list[topic]);added=true;if(articles.length===5)break;}}
     if(!added)break;
   }
   if(!articles.length)return {day,generatedAt:null,trackedProfiles,articles:[]};
