@@ -1038,6 +1038,22 @@ tr.source-zone--hover::before {
   font-size: 14px; font-weight: 500; color: var(--fg-1);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
+.navbar-search {
+  display: flex; align-items: center; gap: 9px;
+  flex: 1 1 320px; min-width: 190px; max-width: 390px;
+  padding: 9px 12px; border: 1px solid var(--border-2);
+  border-radius: 8px; background: var(--bg); color: var(--muted-2);
+  text-align: left; font-size: 13px; cursor: pointer;
+}
+.navbar-search svg, .navbar-search kbd { flex: none; }
+.navbar-search span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.navbar-search kbd { margin-left: auto; font-size: 10px; opacity: .8; }
+.navbar-search:hover, .navbar-search:focus-visible { border-color: var(--accent); color: var(--fg-1); }
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .navbar > .crumb, .navbar > .crumb__sep { display: none; }
+  .navbar-search kbd { display: none; }
+}
+@media (max-width: 1023px) { .navbar-search { display: none; } }
 
 .content__inner { padding: 0 28px 28px; max-width: var(--page-max-w); margin: 0 auto; }
 
