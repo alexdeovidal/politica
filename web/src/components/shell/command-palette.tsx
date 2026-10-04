@@ -77,7 +77,8 @@ export function CommandPalette() {
         .then((d: { results: SearchResult[] }) => {if(!controller.signal.aborted){setResults(d.results);setSearchError("");}})
         .catch(() => {if(!controller.signal.aborted){setResults([]);setSearchError("Não foi possível consultar agora. Tente novamente.");}})
         .finally(() => {if(!controller.signal.aborted){setLoading(false);setSearchedQuery(trimmed);}});
-    }, 180);
+    // Avoid piling synchronous SQLite searches onto the server while someone is still typing.
+    }, 280);
     return () => {
       clearTimeout(t);
       controller.abort();
