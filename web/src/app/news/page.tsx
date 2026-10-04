@@ -11,13 +11,14 @@ function timeLabel(value:string|null){if(!value)return null;return new Date(valu
 
 export default function NewsPage(){
   const feed=getDailyNews();
+  const hasOpeningEdition=feed.articles.some(article=>article.category==="Pauta especial de estreia");
   return <main className="news-page">
     <PageHeader group="Informação pública" current="Notícias"/>
     <section className="news-masthead">
       <div className="news-masthead__copy">
         <span className="news-eyebrow"><Newspaper size={15}/> RADAR DE DADOS PÚBLICOS</span>
         <h1>Notícias que partem dos dados.</h1>
-        <p>Matérias automáticas sobre candidaturas, processos eleitorais, despesas e outros registros públicos — priorizadas pelos perfis mais consultados no Politica007.</p>
+        <p>Matérias sobre candidaturas, processos eleitorais, despesas e outros registros públicos. {hasOpeningEdition?"A edição de estreia traz uma pauta verificada; as próximas serão priorizadas pelos perfis mais consultados.":"As edições diárias são priorizadas pelos perfis mais consultados no Politica007."}</p>
       </div>
       <div className="news-edition"><span>EDIÇÃO DE HOJE</span><strong>{dateLabel(feed.day)}</strong><small>Até 5 matérias · geradas uma vez ao dia{timeLabel(feed.generatedAt)?` · ${timeLabel(feed.generatedAt)}`:""}</small></div>
     </section>
@@ -36,6 +37,6 @@ export default function NewsPage(){
       <p>{feed.trackedProfiles?"Ainda não há matéria pronta para esta edição. Acompanhe em instantes.":"O sistema contabiliza de forma agregada as consultas aos perfis. Quando houver consultas suficientes, ele seleciona até cinco candidatos por dia e verifica processos, despesas comparativas e outros dados disponíveis."}</p>
       <Link href="/" className="btn btn--primary">Pesquisar candidatos e dados</Link>
     </section>}
-    <footer className="news-methodology"><strong>Como estas matérias são selecionadas</strong><p>Os perfis são ordenados pela quantidade agregada de consultas nos últimos 30 dias, limitada a uma contagem diária por navegador e candidato. Não armazenamos quem fez a consulta. O conteúdo usa fatos estruturados nas bases públicas do TSE e apresenta a fonte junto de cada pauta; sinais automatizados são identificados como sinais, sem conclusão de irregularidade.</p><Link href="/fontes">Ver fontes e atualizações do portal <ArrowUpRight size={14}/></Link></footer>
+    <footer className="news-methodology"><strong>Como estas matérias são selecionadas</strong><p>{hasOpeningEdition?"A pauta especial de estreia foi escolhida editorialmente a partir de registros oficiais. Nas edições seguintes, os perfis serão ordenados pela quantidade agregada de consultas nos últimos 30 dias, limitada a uma contagem diária por navegador e candidato.":"Os perfis são ordenados pela quantidade agregada de consultas nos últimos 30 dias, limitada a uma contagem diária por navegador e candidato."} Não armazenamos quem fez a consulta. O conteúdo usa fatos estruturados nas bases públicas do TSE e apresenta a fonte junto de cada pauta; sinais automatizados são identificados como sinais, sem conclusão de irregularidade.</p><Link href="/fontes">Ver fontes e atualizações do portal <ArrowUpRight size={14}/></Link></footer>
   </main>;
 }
