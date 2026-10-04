@@ -25,5 +25,10 @@ try{
  assert.equal(con.prepare("SELECT count(*) AS n FROM cache WHERE key='pncp:recent-cursor'").get().n,0);
  assert.equal(con.prepare('SELECT status FROM sync_run ORDER BY id DESC LIMIT 1').get().status,'success');
  assert.equal(con.prepare('SELECT count(*) AS n FROM worker_lock').get().n,0);con.close();
- console.log('PNCP mock: retry, preservation and resumption passed');
+ const recentStamp=new Database(process.env.POLITICA_PLATFORM_DB_PATH);const originalStamp=recentStamp.prepare("SELECT updated_at FROM cache WHERE key='pncp:recent-completed'").get().updated_at;recentStamp.close();
+ let timeoutCalls=0;globalThis.fetch=async url=>{assert.ok(!new URL(url).pathname.endsWith('/atualizacao'),'A completed recent window is not redownloaded within four hours');if(timeoutCalls++===0)throw Object.assign(new Error('Tempo limite simulado'),{name:'TimeoutError'});return new Response(null,{status:204});};
+ await import('./sync-public-sources.mjs?fixture=third');assert.equal(timeoutCalls,61);
+ con=new Database(process.env.POLITICA_PLATFORM_DB_PATH);assert.equal(con.prepare("SELECT updated_at FROM cache WHERE key='pncp:recent-completed'").get().updated_at,originalStamp);assert.equal(con.prepare('SELECT status FROM sync_run ORDER BY id DESC LIMIT 1').get().status,'success');assert.equal(con.prepare('SELECT count(*) AS n FROM worker_lock').get().n,0);con.prepare("UPDATE cache SET updated_at='2000-01-01T00:00:00Z' WHERE key='pncp:recent-completed'").run();con.close();
+ let recentRequested=false;globalThis.fetch=async url=>{if(new URL(url).pathname.endsWith('/atualizacao'))recentRequested=true;return new Response(null,{status:204});};await import('./sync-public-sources.mjs?fixture=fourth');assert.ok(recentRequested,'An expired recent window is refreshed');
+ console.log('PNCP mock: rate limits, timeouts, preservation, cursor resumption and recent-window freshness passed');
 }finally{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimer;rmSync(dir,{recursive:true,force:true});}
