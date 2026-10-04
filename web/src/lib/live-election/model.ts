@@ -7,10 +7,10 @@ export const TSE_TECHNICAL_SOURCE = "https://www.tse.jus.br/eleicoes/informacoes
 export type ElectionSelection = { turn: number; office: string; state: string; municipality: string; zone: string };
 export type ElectionOffice = { code: string; name: string; proportional: boolean };
 export type OfficialElection = { code: string; cycle: string; date: string; turn: number; offices: ElectionOffice[] };
-export type Municipality = { code: string; name: string; zones: string[] };
+export type Municipality = { code: string; name: string; zones: string[]; ibgeCode?: string };
 export type ElectionState = { code: string; name: string; municipalities: Municipality[] };
 export type LiveConfig = { elections: OfficialElection[]; states: ElectionState[]; sourceUrl: string; generatedAt: string | null; checkedAt: string; stale: boolean };
-export type PublicConfig = Omit<LiveConfig, "states"> & { states: {code: string; name: string}[]; municipalities: Municipality[] };
+export type PublicConfig = Omit<LiveConfig, "states"> & { states: {code: string; name: string}[]; municipalities: Municipality[]; exteriorMunicipalities: Municipality[] };
 export type LiveCandidate = {
   id: string; number: string; name: string; legalName: string; party: string; partyName: string;
   coalition: string; votes: number | null; percentage: number | null; destination: string;
@@ -86,7 +86,7 @@ export function parseElections(value: unknown): OfficialElection[] {
 export function parseStates(value: unknown): ElectionState[] {
   const root = object(value);
   if (root.f !== "o") throw new Error("A lista de localidades recebida não contém dados oficiais.");
-  const states = list(root.abr).map(area => ({code: str(area.cd).toLowerCase(), name: displayName(str(area.ds)), municipalities: list(area.mu).map(municipality => ({code: str(municipality.cd).padStart(5, "0"), name: displayName(str(municipality.nm)), zones: Array.isArray(municipality.z) ? municipality.z.map(zone => str(zone).padStart(4, "0")) : []}))}));
+  const states = list(root.abr).map(area => ({code: str(area.cd).toLowerCase(), name: displayName(str(area.ds)), municipalities: list(area.mu).map(municipality => ({code: str(municipality.cd).padStart(5, "0"), name: displayName(str(municipality.nm)), ibgeCode: /^\d{7}$/.test(str(municipality.cdi)) ? str(municipality.cdi) : "", zones: Array.isArray(municipality.z) ? municipality.z.map(zone => str(zone).padStart(4, "0")) : []}))}));
   if (!states.length || states.some(state => !/^[a-z]{2}$/.test(state.code) || !state.name || state.municipalities.some(municipality => !/^\d{5}$/.test(municipality.code) || municipality.zones.some(zone => !/^\d{4}$/.test(zone))))) throw new Error("Localidades inválidas na configuração oficial.");
   return states.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }

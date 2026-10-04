@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- Candidate photos are served directly by TSE; QR images are generated locally. */
 "use client";
 
-import {useEffect, useMemo, useRef, useState, type CSSProperties} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
@@ -9,6 +9,8 @@ import {BrandMark} from "@/components/brand/brand-lockup";
 import {ThemeToggle} from "@/components/shell/theme-toggle";
 import {displayName, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
 import {LocationPicker} from "./location-picker";
+import {ElectionMap} from "./election-map";
+import {changeElectionSelection} from "@/lib/live-election/geography";
 
 const integer = new Intl.NumberFormat("pt-BR"), percent = new Intl.NumberFormat("pt-BR", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const number = (value: number | null | undefined) => value == null ? "—" : integer.format(value);
@@ -29,9 +31,9 @@ async function json<T>(url: string, signal: AbortSignal): Promise<T> {
   return body;
 }
 
-export function LiveElectionDashboard({initialSelection, initialConfig, initialResult, initialOverview, initialError, initialTv, initialQuery, initialParty, initialNow}: {
+export function LiveElectionDashboard({initialSelection, initialConfig, initialResult, initialOverview, initialError, initialTv, initialQuery, initialParty, initialCountry, initialNow}: {
   initialSelection: ElectionSelection; initialConfig: PublicConfig | null; initialResult: LiveResult | null;
-  initialOverview: LiveOverview | null; initialError: string | null; initialTv: boolean; initialQuery: string; initialParty: string; initialNow: number;
+  initialOverview: LiveOverview | null; initialError: string | null; initialTv: boolean; initialQuery: string; initialParty: string; initialCountry: string; initialNow: number;
 }) {
   const [selection, setSelection] = useState(initialSelection), [config, setConfig] = useState(initialConfig);
   const [data, setData] = useState(initialResult), [overview, setOverview] = useState(initialOverview);
@@ -42,6 +44,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   const [territoryQuery, setTerritoryQuery] = useState(""), [territoryCount, setTerritoryCount] = useState(12);
   const [tvPage, setTvPage] = useState(0), [rotating, setRotating] = useState(true), [copied, setCopied] = useState(false), [shareError, setShareError] = useState<string | null>(null), [qr, setQr] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [mapCountry, setMapCountry] = useState(initialCountry);
   const [configIdentity, setConfigIdentity] = useState(`${initialSelection.turn}:${initialSelection.state}`);
   const [configTick, setConfigTick] = useState(0);
   const configRequestKey = useRef(initialConfig ? `${initialSelection.turn}:${initialSelection.state}:0:0` : "");
@@ -60,6 +63,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   if (query) linkParams.set("busca", query);
   if (party) linkParams.set("partido", party);
   if (tv) linkParams.set("tv", "1");
+  if (selection.state === "zz" && mapCountry) linkParams.set("pais", mapCountry);
   const shareUrl = `https://politica007.com.br/apuracao?${linkParams}`;
   const parties = useMemo(() => Array.from(new Set(selectedResult?.candidates.map(candidate => candidate.party) || [])).sort(), [selectedResult]);
   const candidates = useMemo(() => {
@@ -133,16 +137,12 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   function updateQuery(value: string) {setQuery(value); resetCandidatePages();}
   function updateParty(value: string) {setParty(value); resetCandidatePages();}
   function updateSort(value: string) {setSort(value); resetCandidatePages();}
-  function changeSelection(change: Partial<ElectionSelection>) {
-    resetCandidatePages(); setTerritoryQuery(""); setTerritoryCount(12); setLoading(false);
-    setSelection(current => {
-      const next = {...current, ...change};
-      if (change.state !== undefined) {next.municipality = ""; next.zone = ""; if (next.state === "zz") next.office = "1"; else if (next.office === "8" && next.state !== "df") next.office = "7"; else if (next.office === "7" && next.state === "df") next.office = "8"; else if (next.office === "25") next.office = "1";}
-      if (change.municipality !== undefined) next.zone = "";
-      return next;
-    });
+  const changeSelection = useCallback((change: Partial<ElectionSelection>) => {
+    setTvPage(0); setVisibleCount(30); setTerritoryQuery(""); setTerritoryCount(12); setLoading(false);
+    setSelection(current => changeElectionSelection(current, change));
+    if (change.municipality !== undefined || change.state && change.state !== "zz") setMapCountry("");
     setOverview(null); setParty(""); setQuery(""); setError(null);
-  }
+  }, []);
   async function toggleTv() {
     if (tv) {setTv(false); setFiltersOpen(false); if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});}
     else {setTv(true); setFiltersOpen(false); await document.documentElement.requestFullscreen?.().catch(() => {});}
@@ -170,6 +170,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     <button className="live-button live-button--reset" type="button" onClick={() => changeSelection({state: "br", municipality: "", zone: "", office: "1"})}>Visão nacional <ArrowRight size={16}/></button>
   </div>;
   const officeTabs = <div className="live-offices" role="tablist" aria-label="Cargo em disputa">{officeList.map(office => <button key={office.code} type="button" role="tab" aria-selected={selection.office === office.code} className={selection.office === office.code ? "is-active" : ""} onClick={() => changeSelection({office: office.code})}>{office.name}</button>)}</div>;
+  const candidateFilters = <div className="live-candidate-filters"><label className="live-search"><Search size={17}/><input aria-label="Pesquisar candidatura em todos os resultados" placeholder="Nome, número ou partido do candidato" value={query} onChange={event => updateQuery(event.target.value)}/>{query && <button type="button" onClick={() => updateQuery("")} aria-label="Limpar pesquisa de candidaturas"><X size={15}/></button>}</label><label className="sr-only" htmlFor="live-party">Partido</label><select id="live-party" aria-label="Partido" value={party} onChange={event => updateParty(event.target.value)}><option value="">Todos os partidos</option>{parties.map(name => <option key={name} value={name}>{name}</option>)}</select><label className="sr-only" htmlFor="live-sort">Ordenação</label><select id="live-sort" aria-label="Ordenação" value={sort} onChange={event => updateSort(event.target.value)}><option value="votes">{started ? "Mais votos" : "Ordem alfabética"}</option><option value="name">Nome · A–Z</option></select></div>;
   const unhealthy = Boolean(error || configError || selectedResult?.stale);
   const lastUpdate = selectedResult?.totalizedAt || selectedResult?.generatedAt;
 
@@ -187,7 +188,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
         </div>
       </header>
       {!tv && <div className="live-intro"><div><span className="live-eyebrow"><Radio size={15}/> DADOS OFICIAIS DO TSE</span><h1>Acompanhe cada voto.</h1><p>Resultados, candidaturas e o avanço da apuração em uma só tela.</p></div><div className="live-intro__date"><span>ELEIÇÕES GERAIS</span><strong>2026 <i>·</i> {selection.turn}º turno</strong><small>Atualização automática a cada 30 segundos</small></div></div>}
-      {(!tv || filtersOpen) && <section className="live-filter-panel" aria-label="Filtros da apuração">{filters}{officeTabs}{tv && <div className="live-tv-filter-note">Feche os filtros para apresentar os resultados. A troca de candidatos ocorre a cada 12 segundos.</div>}</section>}
+      {(!tv || filtersOpen) && <div className="live-location-tools"><section className="live-filter-panel" aria-label="Filtros da apuração">{filters}{officeTabs}{tv && candidateFilters}{tv && <div className="live-tv-filter-note">Feche os filtros para apresentar os resultados. A troca de candidatos ocorre a cada 12 segundos.</div>}</section><ElectionMap selection={selection} config={config} configReady={configIdentity === `${selection.turn}:${selection.state}`} overview={overview} country={mapCountry} onCountry={setMapCountry} onSelect={changeSelection}/>{tv && <button className="live-button live-button--primary live-map-present" type="button" onClick={() => setFiltersOpen(false)}><Monitor size={16}/>Apresentar resultados</button>}</div>}
       {(configError || shareError) && <p className="live-notice" role="status">{configError || shareError}</p>}
 
       <div className={`live-connection${unhealthy ? " is-unhealthy" : ""}`} role="status">
@@ -201,7 +202,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
         <section className="live-candidates-panel" aria-labelledby="live-candidates-title">
           {!tv && <div className="live-section-heading"><div><span className="live-eyebrow">{selection.turn}º TURNO · {selection.zone ? `ZONA ${Number(selection.zone)}` : selection.state === "br" ? "ABRANGÊNCIA NACIONAL" : selection.municipality ? "VOTAÇÃO NA CIDADE" : "VOTAÇÃO NA ABRANGÊNCIA"}</span><h2 id="live-candidates-title">{selectedOffice?.name || "Resultados"}<span> · {area}</span></h2></div><span className="live-count">{number(selectedResult?.candidates.length)} candidaturas</span></div>}
           {tv && <h2 id="live-candidates-title" className="sr-only">Candidaturas para {selectedOffice?.name}</h2>}
-          {(!tv || filtersOpen) && <div className="live-candidate-filters"><label className="live-search"><Search size={17}/><input aria-label="Pesquisar candidatura em todos os resultados" placeholder="Nome, número ou partido do candidato" value={query} onChange={event => updateQuery(event.target.value)}/>{query && <button type="button" onClick={() => updateQuery("")} aria-label="Limpar pesquisa de candidaturas"><X size={15}/></button>}</label><label className="sr-only" htmlFor="live-party">Partido</label><select id="live-party" aria-label="Partido" value={party} onChange={event => updateParty(event.target.value)}><option value="">Todos os partidos</option>{parties.map(name => <option key={name} value={name}>{name}</option>)}</select><label className="sr-only" htmlFor="live-sort">Ordenação</label><select id="live-sort" aria-label="Ordenação" value={sort} onChange={event => updateSort(event.target.value)}><option value="votes">{started ? "Mais votos" : "Ordem alfabética"}</option><option value="name">Nome · A–Z</option></select></div>}
+          {!tv && candidateFilters}
           {error && <div className="live-notice" role="alert"><WifiOff size={18}/><p>{error}</p></div>}
           {!started && selectedResult && <div className="live-waiting"><Clock3 size={22}/><div><strong>Os votos deste recorte ainda não foram divulgados.</strong><p>As candidaturas abaixo vêm do cadastro oficial. A tela acompanha automaticamente a publicação da apuração pelo TSE.</p></div></div>}
           {selectedResult?.mathematicalDecision && <div className="live-notice"><Info size={18}/><p>O TSE indica {selectedResult.mathematicalDecision === "s" ? "definição matemática de segundo turno" : "definição matemática da eleição"}. A situação de cada candidatura segue a totalização final informada pelo TSE.</p></div>}
@@ -217,7 +218,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
 
         {!tv && <aside className="live-side-panels">
           <section className="live-summary-panel" aria-labelledby="live-summary-title"><div className="live-section-heading"><h2 id="live-summary-title">Andamento da apuração</h2><span className="live-count">{selectedResult?.seats ? `${selectedResult.seats} ${selectedResult.seats === 1 ? "vaga" : "vagas"}` : "TSE"}</span></div><div className="live-progress-ring" style={{"--live-progress": `${(selectedResult?.sections.percentage || 0) * 3.6}deg`} as CSSProperties}><div><strong>{percentage(selectedResult?.sections.percentage)}</strong><span>seções totalizadas</span></div></div><p className="live-section-total"><strong>{number(selectedResult?.sections.counted)}</strong> de <strong>{number(selectedResult?.sections.total)}</strong> seções</p><div className="live-summary-rows"><Metric label="Votos válidos" value={selectedResult?.votes.valid}/><Metric label="Brancos" value={selectedResult?.votes.blank}/><Metric label="Nulos" value={selectedResult?.votes.null}/><Metric label="Total de votos" value={selectedResult?.votes.total} emphasis/></div><p className="live-summary-foot">{status === "counted" ? "Todas as seções deste recorte foram totalizadas. A situação final do cargo pode depender da finalização da eleição." : status === "final" ? "Totalização final informada pelo TSE para esta abrangência." : "Resultados parciais mudam com a chegada dos boletins de urna."}</p></section>
-          <section className="live-territories-panel"><div className="live-section-heading"><h2>{selection.state === "br" ? "Apuração nos estados" : selection.state === "zz" ? "Localidades no exterior" : "Apuração nas cidades"}</h2><MapPin size={17}/></div><p>Selecione uma localidade para explorar seus votos.</p><label className="live-search"><Search size={16}/><input aria-label="Pesquisar localidade no andamento da apuração" placeholder={selection.state === "br" ? "Encontrar estado..." : "Encontrar cidade..."} value={territoryQuery} onChange={event => {setTerritoryQuery(event.target.value); setTerritoryCount(12);}}/></label>{overviewError && <p className="live-small-notice">{overview ? "Não foi possível atualizar as localidades. Exibindo a última consulta válida." : "O acompanhamento territorial ainda não está disponível neste recorte."}</p>}<div className="live-territories">{territories.slice(0, territoryCount).map(territory => <button key={territory.code} type="button" onClick={() => {changeSelection({state: territory.state, municipality: territory.municipality, zone: ""}); if (territory.municipality) setSelection(current => ({...current, municipality: territory.municipality, zone: ""}));}}><div><strong>{territory.name}</strong><span>{percentage(territory.percentage)}<ChevronRight size={14}/></span></div><span className="live-territory-bar"><i style={{width: `${territory.percentage}%`}}/></span><small>{number(territory.counted)} de {number(territory.sections)} seções</small></button>)}</div>{territories.length > territoryCount && <button type="button" className="live-territory-more" onClick={() => setTerritoryCount(count => count + 30)}>Ver mais localidades <ChevronDown size={15}/></button>}{overview?.sourceUrl && <a className="live-source-link" target="_blank" rel="noopener noreferrer" href={overview.sourceUrl}>Fonte deste acompanhamento <ExternalLink size={12}/></a>}</section>
+          <section className="live-territories-panel"><div className="live-section-heading"><h2>{selection.state === "br" ? "Apuração nos estados" : selection.state === "zz" ? "Localidades no exterior" : "Apuração nas cidades"}</h2><MapPin size={17}/></div><p>Selecione uma localidade para explorar seus votos.</p><label className="live-search"><Search size={16}/><input aria-label="Pesquisar localidade no andamento da apuração" placeholder={selection.state === "br" ? "Encontrar estado..." : "Encontrar cidade..."} value={territoryQuery} onChange={event => {setTerritoryQuery(event.target.value); setTerritoryCount(12);}}/></label>{overviewError && <p className="live-small-notice">{overview ? "Não foi possível atualizar as localidades. Exibindo a última consulta válida." : "O acompanhamento territorial ainda não está disponível neste recorte."}</p>}<div className="live-territories">{territories.slice(0, territoryCount).map(territory => <button key={territory.code} type="button" onClick={() => changeSelection({state: territory.state, municipality: territory.municipality, zone: ""})}><div><strong>{territory.name}</strong><span>{percentage(territory.percentage)}<ChevronRight size={14}/></span></div><span className="live-territory-bar"><i style={{width: `${territory.percentage}%`}}/></span><small>{number(territory.counted)} de {number(territory.sections)} seções</small></button>)}</div>{territories.length > territoryCount && <button type="button" className="live-territory-more" onClick={() => setTerritoryCount(count => count + 30)}>Ver mais localidades <ChevronDown size={15}/></button>}{overview?.sourceUrl && <a className="live-source-link" target="_blank" rel="noopener noreferrer" href={overview.sourceUrl}>Fonte deste acompanhamento <ExternalLink size={12}/></a>}</section>
         </aside>}
       </div>}
 

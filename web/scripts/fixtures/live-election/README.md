@@ -12,3 +12,5 @@ Captured from the TSE public result files on 4 October 2026. These fixtures are 
 - Territorial progress: https://resultados.tse.jus.br/oficial/ele2026/6257/dados/br/br-e006257-ab.json
 
 The election configuration was reduced to the 2026 cycle; municipality configuration was reduced to São Paulo, Brasília, Fernando de Noronha and Wellington. All kept records and result snapshots preserve their original fields.
+
+`municipios-map.json` preserves the complete EA12 configuration from the same source URL for cartographic coverage checks. See [MAPS.md](MAPS.md) for geography sources and attribution.
