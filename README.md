@@ -1,6 +1,6 @@
-# Elosys — cruzamento de dados públicos de políticos brasileiros
+# Politica007 — portal independente de dados públicos
 
-Elosys monta, a partir de **fontes oficiais e públicas**, uma base de dados
+O Politica007, baseado no projeto Elosys, monta a partir de **fontes oficiais e públicas** uma base de dados
 consolidada de candidatos e eleitos brasileiros (2014–2026), cruzada por CPF/CNPJ,
 para investigar relações entre políticos e levantar **indícios** de padrões
 suspeitos (doação circular, fracionamento de doações, empresas de fachada,
@@ -12,10 +12,10 @@ enriquecimento incompatível).
 > qualquer pessoa pode re-baixar esse arquivo e conferir o hash.
 
 Backend: pipeline de coleta em Python + banco SQLite (`elosys.db`). Frontend:
-app Next.js só-leitura em [`/web`](web/README.md) — busca candidato e mostra a
+app Next.js em [`/web`](web/README.md) — lê a base eleitoral e mostra a
 ficha completa com a fonte de cada campo.
 
-Já coletado: **1,63 M candidaturas** (`consulta_cand` 2014–2026, ~1,18 M pessoas),
+Snapshot original distribuído pelo Elosys (não representa os totais atuais da produção): **1,63 M candidaturas** (`consulta_cand` 2014–2026, ~1,18 M pessoas),
 **1,04 M CNPJs de campanha**, **5,16 M doações** (R$ 26,7 bilhões, quem doou pra
 cada CNPJ e quanto), **9,47 M despesas contratadas** (R$ 16,2 bilhões, pra quem
 a campanha pagou), **10,89 M pagamentos** (R$ 18,85 bilhões, regime de caixa —
@@ -26,6 +26,33 @@ fornecedor de campanha) e **3,25 M bens declarados** (R$ 445,5 bilhões,
 patrimônio no registro de candidatura). Banco ~11,4 GB.
 
 ---
+
+## Plataforma em produção
+
+Portal: [politica007.com.br](https://politica007.com.br/).
+
+- Pesquisa unificada por fragmentos de nome, nome de urna, CPF e CNPJ, incluindo doadores e fornecedores.
+- Consulta por cidade/UF/cargo/eleição e comparação de candidaturas em contextos compatíveis.
+- Quadro societário, participações inversas, filiais, vínculos com grau de confiança e caminhos entre pessoas e empresas.
+- Grafos com expansão gradual, filtros e explicação das evidências; documento mascarado não confirma identidade.
+- Finanças contratadas e pagas separadas, concentração, origem de recursos e evolução por eleição.
+- Votos por município, zona, seção e local de votação; patrimônio e processos eleitorais com pesquisa em toda a base e paginação.
+- Publicações públicas por tema/período/contexto, propostas oficiais do TSE e integrações de Câmara, Senado e PNCP.
+- Imagens compartilháveis em três formatos com domínio, fonte, data, período e QR; consultas salvas com alerta de mudanças enquanto o portal está aberto.
+- Ficha pública, verificação de controle de domínio declarado ao TSE, esclarecimentos com fontes e fila de correções. Controle de domínio não é confirmação de identidade pessoal.
+- Métricas agregadas e anônimas de navegação e compartilhamento.
+
+A cobertura depende dos conjuntos públicos coletados. Processos são da Justiça Eleitoral; não representam todos os tribunais. A ausência de informação não deve ser apresentada como zero ou ausência de atividade. Consulte [Fontes e atualização](https://politica007.com.br/fontes/) para datas reais, limitações e falhas de cada fonte.
+
+### Operação e atualização
+
+As rotinas do Coolify verificam bases atuais do TSE, fontes históricas, propostas atuais e PNCP a cada quatro horas. Há auditoria diária e coleta diária de propostas históricas. Não existe garantia de atualização em tempo real: a publicação pelo órgão, o tamanho dos arquivos e a disponibilidade do serviço determinam o processamento.
+
+Os coletores Python usam `/data/politica-source`, bibliotecas em `/data/elosys-python` e o comando persistente `scripts/refresh-tse.sh`. Os monitores e o cálculo dos sinais compartilham uma trava de escrita. Arquivos são validados e publicados atomicamente; uma falha preserva o conjunto válido anterior. PNCP respeita limites do provedor, repete requisições interrompidas e retoma o cursor salvo. A janela recente só é considerada fresca por quatro horas; sua data não é renovada quando a execução apenas retoma o histórico. O histórico é preenchido progressivamente.
+
+O comando persistente de contratos é `ELOSYS_DB_PATH=/data/elosys.db node /data/politica-source/web/scripts/sync-public-sources.mjs`. O diretório `/data/politica-source/web/node_modules` aponta para `/app/node_modules`, as dependências da imagem em execução. Após atualizar o coletor, conferir a revisão do checkout persistente e executar uma sincronização real; a revisão do site e a revisão dos coletores podem diferir quando a mudança afeta apenas os coletores.
+
+A base eleitoral principal continua sendo lida pelo site; propostas, contratos, cache, verificações e correções usam `politica-platform.db`. O backup consistente anterior à atualização está em `/data/backups/elosys-before-platform-20261003.db`. O relatório operacional e de verificação está em `delivery/public-network-platform.json`.
 
 ## Rodar com banco de dados
 
@@ -72,7 +99,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-O app é **só leitura**: abre o `.db` em modo readonly e nunca escreve nele. Para
+O app abre a **base eleitoral principal em modo readonly**. Recursos complementares usam um banco separado. Para
 apontar outro caminho:
 
 ```sh
@@ -99,8 +126,7 @@ uv run elosys init-db --db elosys.db
 
 ### Etapa 1 — coletar as fontes
 
-Cada crawler é independente e **rewrite-only**: apaga as tabelas que possui e as
-reconstrói. Sem `--years`, processa todos os anos suportados.
+Os comandos completos de coleta abaixo reconstroem as tabelas de cada fonte. Sem `--years`, processam todos os anos suportados. Os monitores de produção usam atualização atômica por ano/conjunto e preservam as demais eleições.
 
 ```sh
 uv run elosys tse-candidates --db elosys.db      # candidaturas 2014–2026 (TSE consulta_cand)
@@ -343,8 +369,8 @@ As decisões estão em [`ADs/`](ADs/), uma por assunto. Resumo:
 | Receita Federal (BrasilAPI) | Quadro societário de CNPJ, data de abertura, capital | ✅ coletado (incremental — não é rewrite-only, ver ADs/politician.md §2.3) |
 | CNJ — DataJud | Metadados de processos judiciais públicos | ⛔ não permite identificar todos os processos de uma pessoa física com segurança — ver nota abaixo |
 | Portal da Transparência — CEIS/CNEP | Empresas/pessoas impedidas de contratar com o governo ou punidas por corrupção | ✅ coletado (snapshot diário) |
-| Portal da Transparência — contratos/emendas | Contratos, convênios, emendas parlamentares | ⬜ pendente |
-| Câmara / Senado — dados abertos | Mandatos em exercício, votações, cota parlamentar (CEAP) | ⬜ pendente |
+| Portal da Transparência / PNCP | Emendas, beneficiários e execução; contratos de fornecedores | ✅ emendas coletadas; PNCP com janela recente e histórico incremental |
+| Câmara / Senado — dados abertos | Proposições, votações, cota parlamentar (CEAP) | ✅ consulta sob demanda com associação conservadora de identidade e cache de até quatro horas |
 
 **Não coletamos** (protegido / sigiloso): endereço residencial, telefone e e-mail
 pessoal de candidatos; antecedentes fora de processo público; relatórios do COAF.
