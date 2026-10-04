@@ -218,7 +218,7 @@
 .live-election--tv .live-waiting { padding: 9px 15px; margin-bottom: 12px; flex-shrink: 0; }
 .live-election--tv .live-waiting strong { font-size: 13px; }
 .live-election--tv .live-waiting p { font-size: 11px; margin-top: 1px; }
-.live-election--tv .live-candidate-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.5vw, 24px); flex: 1; min-height: 0; }
+.live-election--tv .live-candidate-list { display: grid; grid-template-columns: repeat(var(--live-tv-columns, 3), minmax(0, 1fr)); grid-template-rows: repeat(var(--live-tv-rows, 2), minmax(0, 1fr)); gap: clamp(12px, 1.5vw, 24px); flex: 1; min-height: 0; }
 .live-election--tv .live-candidate { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; padding: clamp(15px, 1.8vw, 33px); border-radius: 17px; background: linear-gradient(145deg, #132d3a, #102430); overflow: hidden; }
 .live-election--tv .live-candidate__identity { gap: clamp(10px, 1vw, 20px); align-items: flex-start; }
 .live-election--tv .live-candidate__rank { font-size: clamp(11px, 1vw, 18px); width: auto; padding-top: 4px; }

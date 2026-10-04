@@ -206,7 +206,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
           {!started && selectedResult && <div className="live-waiting"><Clock3 size={22}/><div><strong>Os votos deste recorte ainda não foram divulgados.</strong><p>As candidaturas abaixo vêm do cadastro oficial. A tela acompanha automaticamente a publicação da apuração pelo TSE.</p></div></div>}
           {selectedResult?.mathematicalDecision && <div className="live-notice"><Info size={18}/><p>O TSE indica {selectedResult.mathematicalDecision === "s" ? "definição matemática de segundo turno" : "definição matemática da eleição"}. A situação de cada candidatura segue a totalização final informada pelo TSE.</p></div>}
           {selectedResult?.noWinnersReason.length ? <div className="live-notice"><Info size={18}/><p>O TSE informa que não houve atribuição de eleitos: {selectedResult.noWinnersReason.join("; ")}.</p></div> : null}
-          <div className="live-candidate-list" aria-busy={loading && !selectedResult}>
+          <div className="live-candidate-list" aria-busy={loading && !selectedResult} style={tv ? {"--live-tv-columns": displayed.length === 4 ? 2 : Math.min(3, displayed.length || 3), "--live-tv-rows": displayed.length > 0 && displayed.length <= 3 ? 1 : 2} as CSSProperties : undefined}>
             {displayed.map(candidate => <CandidateCard key={`${candidate.id}-${selection.office}`} candidate={candidate} rank={started ? (selectedResult?.candidates.findIndex(item => item.id === candidate.id) ?? -1) + 1 : null} tv={tv}/>) }
             {!selectedResult && loading && Array.from({length: tv ? 6 : 4}, (_, index) => <div className="live-candidate-skeleton" key={index}><i/><div><span/><span/></div><b/></div>)}
           </div>
