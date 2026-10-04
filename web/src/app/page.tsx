@@ -38,6 +38,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         actions={<YearSelect basePath="/" years={expenseYears} value={year} allLabel="todos os anos" />}
       />
 
+      <Link href="/apuracao" className="live-home-link"><span className="live-home-link__dot"/><span><strong>Apuração das Eleições 2026</strong><small>Resultados oficiais do TSE · Estados, cidades e modo TV</small></span><span>Acompanhar →</span></Link>
       <div className="platform-toolbar"><Link href="/explorar" className="btn">Minha cidade e candidaturas</Link><Link href="/grafo" className="btn">Rede de pessoas e empresas</Link><Link href="/emendas" className="btn">Destino dos recursos públicos</Link><Link href="/comparar" className="btn">Comparar candidaturas</Link></div>
       <section className="portal-hero animate-in" aria-labelledby="portal-title">
         <div className="portal-hero__content">

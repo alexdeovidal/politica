@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+.live-home-link {display:flex;align-items:center;gap:14px;padding:18px 22px;border:1px solid var(--border-2);border-left:4px solid var(--accent);border-radius:12px;background:var(--accent-tint);color:var(--fg-1);text-decoration:none;}
+.live-home-link__dot {width:9px;height:9px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.live-home-link > span:nth-child(2) {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.live-home-link strong {font-size:15px;font-weight:600;}
+.live-home-link small {font-size:11px;color:var(--muted);line-height:1.5;}
+.live-home-link > span:last-child {margin-left:auto;color:var(--accent);font-size:12px;white-space:nowrap;}
+@media(max-width:620px){.live-home-link{padding:16px;gap:10px;flex-wrap:wrap}.live-home-link strong{font-size:14px}.live-home-link > span:last-child{margin-left:19px}.live-home-link small{font-size:10px}}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
