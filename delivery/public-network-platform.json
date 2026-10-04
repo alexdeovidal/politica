@@ -1,118 +1,191 @@
 {
-  "status": "implementation_in_progress",
-  "productionPublished": false,
+  "status": "implemented_deployed_verified",
+  "productionPublished": true,
   "requirements": [
     {
       "id": "identity-network",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Document and masked document confidence, corporate root, linked partners, reverse participation, provenance and dates verified"
     },
     {
       "id": "regional-discovery",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "State/city/office/election discovery, home entry paths, unified search and homonyms"
     },
     {
       "id": "profile-timeline",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Profile summaries, tab navigation, events and relationship timelines"
     },
     {
       "id": "ownership-graph",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Ownership/admin graph edges, staged expansion, relation and time filters, evidence explanation, paths"
     },
     {
       "id": "finance",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Contracted versus paid, concentration, source of funds, election evolution"
     },
     {
       "id": "votes-map",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Territory map, municipality/zone/polling-place breakdown, percentages, compatible election compare"
     },
     {
       "id": "comparison",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Election/office/region context, persistent URL, shared PNG and legislative/proposal data"
     },
     {
       "id": "assets",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Filters, changes, election compare, missing versus zero"
     },
     {
       "id": "cases",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Status/role/decisions summaries, timeline, full search, specific official records"
     },
     {
       "id": "earmarks-contracts",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Individual/caucus/committee distinction, recipients, purpose, execution, providers"
     },
     {
       "id": "signals",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Rule, raw evidence, source period and computation date"
     },
     {
       "id": "social-proposals",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Themes/dates/context, official government proposals"
     },
     {
       "id": "freshness-monitor",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Source freshness/history, profile/company/city meaningful update monitoring"
     },
     {
       "id": "sharing",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Each datum or section, three image formats, branding, source/date/period, QR, editable factual summary, URL filters and OG"
     },
     {
       "id": "public-profile",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Public summary, declared domain control verification, sourced clarification, correction queue"
     },
     {
       "id": "saved-consultations",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Saved profiles, companies, cities and comparisons with meaningful change alerts"
     },
     {
       "id": "official-integrations",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Camara activities/votes/expenses, Senado votes, PNCP contracts, official TSE proposals, explicit coverage"
     },
     {
       "id": "metrics",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Anonymous aggregate profile exploration, share, referral and return metrics"
     },
     {
       "id": "validation",
-      "status": "implemented_pending_final_verification",
+      "status": "implemented_verified",
       "acceptance": "Identity fixtures, official data reconciliation, filtered URL persistence, visible sources and mobile checks"
     },
     {
       "id": "production",
-      "status": "pending",
+      "status": "implemented_verified",
       "acceptance": "Merged reviewed commit, successful deploy, migrated persistent data, scheduled workers, production verification"
     }
   ],
   "verification": {
-    "pythonTests": 66,
-    "typescript": "passed_after_final_adjustments",
+    "pythonTests": 70,
+    "typescript": "passed",
     "build": "passed",
-    "mobileOverflow": "regional page: scrollWidth equals viewport width",
+    "mobileOverflow": "Final deployed home at width 390: scrollWidth 381; full R$ 29.591.039.751,78 and R$ 19.409.344.415,10 visually verified in dark theme; responsive header, dates and cadence visible",
     "identityPath": "masked document shown as possible identity",
     "fullSearch": "name fragments + ballot aliases + election filters applied before limit",
     "sourceAudit": "production snapshots before and after refresh: no duplicated public documents, file-provenance mismatch, campaign CNPJ mismatch or negative votes",
-    "pncpRegression": "offline rate limit, interruption and durable resumption passed",
+    "pncpRegression": "Offline rate limit, interrupted-page resumption, network timeout retry, fresh-window reuse without timestamp renewal and expired-window refresh passed",
     "searchIndex": "ballot-name index maintained transactionally; fixture search verified",
-    "writerCoordination": "shared ingestion lock regression passed"
-  }
+    "writerCoordination": "shared ingestion lock regression passed",
+    "publicDatesRegression": "mixed source timestamps, chronological ordering and full SQL date filters passed",
+    "productionComparison": "Wagner de Leo Paez and Joao Marcos Martins: compatible 2016 Sao Paulo vereador context; missing collected finance explicitly distinguished from zero",
+    "productionCases": "Daniel Messac: unloaded ninth/tenth records searchable before load more; 8-to-10 pagination verified",
+    "productionSavedQueries": "BEACON company saved, updates checked, and removed without public submission",
+    "productionSearch": "Flavio Bolsonaro matches legal name; common Joao search with compatible city/office/election filters returned 22 candidates",
+    "productionNetwork": "BEACON -> administrator -> Wagner Paez candidate: possible identity explicitly labeled; paths and graph verified",
+    "auditCheckedAt": "2026-10-04T00:26:37Z",
+    "auditFlags": {
+      "duplicatePublicDocuments": 0,
+      "sourceFileCollectionMismatch": 0,
+      "campaignDocumentMismatch": 0,
+      "negativeVotes": 0
+    },
+    "productionMetrics": "Aggregate view counts recorded for profiles, companies, comparison, graph and regional pages; share event recorded; no visitor identity in metric rows",
+    "historicalTSEProgress": {
+      "processes2024": "updated 2026-10-04T00:00:15Z",
+      "candidates2024": "updated 2026-10-04T00:00:54Z",
+      "finance2024": "updated 2026-10-04T00:16:00Z",
+      "assets2024": "updated 2026-10-04T00:16:39Z",
+      "social2024": "updated 2026-10-04T00:17:32Z",
+      "processes2020": "updated 2026-10-04T00:36:54Z"
+    },
+    "productionSharing": "Native PNG download confirmed at 1080x1080; visible politica007.com.br branding, source collection timestamp, Brasília generation date, QR and explicit possible-identity caveat",
+    "derivedSignals": {
+      "pending": false,
+      "syncedAt": "2026-10-04T00:22:45Z",
+      "acceptance": "Atomic rule recomputation completed after 2024 financial input update"
+    },
+    "tseNetworkRegression": "Transient signature timeouts are retried with bounded backoff; exhausted or permanent failures remain explicit; full mocked regression suite passed",
+    "productionPNCP": {
+      "status": "success",
+      "checkedAt": "2026-10-04T00:25:32.024Z",
+      "historicalCursor": "2021-08-13 page 1",
+      "recentCompletedAt": "2026-10-04T00:08:08.563Z",
+      "acceptance": "Interrupted history resumed with fresh recent window reused; original recent completion timestamp preserved"
+    },
+    "historicalSourceRetry": {
+      "status": "completed",
+      "failedSources": 0,
+      "acceptance": "Actual retry recovered temporary upstream timeouts; unprocessed changed sets remain explicitly pending, not falsely reported current"
+    },
+    "postCasesProvenanceMismatch": 0,
+    "productionHeaderSearch": "Visible desktop control opens the same accessible global modal; Flavio Bolsonaro returned Flavio Nantes Bolsonaro in the final deployed build",
+    "desktopCompact": "1024px viewport: scrollWidth 1015; search label fully visible (211px text equals 211px available)",
+    "historicalProposalResumption": "Actual scheduled task resumed in final production container at 2026-10-04T00:46:17Z",
+    "mobileNavigation": "Final 390px build: navigation opens with accessible dialog, all menu destinations listed, Fontes e atualizacao navigation succeeds and closes dialog",
+    "publicSources": "Final /fontes shows successful TSE integration 2026-10-04T00:36:54Z, four-hour interval, audit 2026-10-04T00:26:37Z and no failed historical TSE header checks; proposal PDF source failures remain explicitly visible"
+  },
+  "productionCommit": "726b0bc437dfaafa1323d18eafe11316893833af",
+  "workerCommit": "726b0bc437dfaafa1323d18eafe11316893833af",
+  "deployedAt": "2026-10-04T00:43:06Z",
+  "ongoingDataCollection": {
+    "historicalTSE": "Bounded source refresh every four hours; candidacies, finance, assets, social and electoral cases from 2024 refreshed; older sections filled progressively",
+    "historicalProposals": "daily incremental import; invalid official PDFs preserve prior valid archives and are explicitly reported",
+    "PNCP": "four-hour recent updates and progressive history; rate limits respected and cursor persisted"
+  },
+  "coverageLimits": [
+    "Only records available in collected public sources; not a guarantee of every public record.",
+    "Electoral cases from TSE datasets; not universal coverage of every Brazilian court.",
+    "Masked-document/name links are possible identity, not confirmed identity.",
+    "TSE checks every four hours, not real-time upstream publication.",
+    "Saved-query alerts check while the portal is open, without offline push.",
+    "Historical proposals and PNCP records are imported progressively; failed source archives retain prior valid records.",
+    "Official historical proposal PDFs that fail PDF validation and temporary upstream timeouts are reported; prior valid records remain available."
+  ],
+  "evidenceFiles": [
+    "politica007-conexoes-producao.jpg",
+    "politica007-grafo-producao.jpg",
+    "politica007-comparacao-producao.jpg",
+    "politica007-inicio-producao.jpg",
+    "politica007-mobile-producao.jpg",
+    "politica007-mobile-valores-producao.jpg",
+    "politica007-atualizacao-producao.jpg"
+  ]
 }
