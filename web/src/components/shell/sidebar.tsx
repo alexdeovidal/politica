@@ -14,6 +14,7 @@ import {
   Info,
   MessageSquareText,
   Network,
+  Newspaper,
   ReceiptText,
   Radio,
   Search,
@@ -94,6 +95,7 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
 
   const top: NavLink[] = [
     { href: "/", label: "Visão geral", icon: Home, description: "Resumo do portal, dados disponíveis, atualização das fontes e acesso à pesquisa completa." },
+    { href: "/news", label: "Notícias", icon: Newspaper, description: "Até cinco matérias automáticas por dia, com base nos dados públicos e nos candidatos mais consultados no portal." },
     { href: "/apuracao", label: "Apuração ao vivo · 2026", icon: Radio, description: "Acompanhe os resultados oficiais do TSE por estado, cidade, zona eleitoral e cargo, com atualização automática e modo de apresentação para TV." },
     { href: "#pesquisar", label: "Pesquisar dados públicos", icon: Search, action: "search", description: "Pesquise candidatos, empresas e pessoas físicas por nome, CPF ou CNPJ, incluindo doadores e fornecedores de campanhas." },
     { href: "/grafo", label: "Relações entre pessoas e empresas", icon: Network, description: "Explore relações encontradas nos registros públicos, como doações, despesas contratadas e vínculos empresariais." },
@@ -205,7 +207,7 @@ function NavGroup({
               <div className="navitem-entry__row">
                 <Link
                   href={l.href}
-                  className={`navitem${pathname === l.href ? " is-active" : ""}`}
+                  className={`navitem${pathname === l.href || (l.href !== "/" && pathname.startsWith(`${l.href}/`)) ? " is-active" : ""}`}
                   onClick={(event) => {
                     onNavigate();
                     if (l.action === "search") {

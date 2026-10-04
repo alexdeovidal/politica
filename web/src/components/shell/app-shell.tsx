@@ -31,7 +31,7 @@ export function AppShell({
         <Sidebar counts={counts} />
         <div className="shell-main">
           <Topbar />
-          <ContentBody><PageTools />{children}</ContentBody>
+          <ContentBody>{pathname?.startsWith("/news")?null:<PageTools />}{children}</ContentBody>
         </div>
       </div>
     </ShellProvider>

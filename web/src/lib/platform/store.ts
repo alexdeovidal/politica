@@ -12,6 +12,9 @@ export function platformStore(){
   connection=new Database(filename);connection.function("normalize_public_name",{deterministic:true},(value:unknown)=>normalizeName(String(value??"")));connection.pragma("journal_mode=WAL");connection.pragma("busy_timeout=5000");
   connection.exec(`CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL,updated_at TEXT NOT NULL,source_url TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS metric(day TEXT NOT NULL,event TEXT NOT NULL,area TEXT NOT NULL,count INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,event,area));
+    CREATE TABLE IF NOT EXISTS candidate_profile_access_daily(day TEXT NOT NULL,person_id INTEGER NOT NULL,views INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,person_id));
+    CREATE INDEX IF NOT EXISTS ix_candidate_profile_access_day ON candidate_profile_access_daily(day,views DESC);
+    CREATE TABLE IF NOT EXISTS daily_news(day TEXT PRIMARY KEY,payload TEXT NOT NULL,generated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS claim(id TEXT PRIMARY KEY,person_id INTEGER NOT NULL,domain TEXT NOT NULL,secret_hash TEXT NOT NULL,created_at TEXT NOT NULL,verified_at TEXT,statement TEXT,statement_source TEXT);
     CREATE TABLE IF NOT EXISTS correction(id TEXT PRIMARY KEY,person_id INTEGER,path TEXT NOT NULL,description TEXT NOT NULL,source_url TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'recebida');
     CREATE TABLE IF NOT EXISTS sync_run(id INTEGER PRIMARY KEY,source TEXT NOT NULL,status TEXT NOT NULL,checked_at TEXT NOT NULL,changed_at TEXT,detail TEXT);
