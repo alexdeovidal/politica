@@ -7,6 +7,7 @@ import fcntl
 import json
 import logging
 import os
+import time
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,19 @@ SOURCES = (
 
 
 def remote_signature(url: str) -> dict[str, str | None]:
+    for attempt in range(3):
+        try:
+            return _remote_signature_once(url)
+        except requests.exceptions.RequestException as error:
+            response = getattr(error, "response", None)
+            transient = getattr(error, "code", None) in (6, 7, 28, 52, 56, 92) or getattr(response, "status_code", None) in (429, 500, 502, 503, 504)
+            if not transient or attempt == 2:
+                raise
+            time.sleep(2 ** (attempt + 1))
+    raise RuntimeError("TSE: verificação interrompida")
+
+
+def _remote_signature_once(url: str) -> dict[str, str | None]:
     response = requests.head(url, headers=HEADERS, timeout=45, impersonate="chrome")
     try:
         if response.status_code == 403:
