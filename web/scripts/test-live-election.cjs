@@ -14,14 +14,61 @@ function moduleFrom(file, dependencies = {}) {
   return module.exports;
 }
 const model = moduleFrom('src/lib/live-election/model.ts');
+const geography = moduleFrom('src/lib/live-election/geography.ts');
 const fixture = name => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/live-election', `${name}.json`), 'utf8'));
 const elections = model.parseElections(fixture('ele-c'));
 const states = model.parseStates(fixture('municipios'));
+const mapStates = model.parseStates(fixture('municipios-map'));
 const selection = model.selectionFromParams(new URLSearchParams());
 const election = model.findElection(elections, selection);
 let checks = 0;
 function check(name, run) {run(); checks++; console.log(`PASS ${name}`);}
 function parse(raw, selected = selection) {return model.parseResult(raw, model.findElection(elections, selected), selected, states);}
+check('map clicks retain explicit cities and clear incompatible zones', () => {
+  assert.deepEqual(geography.changeElectionSelection({...selection, state: 'sp', municipality: '71072', zone: '0001'}, {state: 'zz', municipality: '30805'}), {...selection, state: 'zz', municipality: '30805', zone: ''});
+  assert.equal(geography.changeElectionSelection({...selection, state: 'sp', office: '7'}, {state: 'df'}).office, '8');
+  assert.equal(geography.changeElectionSelection({...selection, state: 'df', office: '8'}, {state: 'sp'}).office, '7');
+  assert.equal(geography.changeElectionSelection({...selection, state: 'sp', zone: '0001'}, {municipality: '71072'}).zone, '');
+  assert.equal(geography.changeElectionSelection({...selection, state: 'pe', office: '25', municipality: '12345'}, {municipality: '54321'}).office, '1');
+});
+check('cartographic joins use official IBGE codes instead of similar names', () => {
+  const city = states.find(state => state.code === 'sp').municipalities.find(city => city.code === '71072');
+  assert.equal(city.ibgeCode, '3550308');
+  const shapes = [{code: '3550308', d: 'M0,0Z', bounds: [0,0,1,1], point: [.5,.5]}, {code: '9999999', name: city.name, d: 'M0,0Z', bounds: [0,0,1,1], point: [.5,.5]}];
+  const joined = geography.municipalityShapes(shapes, [city]);
+  assert.equal(joined.length, 1);
+  assert.equal(joined[0].municipality.code, '71072');
+});
+check('every Brazilian electoral municipality has a usable polygon, including the new MT city', () => {
+  let count = 0;
+  for (const state of mapStates.filter(state => state.code !== 'zz')) {
+    const file = JSON.parse(fs.readFileSync(path.join(root, 'public/maps/live-2026', `${state.code}.json`), 'utf8'));
+    assert(file.source.startsWith('https://servicodados.ibge.gov.br/') || file.source.startsWith('https://geoftp.ibge.gov.br/'));
+    const joined = geography.municipalityShapes(file.shapes, state.municipalities);
+    assert.equal(joined.length, state.municipalities.length, state.code);
+    assert(joined.every(shape => shape.d.startsWith('M') && !shape.d.includes('NaN') && shape.bounds.every(Number.isFinite)));
+    count += joined.length;
+  }
+  assert.equal(count, 5571);
+});
+check('overseas geography covers current TSE city codes and known country locations', () => {
+  const cities = JSON.parse(fs.readFileSync(path.join(root, 'public/maps/live-2026/exterior.json'), 'utf8')).cities;
+  const official = mapStates.find(state => state.code === 'zz').municipalities;
+  assert.equal(cities.length, 186);
+  assert.equal(new Set(cities.map(city => city.code)).size, cities.length);
+  assert(official.every(city => cities.some(point => point.code === city.code)));
+  assert(cities.every(city => /^[A-Z]{2}$/.test(city.country) && city.point.every(Number.isFinite) && Math.abs(city.point[0]) <= 180 && Math.abs(city.point[1]) <= 90));
+  assert.equal(cities.find(city => city.code === '30805').country, 'NZ');
+  assert.equal(cities.find(city => city.name === 'LISBOA').country, 'PT');
+  assert.equal(cities.find(city => city.name === 'LIUBLIANA').country, 'SI');
+  assert.equal(cities.find(city => city.name === 'KINGSTON-JAMAICA').country, 'JM');
+});
+check('map zoom boxes remain finite for tiny areas', () => {
+  const box = geography.paddedBox([1,1,1,1]);
+  assert(box.every(Number.isFinite));
+  assert(box[2] > 0 && box[3] > 0);
+  assert.deepEqual(geography.combinedBounds([]), [-180,-84,180,60]);
+});
 check('pre-count is not a zero-vote result', () => {
   const result = parse(fixture('presidente'));
   assert.equal(result.progress, 'waiting');

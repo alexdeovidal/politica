@@ -123,7 +123,7 @@ export async function getLiveConfig(turn = 1): Promise<LiveConfig> {
   return {elections, states: parseStates(cityFile.data), sourceUrl, generatedAt: tseTimestamp(root.dg, root.hg), checkedAt: cityFile.checkedAt, stale: electionFile.stale || cityFile.stale};
 }
 export function publicConfig(config: LiveConfig, state: string): PublicConfig {
-  return {...config, states: config.states.map(item => ({code: item.code, name: item.name})), municipalities: config.states.find(item => item.code === state)?.municipalities || []};
+  return {...config, states: config.states.map(item => ({code: item.code, name: item.name})), municipalities: config.states.find(item => item.code === state)?.municipalities || [], exteriorMunicipalities: config.states.find(item => item.code === "zz")?.municipalities || []};
 }
 
 export async function getLiveResult(selection: ElectionSelection): Promise<LiveResult> {
