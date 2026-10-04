@@ -9,6 +9,7 @@ import { useShell } from "./shell-context";
 
 const SHORTCUTS = [
   { href: "/", label: "Visão geral" },
+  { href: "/news", label: "Notícias" },
   { href: "/explorar", label: "Minha cidade e candidaturas" },
   { href: "/grafo", label: "Relações entre pessoas e empresas" },
   { href: "/conexoes", label: "Como se conectam?" },
