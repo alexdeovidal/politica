@@ -2,14 +2,14 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 import { useShell } from "./shell-context";
 import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 
 export function Topbar() {
-  const { header, analysisMode, setAnalysisMode, mobileNavOpen, setMobileNavOpen } = useShell();
+  const { header, analysisMode, setAnalysisMode, mobileNavOpen, setMobileNavOpen, setPaletteOpen } = useShell();
   const pathname = usePathname();
   useCommandPaletteShortcut();
 
@@ -45,6 +45,18 @@ export function Topbar() {
             <span className="crumb__current">{header.current}</span>
           </>
         ) : null}
+        <button
+          type="button"
+          className="navbar-search"
+          onClick={() => setPaletteOpen(true)}
+          aria-label="Pesquisar candidatos, empresas ou pessoas físicas"
+          aria-haspopup="dialog"
+          title="Pesquisar por nome, CPF ou CNPJ (Ctrl+K)"
+        >
+          <Search size={18} aria-hidden="true" />
+          <span>Candidatos, empresas ou pessoas</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <span style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flex: "none" }}>
           {header.actions}
           {analysisAvailable ? (
