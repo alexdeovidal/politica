@@ -19,6 +19,10 @@ export function AppShell({
   aiReviewEnabled: boolean;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  if (pathname === "/apuracao") {
+    return <ShellProvider aiReviewEnabled={aiReviewEnabled}><Metrics/>{children}</ShellProvider>;
+  }
   return (
     <ShellProvider aiReviewEnabled={aiReviewEnabled}>
       <ContributionReminder />
