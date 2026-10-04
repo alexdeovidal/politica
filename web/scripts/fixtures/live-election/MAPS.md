@@ -10,6 +10,9 @@ not election results. All counts still come exclusively from the live TSE files.
   because the simplified API still omits Boa Esperança do Norte (IBGE 5101837).
   Polygon rings are simplified at 0.003 geographic degrees for browser rendering.
 - Country boundaries: Natural Earth, `ne_50m_admin_0_countries`, public domain.
+  Rings are simplified at 0.04 geographic degrees; minor islands below 0.025
+  square degrees are omitted, retaining the largest polygon of every territory.
+  This is a browsing map; overseas city points remain independently selectable.
   https://www.naturalearthdata.com/downloads/50m-cultural-vectors/50m-admin-0-countries-2/
   https://github.com/nvkelso/natural-earth-vector/tree/master/geojson
 - Overseas city centres: GeoNames `cities500.zip`, Creative Commons Attribution.
