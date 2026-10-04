@@ -519,17 +519,21 @@ a.card:hover, button.card:hover {
   z-index: 1000;
   display: grid;
   place-items: center;
-  padding: 16px;
+  overflow-y: auto;
+  padding: 20px;
   background: rgba(9, 18, 24, 0.66);
   backdrop-filter: blur(3px);
 }
 .graph-share-dialog {
-  width: min(520px, 100%);
-  max-height: min(92vh, 820px);
-  overflow-y: auto;
+  display: flex;
+  width: min(560px, 100%);
+  max-height: min(90vh, 820px);
+  max-height: min(90dvh, 820px);
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border-2);
-  border-radius: var(--r-lg);
-  background: var(--card-tone);
+  border-radius: 18px;
+  background: var(--surface);
   color: var(--fg-1);
   box-shadow: var(--shadow-modal);
 }
@@ -538,26 +542,105 @@ a.card:hover, button.card:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 20px 15px;
+  flex: none;
+  padding: 22px 24px 17px;
   border-bottom: 1px solid var(--border-1);
+  background: var(--surface);
 }
+.graph-share-dialog__header > div { min-width: 0; }
+.graph-share-dialog__header .mono-label { color: var(--muted-2); font-size: 11px; }
 .graph-share-dialog__header h2 {
-  margin-top: 5px;
+  margin: 6px 0 0;
   color: var(--fg-1);
-  font-size: 19px;
+  font-size: clamp(19px, 3vw, 22px);
+  line-height: 1.25;
   font-weight: 600;
 }
 .graph-share-dialog__header p,
 .graph-share-hint {
-  margin-top: 5px;
+  margin: 7px 0 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
 }
+.graph-share-content {
+  display: grid;
+  min-height: 0;
+  gap: 15px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 24px 22px;
+}
+.graph-share-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.graph-share-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.graph-share-field select,
+.graph-share-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--card-tone);
+  color: var(--fg-1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+.graph-share-field select:focus-visible,
+.graph-share-field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.graph-share-field textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.graph-share-instructions { margin: -5px 0 0; }
+.graph-share-generate {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 14px;
+  font-weight: 650;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+.graph-share-generate:hover:not(:disabled) { filter: brightness(1.08); }
+.graph-share-generate:active:not(:disabled) { transform: translateY(1px); }
+.graph-share-generate:disabled { cursor: wait; opacity: .75; }
+.graph-share-network-section { min-width: 0; }
+.graph-share-network-section h3 {
+  margin: 0 0 9px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 650;
+}
 .graph-share-close {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   flex: none;
   place-items: center;
   border: 1px solid var(--border-1);
@@ -570,7 +653,7 @@ a.card:hover, button.card:hover {
   min-height: 100px;
   max-height: 250px;
   place-items: center;
-  margin: 16px 20px 0;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--border-1);
   border-radius: var(--r-sm);
@@ -585,36 +668,44 @@ a.card:hover, button.card:hover {
 .graph-share-primary,
 .graph-share-download {
   display: flex;
-  width: calc(100% - 40px);
-  min-height: 42px;
+  width: 100%;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  margin: 14px 20px 0;
+  margin: 0;
   border-radius: var(--r-sm);
   font-size: 13px;
   font-weight: 600;
 }
-.graph-share-primary { background: var(--accent); color: #fff; }
+.graph-share-primary { background: var(--accent); color: var(--accent-foreground); }
 .graph-share-primary:hover { background: var(--accent-2); }
 .graph-share-download { border: 1px solid var(--border-2); background: var(--surface); color: var(--fg-2); }
 .graph-share-download:hover { background: var(--active); color: var(--fg-1); }
-.graph-share-hint,
-.graph-share-message { margin: 12px 20px 0; }
-.graph-share-message { color: var(--red); font-size: 12px; }
+.graph-share-message {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--red) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 7%, var(--surface));
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .graph-share-networks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  padding: 16px 20px;
 }
 .graph-share-network {
   display: flex;
-  min-height: 40px;
+  min-width: 0;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid var(--border-1);
+  padding: 8px 10px;
+  border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--fg-2);
@@ -622,12 +713,22 @@ a.card:hover, button.card:hover {
   font-weight: 600;
   text-decoration: none;
 }
-.graph-share-network:hover { border-color: var(--border-2); background: var(--hover); color: var(--fg-1); }
+.graph-share-network svg { flex: none; }
+.graph-share-network span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph-share-network:hover { border-color: var(--accent); background: var(--hover); color: var(--fg-1); }
 .graph-share-domain {
+  display: grid;
+  flex: none;
+  gap: 4px;
   margin: 0;
-  padding: 10px 20px 14px;
+  padding: 12px 24px 16px;
   border-top: 1px solid var(--border-1);
+  background: var(--card-tone);
   color: var(--muted-2);
+  font-size: 11px;
+}
+.graph-share-domain__url {
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: 10px;
   overflow-wrap: anywhere;
@@ -2181,20 +2282,18 @@ tr.source-zone--hover::before {
     border-bottom: 0;
     border-left: 0;
     border-radius: 18px 18px 0 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .graph-share-dialog__header { padding: 18px 18px 14px; }
   .graph-share-dialog__header h2 { font-size: 18px; }
   .graph-share-close { width: 44px; height: 44px; }
-  .graph-share-preview { max-height: 28dvh; margin: 14px 16px 0; }
+  .graph-share-content { gap: 13px; padding: 16px 18px 18px; }
+  .graph-share-preview { max-height: 28dvh; margin: 0; }
   .graph-share-preview img { max-height: 28dvh; }
   .graph-share-primary,
-  .graph-share-download { width: calc(100% - 32px); min-height: 46px; margin-right: 16px; margin-left: 16px; }
-  .graph-share-hint,
-  .graph-share-message { margin-right: 16px; margin-left: 16px; }
-  .graph-share-networks { gap: 8px; padding: 14px 16px; }
+  .graph-share-download { width: 100%; min-height: 46px; margin: 0; }
+  .graph-share-networks { gap: 8px; padding: 0; }
   .graph-share-network { min-height: 46px; font-size: 12px; }
-  .graph-share-domain { padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .graph-share-domain { padding: 11px 18px calc(14px + env(safe-area-inset-bottom, 0px)); }
 
   .politician-network__actions { justify-content: stretch; }
   .politician-network__actions .graph-share-trigger { width: 100%; min-height: 44px; }
@@ -2213,14 +2312,11 @@ tr.source-zone--hover::before {
   .graph-canvas-shell { min-height: 530px; }
   .graph-canvas-viewport { min-height: 300px; }
   .graph-share-dialog__header { padding: 15px 14px 12px; }
-  .graph-share-preview { margin-right: 12px; margin-left: 12px; }
-  .graph-share-networks { gap: 7px; padding-right: 12px; padding-left: 12px; }
+  .graph-share-content { padding: 14px 14px 16px; }
+  .graph-share-fields { grid-template-columns: minmax(0, 1fr); }
+  .graph-share-networks { gap: 7px; }
   .graph-share-network { min-height: 44px; font-size: 11px; }
-  .graph-share-primary,
-  .graph-share-download { width: calc(100% - 24px); margin-right: 12px; margin-left: 12px; }
-  .graph-share-hint,
-  .graph-share-message { margin-right: 12px; margin-left: 12px; }
-  .graph-share-domain { padding-right: 12px; padding-left: 12px; }
+  .graph-share-domain { padding-right: 14px; padding-left: 14px; }
 }
 
 /* Public network platform: wrap long names, accessible controls and responsive cards. */

@@ -14,6 +14,30 @@ type ShareNetwork = {
   url: (shareUrl: string, text: string) => string;
 };
 
+type ShareSection = { id: string; title: string };
+
+function getShareSections(root: HTMLElement): ShareSection[] {
+  const sections = Array.from(root.querySelectorAll<HTMLElement>("section")).map((node, index) => ({
+    id: node.id || `section:${index}`,
+    title: node.dataset.tocTitle || node.querySelector("h2,h3,.section-title")?.textContent?.trim() || `Seção ${index + 1}`,
+  }));
+  const cards = Array.from(root.querySelectorAll<HTMLElement>("article,.kpi")).map((node, index) => ({
+    id: `card:${index}`,
+    title: `Dado: ${(node.querySelector("h2,h3,strong,.kpi__label")?.textContent || node.textContent || "Registro").trim().slice(0, 90)}`,
+  }));
+  return [...sections, ...cards];
+}
+
+function getShareTarget(root: HTMLElement, section: string): HTMLElement {
+  if (section.startsWith("section:")) {
+    return root.querySelectorAll<HTMLElement>("section")[Number(section.slice(8))] || root;
+  }
+  if (section.startsWith("card:")) {
+    return root.querySelectorAll<HTMLElement>("article,.kpi")[Number(section.slice(5))] || root;
+  }
+  return section ? document.getElementById(section) || root : root;
+}
+
 const networks: ShareNetwork[] = [
   {
     name: "WhatsApp",
@@ -47,7 +71,7 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
   const [open, setOpen] = useState(false);
   const [format,setFormat]=useState("original");
   const [section,setSection]=useState("");
-  const [sections,setSections]=useState<{id:string;title:string}[]>([]);
+  const [sections,setSections]=useState<ShareSection[]>([]);
   const [summary,setSummary]=useState(`Consulte ${title} no Politica007. Dados públicos com fontes identificadas.`);
   const [generating, setGenerating] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -84,14 +108,36 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
     : (()=>{const u=new URL(`${window.location.pathname}${window.location.search}`,SITE_ORIGIN);u.searchParams.set("ref","compartilhamento");return u.toString();})();
   const shareText = summary;
 
-  function openDialog(){const root=targetRef.current||document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");if(root){setSections([...Array.from(root.querySelectorAll<HTMLElement>("section[id],[data-toc-title][id]")).map(n=>({id:n.id,title:n.dataset.tocTitle||n.querySelector("h2,h3,.section-title")?.textContent||n.id})),...Array.from(root.querySelectorAll<HTMLElement>("article,.kpi")).map((n,i)=>({id:`card:${i}`,title:`Dado: ${(n.querySelector("h2,h3,strong,.kpi__label")?.textContent||n.textContent||"Registro").trim().slice(0,90)}`}))]);}setSummary(`Consulte ${title} no Politica007. Dados públicos com fontes identificadas.`);setOpen(true);}
+  function openDialog() {
+    const root = targetRef.current || document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");
+    const availableSections = root ? getShareSections(root) : [];
+    setSections(availableSections);
+    // Full candidate profiles can contain thousands of rows. Start with a
+    // concise section in that case so image generation stays useful and fast.
+    const firstReadableSection = availableSections.find((item) => {
+      const target = root ? getShareTarget(root, item.id) : null;
+      return target && target.scrollHeight <= 7000;
+    });
+    setSection(root && root.scrollHeight > 7000 ? firstReadableSection?.id || "" : "");
+    setSummary(`Consulte ${title} no Politica007. Dados públicos com fontes identificadas.`);
+    setMessage("");
+    setCopied(false);
+    setFile(null);
+    setPreviewUrl(null);
+    setCanShareFile(false);
+    setOpen(true);
+  }
   async function prepareImage() {
-    const root=targetRef.current||document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");
-    const target = section.startsWith("card:") ? root?.querySelectorAll<HTMLElement>("article,.kpi")[Number(section.slice(5))] : section ? document.getElementById(section) : root;
-    if(root)setSections([...Array.from(root.querySelectorAll<HTMLElement>("section[id],[data-toc-title][id]")).map(n=>({id:n.id,title:n.dataset.tocTitle||n.querySelector("h2,h3,.section-title")?.textContent||n.id})),...Array.from(root.querySelectorAll<HTMLElement>("article,.kpi")).map((n,i)=>({id:`card:${i}`,title:`Dado: ${(n.querySelector("h2,h3,strong,.kpi__label")?.textContent||n.textContent||"Registro").trim().slice(0,90)}`}))]);
+    const root = targetRef.current || document.querySelector<HTMLElement>(".content__inner main,.graph-page-body,.content__inner");
+    const target = root ? getShareTarget(root, section) : null;
+    if (root) setSections(getShareSections(root));
     if (!target) {
       setMessage("Não foi possível localizar os dados para gerar a imagem.");
       setOpen(true);
+      return;
+    }
+    if (!section && target.scrollHeight > 12000) {
+      setMessage("Esta consulta completa é extensa demais para uma imagem legível. Escolha uma seção ou um dado no campo Conteúdo e tente novamente.");
       return;
     }
 
@@ -269,60 +315,95 @@ export function GraphShareButton({ targetRef, title, className = "" }: GraphShar
               </button>
             </header>
 
-            {sections.length>0&&<label className="platform-form">Conteúdo<select value={section} onChange={e=>setSection(e.target.value)}><option value="">Consulta completa</option>{sections.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}
-            <label className="platform-form">Formato<select value={format} onChange={e=>setFormat(e.target.value)}><option value="original">Conteúdo completo</option><option value="quadrado">Quadrado · 1080 × 1080</option><option value="retrato">Retrato · 1080 × 1350</option><option value="paisagem">Paisagem · 1600 × 900</option></select></label>
-            <label className="platform-form">Texto da publicação<textarea value={summary} onChange={e=>setSummary(e.target.value)} maxLength={1000}/></label>
-            <p className="text-sm">Para manter os textos legíveis nas redes, escolha uma seção ou um dado. Uma consulta inteira pode ficar muito longa.</p>
-            <button className="btn" disabled={generating} onClick={prepareImage}>{generating?"Gerando imagem…":file?"Atualizar imagem":"Gerar imagem"}</button>
-            {previewUrl ? (
-              <div className="graph-share-preview">
-                {/* Generated locally in the browser from the graph the person is sharing. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={previewUrl} alt={`Prévia da imagem de ${title}`} />
+            <div className="graph-share-content">
+              <div className="graph-share-fields">
+                {sections.length > 0 && (
+                  <label className="graph-share-field">
+                    Conteúdo
+                    <select value={section} onChange={(event) => setSection(event.target.value)}>
+                    <option value="">Tudo desta página</option>
+                      {sections.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="graph-share-field">
+                  Formato da imagem
+                  <select value={format} onChange={(event) => setFormat(event.target.value)}>
+                    <option value="original">Proporção original</option>
+                    <option value="quadrado">Quadrado · 1080 × 1080</option>
+                    <option value="retrato">Retrato · 1080 × 1350</option>
+                    <option value="paisagem">Paisagem · 1600 × 900</option>
+                  </select>
+                </label>
               </div>
-            ) : null}
 
-            {message ? <p className="graph-share-message" role="status">{message}</p> : null}
-
-            {canShareFile ? (
-              <button type="button" className="graph-share-primary" onClick={shareImage}>
-                <Share2 size={16} /> compartilhar imagem
-              </button>
-            ) : null}
-            {file ? (
-              <p className="graph-share-hint">
-                {canShareFile
-                  ? "O botão acima envia o PNG. Os atalhos de rede abaixo abrem o link e baixam a imagem para anexar à publicação."
-                  : "Os atalhos abaixo abrem o link e baixam o PNG; anexe a imagem à publicação se a rede solicitar."}
+              <label className="graph-share-field">
+                Texto da publicação
+                <textarea value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={1000} />
+              </label>
+              <p className="graph-share-hint graph-share-instructions">
+                Escolha uma seção para manter os dados legíveis. O domínio e o QR code aparecem no rodapé.
               </p>
-            ) : null}
-
-            {file ? (
-              <button type="button" className="graph-share-download" onClick={downloadImage}>
-                <Download size={16} /> baixar imagem PNG
+              <button type="button" className="graph-share-generate" disabled={generating} onClick={prepareImage}>
+                {generating ? <LoaderCircle size={17} className="animate-spin" /> : <Share2 size={17} />}
+                {generating ? "Gerando imagem…" : file ? "Atualizar imagem" : "Criar imagem para compartilhar"}
               </button>
-            ) : null}
 
-            <div className="graph-share-networks" aria-label="Compartilhar link nas redes sociais">
-              {networks.map(({ name, icon: Icon, url }) => (
-                <a
-                  key={name}
-                  href={url(shareUrl, shareText)}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  onClick={downloadImage}
-                  className="graph-share-network"
-                >
-                  <Icon size={18} aria-hidden="true" /> {name}
-                </a>
-              ))}
-              <button type="button" className="graph-share-network" onClick={copyLink}>
-                {copied ? <Check size={17} aria-hidden="true" /> : <Copy size={17} aria-hidden="true" />}
-                {copied ? "Link copiado" : "Copiar link"}
-              </button>
+              {previewUrl ? (
+                <div className="graph-share-preview">
+                  {/* Generated locally in the browser from the graph the person is sharing. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previewUrl} alt={`Prévia da imagem de ${title}`} />
+                </div>
+              ) : null}
+
+              {message ? <p className="graph-share-message" role="alert">{message}</p> : null}
+
+              {canShareFile && (
+                <button type="button" className="graph-share-primary" onClick={shareImage}>
+                  <Share2 size={16} /> Compartilhar imagem
+                </button>
+              )}
+              {file && (
+                <>
+                  <p className="graph-share-hint">
+                    {canShareFile
+                      ? "Compartilhe o PNG direto no celular ou baixe a imagem para anexar à publicação."
+                      : "Baixe a imagem e anexe à publicação na rede social escolhida."}
+                  </p>
+                  <button type="button" className="graph-share-download" onClick={downloadImage}>
+                    <Download size={16} /> Baixar imagem PNG
+                  </button>
+                </>
+              )}
+
+              <section className="graph-share-network-section" aria-labelledby="graph-share-networks-title">
+                <h3 id="graph-share-networks-title">Compartilhar link</h3>
+                <div className="graph-share-networks">
+                  {networks.map(({ name, icon: Icon, url }) => (
+                    <a
+                      key={name}
+                      href={url(shareUrl, shareText)}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      onClick={downloadImage}
+                      className="graph-share-network"
+                    >
+                      <Icon size={18} aria-hidden="true" /> <span>{name}</span>
+                    </a>
+                  ))}
+                  <button type="button" className="graph-share-network" onClick={copyLink}>
+                    {copied ? <Check size={17} aria-hidden="true" /> : <Copy size={17} aria-hidden="true" />}
+                    <span>{copied ? "Link copiado" : "Copiar link"}</span>
+                  </button>
+                </div>
+              </section>
             </div>
 
-            <p className="graph-share-domain">{shareUrl}</p>
+            <footer className="graph-share-domain">
+              <span>Link com marcação do Politica007</span>
+              <span className="graph-share-domain__url">{shareUrl}</span>
+            </footer>
           </section>
         </div>,
         document.body
