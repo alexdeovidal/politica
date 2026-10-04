@@ -9,7 +9,7 @@ const mapCache = new Map<string, Promise<MapFile | ExteriorFile>>();
 function mapFile<T extends MapFile | ExteriorFile>(key: string): Promise<T> {
   let pending = mapCache.get(key);
   if (!pending) {
-    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 30000);
     pending = fetch(`/maps/live-2026/${key}.json`, {signal: controller.signal}).then(async response => {
       if (!response.ok) throw Error("A cartografia não pôde ser carregada.");
       const data = await response.json();
@@ -141,7 +141,7 @@ function ElectionMapView({selection, config, configReady, overview, country, onC
       <div className="live-map-grid">
         <div className="live-map-canvas">
           <div className="live-map-caption"><MapPin size={14}/><span>{caption}</span></div>
-          {loading || layer === "state" && !configReady ? <div className="live-map-loading" role="status"><RefreshCw size={22} className="is-spinning"/>Carregando localidades…</div> : failure?.key === resourceKey ? <div className="live-map-loading" role="alert"><p>Não foi possível carregar o mapa. Os filtros de localidade continuam disponíveis.</p><button className="live-button" onClick={() => setRetry(value => value + 1)}>Tentar novamente</button></div> : <svg ref={svg} className={`live-map-svg${pan ? " can-pan" : ""}`} viewBox={box.join(" ")} role="group" aria-label={caption} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => {drag.current = null;}}>
+          {loading || layer === "state" && !configReady ? <div className="live-map-loading" role="status"><RefreshCw size={22} className="is-spinning"/>Carregando localidades…</div> : failure?.key === resourceKey ? <div className="live-map-loading" role="alert"><p>Não foi possível carregar o mapa. Os filtros de localidade continuam disponíveis.</p><button className="live-button" onClick={() => {setFailure(null); setRetry(value => value + 1);}}>Tentar novamente</button></div> : <svg ref={svg} className={`live-map-svg${pan ? " can-pan" : ""}`} viewBox={box.join(" ")} role="group" aria-label={caption} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => {drag.current = null;}}>
             <title>{caption}. Use os botões de zoom para ampliar os municípios menores.</title>
             {(layer === "world" || layer === "country") && <g aria-hidden="true" className="live-map-background">{currentFile?.shapes.map((shape, index) => <path key={`${shape.code}-${index}`} d={shape.d} fillRule="evenodd" vectorEffect="non-scaling-stroke" className={layer === "country" && shape.code === activeCountry ? "is-country" : ""}/>)}</g>}
             {entries.map(entry => {
