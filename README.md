@@ -195,6 +195,11 @@ con.commit()
 PY
 ```
 
+O monitor TSE também mantém os índices FTS5 de nomes de candidatos, empresas e
+sócios. Eles são atualizados na primeira execução após uma mudança de versão e
+continuam sincronizados por gatilhos do SQLite, evitando varreduras completas
+das tabelas durante a pesquisa.
+
 ### Etapa 4 — regras de detecção
 
 Rodam sobre o que já foi coletado e geram os sinais de alerta.

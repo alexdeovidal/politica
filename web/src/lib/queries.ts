@@ -43,6 +43,10 @@ function pickProvenance(row: Record<string, unknown>): Provenance {
   };
 }
 
+function ftsPrefixQuery(tokens: string[]): string {
+  return tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" ");
+}
+
 export type SearchResult =
   | {kind:"socio";partnerId:number;canonicalName:string;companyName:string}
   | {
@@ -79,6 +83,7 @@ function searchCompanies(rawQuery: string, limit: number): Extract<SearchResult,
 
   const companyName = "COALESCE(NULLIF(cr.trade_name, ''), NULLIF(cr.legal_name, ''), c.legal_name, '')";
   const companySearchName = "COALESCE(cr.trade_name, '') || ' ' || COALESCE(cr.legal_name, c.legal_name, '')";
+  const indexedCompanyNames = hasTable("company_name_search") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version>=2").get();
   const rows = documentQuery
     ? db().prepare(
       `SELECT c.cnpj, ${companyName} AS canonicalName
@@ -87,7 +92,19 @@ function searchCompanies(rawQuery: string, limit: number): Extract<SearchResult,
        ORDER BY CASE WHEN c.cnpj = ? THEN 0 ELSE 1 END, c.cnpj
        LIMIT ?`
     ).all(`${digits}%`, digits, limit)
-    : db().prepare(
+    : indexedCompanyNames
+      ? db().prepare(
+        `SELECT c.cnpj, ${companyName} AS canonicalName
+         FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
+         WHERE c.id IN (SELECT company_id FROM company_name_search WHERE company_name_search MATCH ?)
+         ORDER BY CASE
+           WHEN normalize_public_name(${companyName}) = ? THEN 0
+           WHEN substr(normalize_public_name(${companyName}), 1, length(?)) = ? THEN 1
+           ELSE 2
+         END, length(canonicalName), canonicalName
+         LIMIT ?`
+      ).all(ftsPrefixQuery(nameTokens), normalizeName(query), normalizeName(query), normalizeName(query), limit)
+      : db().prepare(
       `SELECT c.cnpj, ${companyName} AS canonicalName
        FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
        WHERE ${nameTokens.map(() => `instr(normalize_public_name(${companySearchName}), ?) > 0`).join(" AND ")}
@@ -126,15 +143,20 @@ export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:numb
         WHEN instr(canonical_name, ?) > 0 THEN 2
         ELSE 3
       END`;
-  const indexedBallots = !looksLikeCpf && hasTable("politician_name_search") && hasTable("_politica_search_index") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version=1").get();
+  const indexedBallots = !looksLikeCpf && hasTable("politician_name_search") && hasTable("_politica_search_index") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version>=1").get();
+  const indexedPeopleNames = !looksLikeCpf && hasTable("people_name_search") && hasTable("_politica_search_index") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version>=2").get();
   const ballotWhere=indexedBallots ? "id IN (SELECT person_id FROM politician_name_search WHERE politician_name_search MATCH ?)" : `id IN (SELECT person_id FROM politician_history search_history WHERE ${nameTokens.map(()=>"instr(normalize_public_name(search_history.ballot_name),?)>0").join(" AND ")})`;
-  const ballotParams=indexedBallots ? [nameTokens.map(token=>`"${token}"*`).join(" ")] : nameTokens;
+  const ballotParams=indexedBallots ? [ftsPrefixQuery(nameTokens)] : nameTokens;
+  const candidateNameWhere = indexedPeopleNames
+    ? "id IN (SELECT person_id FROM people_name_search WHERE people_name_search MATCH ?)"
+    : `(${nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ")})`;
+  const candidateNameParams = indexedPeopleNames ? [ftsPrefixQuery(nameTokens)] : nameTokens;
   const matchWhere = looksLikeCpf
     ? "cpf LIKE ?"
-    : `(${nameTokens.map(() => "instr(canonical_name, ?) > 0").join(" AND ")} OR ${ballotWhere})`;
+    : `(${candidateNameWhere} OR ${ballotWhere})`;
   const matchParams = looksLikeCpf
     ? [`${digits}%`, limit * 4]
-    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...nameTokens,...ballotParams, limit * 4];
+    : [normalizedQuery, normalizedQuery, normalizedQuery, normalizedQuery, ...candidateNameParams, ...ballotParams, limit * 4];
 
   const filterClauses:string[]=[];const filterParams:(string|number)[]=[];
   for(const [field,value] of [["year",filters?.year],["office",filters?.office],["state",filters?.state],["municipality",filters?.city]] as const)if(value){filterClauses.push(`filter_history.${field}=?`);filterParams.push(value);}
@@ -206,11 +228,7 @@ export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:numb
       )
       .all(cpfPattern, cpfPattern, remaining * 2) as typeof personRows;
   } else if (hasTable("pessoa_fisica_search")) {
-    const ftsQuery = normalizeName(query)
-      .split(" ")
-      .filter(Boolean)
-      .map((tok) => `"${tok.replace(/"/g, '""')}"*`)
-      .join(" ");
+    const ftsQuery = ftsPrefixQuery(normalizeName(query).split(" ").filter(Boolean));
     personRows = ftsQuery
       ? (db()
           .prepare("SELECT cpf, name FROM pessoa_fisica_search WHERE pessoa_fisica_search MATCH ? LIMIT ?")
@@ -229,7 +247,15 @@ export function searchPeople(rawQuery: string, limit = 25, filters?: {year?:numb
     ? searchCompanies(query, Math.min(limit, 8))
     : [];
 
-  const partners:SearchResult[]=!looksLikeCnpj && nameTokens.length && hasTable("company_partner") ? (db().prepare(`SELECT min(cp.id) AS partnerId,cp.partner_name AS canonicalName,max(coalesce(c.legal_name,cp.cnpj)) AS companyName FROM company_partner cp JOIN companies c ON c.id=cp.company_id WHERE ${nameTokens.map(()=>"instr(normalize_public_name(cp.partner_name),?)>0").join(" AND ")} GROUP BY normalize_public_name(cp.partner_name),cp.partner_doc_masked LIMIT 8`).all(...nameTokens) as {partnerId:number;canonicalName:string;companyName:string}[]).map(r=>({kind:"socio",...r})) : [];
+  const indexedPartnerNames = hasTable("company_partner_name_search") && !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version>=2").get();
+  type PartnerSearchRow = { partnerId: number; canonicalName: string; companyName: string };
+  const partnerRows: PartnerSearchRow[] =
+    !looksLikeCnpj && nameTokens.length && hasTable("company_partner")
+      ? indexedPartnerNames
+        ? db().prepare(`SELECT min(cp.id) AS partnerId,cp.partner_name AS canonicalName,max(coalesce(c.legal_name,cp.cnpj)) AS companyName FROM company_partner cp JOIN companies c ON c.id=cp.company_id WHERE cp.id IN (SELECT partner_id FROM company_partner_name_search WHERE company_partner_name_search MATCH ?) GROUP BY normalize_public_name(cp.partner_name),cp.partner_doc_masked LIMIT 8`).all(ftsPrefixQuery(nameTokens)) as PartnerSearchRow[]
+        : db().prepare(`SELECT min(cp.id) AS partnerId,cp.partner_name AS canonicalName,max(coalesce(c.legal_name,cp.cnpj)) AS companyName FROM company_partner cp JOIN companies c ON c.id=cp.company_id WHERE ${nameTokens.map(()=>"instr(normalize_public_name(cp.partner_name),?)>0").join(" AND ")} GROUP BY normalize_public_name(cp.partner_name),cp.partner_doc_masked LIMIT 8`).all(...nameTokens) as PartnerSearchRow[]
+      : [];
+  const partners: SearchResult[] = partnerRows.map((r) => ({ kind: "socio", ...r }));
   // Interleave entity types so one large result group cannot hide the other searchable records.
   const combined: SearchResult[] = [];
   for (let i = 0; combined.length < limit && (i < candidates.length || i < companies.length || i < persons.length || i < partners.length); i += 1) {

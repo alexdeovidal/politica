@@ -1,7 +1,7 @@
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import { ProfileNavigation,ProfileTimeline,FinanceInsights } from "@/components/platform/profile-overview";
 import { shareMetadata } from "@/lib/platform/share";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { SignalMethodology } from "@/components/platform/signal-methodology";
 import { Proposals } from "@/components/platform/proposals";
 import { PublicStatements } from "@/components/platform/public-statements";
@@ -34,10 +34,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 
 const DISCOURSE_SHOWN = 8;
+const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
+const getCachedPersonFinance = cache((personId: number, year?: number) => getPersonFinance(personId, year));
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({params,searchParams}:PageProps<"/politico/[id]">){const {id}=await params;const sp=await searchParams;const person=getPersonHeader(Number(id));return shareMetadata(person?.person.canonicalName||"Perfil público",`/politico/${id}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
+export async function generateMetadata({params,searchParams}:PageProps<"/politico/[id]">){const {id}=await params;const sp=await searchParams;const person=getCachedPersonHeader(Number(id));return shareMetadata(person?.person.canonicalName||"Perfil público",`/politico/${id}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
 
 export default async function PoliticoPage({ params, searchParams }: PageProps<"/politico/[id]">) {
   const { id } = await params;
@@ -49,10 +51,9 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
   const financeYears = getExpenseYears();
   const year = Number.isInteger(anoParam) && financeYears.includes(anoParam) ? anoParam : undefined;
 
-  const header = getPersonHeader(personId);
+  const header = getCachedPersonHeader(personId);
   if (!header) notFound();
   const { person, latestCandidacy } = header;
-  const overviewFinance = getPersonFinance(personId, year);
   const displayName = person.canonicalName ?? "(nome indisponível)";
   const photoUrl = getPersonPhotoUrl(personId);
   const photoProvenance = photoUrl ? getPersonPhotoProvenance(personId) : null;
@@ -104,29 +105,17 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
               </span>
             </SourceZone>
           </div>
-
-          {overviewFinance.donationsCount > 0 || overviewFinance.expensesCount > 0 ? (
-            <div className="kpis kpis--profile mt-6">
-              <div className="kpi">
-                <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
-                <div className="kpi__value kpi__value--green">{formatBRL(overviewFinance.donationsTotalCents)}</div>
-                <div className="kpi__sub">{overviewFinance.donationsCount.toLocaleString("pt-BR")} doações</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi__label">despesas contratadas</div>
-                <div className="kpi__value">{formatBRL(overviewFinance.expensesTotalCents)}</div>
-                <div className="kpi__sub">{overviewFinance.expensesCount.toLocaleString("pt-BR")} despesas</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi__label">pago até agora</div>
-                <div className="kpi__value">{formatBRL(overviewFinance.paymentsTotalCents)}</div>
-                <div className="kpi__sub">regime de caixa</div>
-              </div>
-            </div>
-          ) : null}
         </header>
-        <ProfileNavigation/><ProfileTimeline personId={person.id}/>
-        <FinanceInsights personId={person.id} year={year}/>
+        <Suspense fallback={<SectionSkeleton title="resumo financeiro" rows={1} />}>
+          <ProfileFinanceSummary personId={person.id} year={year} />
+        </Suspense>
+        <ProfileNavigation/>
+        <Suspense fallback={<SectionSkeleton id="linha-do-tempo" title="linha do tempo eleitoral e patrimonial" rows={2} />}>
+          <ProfileTimeline personId={person.id}/>
+        </Suspense>
+        <Suspense fallback={<SectionSkeleton id="resumo-financeiro" title="concentração e evolução" rows={2} />}>
+          <FinanceInsights personId={person.id} year={year}/>
+        </Suspense>
   
         <Suspense fallback={<SectionSkeleton id="candidaturas" title="candidaturas por eleição" rows={3} />}>
           <CandidaciesSection personId={person.id} />
@@ -177,6 +166,31 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
           <DiscourseSection personId={person.id} displayName={displayName} />
         </Suspense>
       </main>
+  );
+}
+
+async function ProfileFinanceSummary({ personId, year }: { personId: number; year?: number }) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const finance = getCachedPersonFinance(personId, year);
+  if (finance.donationsCount === 0 && finance.expensesCount === 0) return null;
+  return (
+    <div className="kpis kpis--profile mt-2">
+      <div className="kpi">
+        <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
+        <div className="kpi__value kpi__value--green">{formatBRL(finance.donationsTotalCents)}</div>
+        <div className="kpi__sub">{finance.donationsCount.toLocaleString("pt-BR")} doações</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi__label">despesas contratadas</div>
+        <div className="kpi__value">{formatBRL(finance.expensesTotalCents)}</div>
+        <div className="kpi__sub">{finance.expensesCount.toLocaleString("pt-BR")} despesas</div>
+      </div>
+      <div className="kpi">
+        <div className="kpi__label">pago até agora</div>
+        <div className="kpi__value">{formatBRL(finance.paymentsTotalCents)}</div>
+        <div className="kpi__sub">regime de caixa</div>
+      </div>
+    </div>
   );
 }
 
@@ -418,7 +432,7 @@ async function EarmarksSection({ personId }: { personId: number }) {
 async function FinanceSection({
   personId, year,
 }: { personId: number; year: number | undefined }) {
-  const finance = year != null ? getPersonFinance(personId, year) : getPersonFinance(personId);
+  const finance = getCachedPersonFinance(personId, year);
   return (
     <div id="financas" data-toc-title="finanças">
       {finance.donationsCount > 0 ? (
