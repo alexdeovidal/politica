@@ -4,6 +4,34 @@ from __future__ import annotations
 
 from elosys.db import create_schema
 from elosys.tse import monitor
+import pytest
+
+
+def test_signature_retries_transient_timeout_and_preserves_real_headers(monkeypatch):
+    calls, delays = [], []
+    expected = {"etag": "actual-official-etag"}
+    def once(url):
+        calls.append(url)
+        if len(calls) < 3:
+            raise monitor.requests.exceptions.RequestException("timeout", code=28)
+        return expected
+    monkeypatch.setattr(monitor, "_remote_signature_once", once)
+    monkeypatch.setattr(monitor.time, "sleep", delays.append)
+    assert monitor.remote_signature("https://tse.example/archive") == expected
+    assert len(calls) == 3 and delays == [2, 4]
+
+
+def test_signature_reports_exhausted_timeout_and_does_not_retry_permanent_error(monkeypatch):
+    for code, expected_calls in ((28, 3), (60, 1)):
+        calls = []
+        def once(url):
+            calls.append(url)
+            raise monitor.requests.exceptions.RequestException("failure", code=code)
+        monkeypatch.setattr(monitor, "_remote_signature_once", once)
+        monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+        with pytest.raises(monitor.requests.exceptions.RequestException):
+            monitor.remote_signature("https://tse.example/archive")
+        assert len(calls) == expected_calls
 
 
 def test_monitor_skips_unchanged_sources_and_persists_updated_signature(tmp_path, monkeypatch):
