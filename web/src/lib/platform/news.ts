@@ -17,7 +17,7 @@ function saoPauloDay(date=new Date()):string{const p=Object.fromEntries(new Intl
 function brl(cents:number):string{return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(cents/100);}
 function number(value:number):string{return value.toLocaleString("pt-BR");}
 function datasetUrl(kind:"candidatos"|"prestacao"|"resultados"|"processual",year:number):string{
-  const slug=kind==="prestacao"?`prestacao-de-contas-eleitorais-${year}`:`${kind}-${year}`;
+  const slug=kind==="prestacao"?`dadosabertos-tse-jus-br-dataset-prestacao-de-contas-eleitorais-${year}`:`${kind}-${year}`;
   return `https://dadosabertos.tse.jus.br/pt_BR/dataset/${slug}`;
 }
 function source(label:string,url:string|null|undefined):NewsSource|null{
