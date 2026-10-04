@@ -1815,6 +1815,26 @@ export function getEntityProfile(cpfCnpj: string, opts: { year?: number } = {}):
       displayName = company.legal_name;
     }
 
+    // Emenda beneficiaries can exist before they have a companies/registry row.
+    // Keep their CNPJ links resolvable and use the name published by the source.
+    const earmarkBeneficiary = hasTable("parliamentary_earmark_beneficiary")
+      ? (db()
+          .prepare(
+            `SELECT beneficiary_name AS name
+             FROM parliamentary_earmark_beneficiary
+             WHERE beneficiary_doc = ? AND beneficiary_type LIKE 'Pessoa Jur%'
+               AND earmark_code != 'Sem informação'
+             GROUP BY beneficiary_name
+             ORDER BY count(*) DESC, max(collected_at) DESC
+             LIMIT 1`
+          )
+          .get(digits) as { name: string | null } | undefined)
+      : undefined;
+    if (earmarkBeneficiary) {
+      displayName = earmarkBeneficiary.name ?? displayName;
+      companyKind = companyKind ?? "earmark_beneficiary";
+    }
+
     const registryRow = db()
       .prepare(
         `SELECT t.legal_name AS legalName, t.trade_name AS tradeName, t.opened_at AS openedAt,

@@ -31,6 +31,7 @@ export function EntityProfileView({
     donor: "já apareceu como doador",
     supplier: "já apareceu como fornecedor",
     sanctioned: "empresa sancionada",
+    earmark_beneficiary: "favorecida por emenda",
   };
 
   return (
