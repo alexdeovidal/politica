@@ -15,7 +15,7 @@ function query(turn: number, office: string, state: string, municipality: string
   return `/api/apuracao/sections?${params}`;
 }
 
-export function LiveSectionVoteBreakdown({selection, candidate}: {selection: ElectionSelection; candidate: LiveCandidate}) {
+export function LiveSectionVoteBreakdown({selection, candidate, finalized = false}: {selection: ElectionSelection; candidate: LiveCandidate; finalized?: boolean}) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<{key: string; page: number; rows: LiveSectionVote[]; meta: SectionResponse} | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,7 @@ export function LiveSectionVoteBreakdown({selection, candidate}: {selection: Ele
     const controller = new AbortController();
     const refresh = async () => {
       if (document.visibilityState === "hidden") {
-        timer = window.setTimeout(refresh, 60000);
+        if (!finalized) timer = window.setTimeout(refresh, 60000);
         return;
       }
       setLoading(true);
@@ -57,7 +57,7 @@ export function LiveSectionVoteBreakdown({selection, candidate}: {selection: Ele
       } finally {
         if (!stopped) {
           setLoading(false);
-          timer = window.setTimeout(refresh, 60000);
+          if (!finalized) timer = window.setTimeout(refresh, 60000);
         }
       }
     };
@@ -67,7 +67,7 @@ export function LiveSectionVoteBreakdown({selection, candidate}: {selection: Ele
       controller.abort();
       if (timer) window.clearTimeout(timer);
     };
-  }, [open, zoneSelected, turn, office, state, municipality, zone, candidateId, page, selectionKey]);
+  }, [open, zoneSelected, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey]);
 
   const totalPages = meta?.totalPages || 0;
 
@@ -83,7 +83,7 @@ export function LiveSectionVoteBreakdown({selection, candidate}: {selection: Ele
         {!zoneSelected ? <div className="rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Para consultar cada urna, escolha um município e uma zona eleitoral nos filtros acima. A consulta por seção é feita sob demanda para não carregar boletins de todo o estado sem necessidade.</div> : <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted-2)]">
             <span>{meta ? `${number.format(meta.total)} seções nesta zona · página ${page}${totalPages ? ` de ${totalPages}` : ""}` : `Consultando seções da zona ${Number(selection.zone)}…`}</span>
-            <span>Verificação automática a cada 60 segundos · última consulta {dateTime(meta?.checkedAt)}</span>
+            <span>{finalized ? "Resultado encerrado · última consulta" : "Verificação automática a cada 60 segundos · última consulta"} {dateTime(meta?.checkedAt)}</span>
           </div>
           {error ? <p role="alert" className="mb-3 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-3 py-2 text-[11px] text-[var(--danger)]">{error}</p> : null}
           {rows.length ? <div className="divide-y divide-[var(--border-1)]">

@@ -19,7 +19,7 @@ export type LiveCandidate = {
 export type LiveResult = {
   selection: ElectionSelection; election: OfficialElection; office: ElectionOffice;
   areaName: string; scope: string; sourceUrl: string; generationId: string;
-  generatedAt: string | null; totalizedAt: string | null; checkedAt: string;
+  generatedAt: string | null; totalizedAt: string | null; checkedAt: string; completedAt?: string | null;
   stale: boolean; available: boolean; votingReleased: boolean;
   progress: "waiting" | "partial" | "counted" | "final";
   mathematicalDecision: string; noWinnersReason: string[]; seats: number | null;
@@ -31,6 +31,14 @@ export type LiveResult = {
 };
 export type LiveTerritory = {code: string; name: string; state: string; municipality: string; progress: string; sections: number; counted: number; percentage: number; totalizedAt: string | null};
 export type LiveOverview = {sourceUrl: string; generatedAt: string | null; checkedAt: string; stale: boolean; territories: LiveTerritory[]};
+
+export function isLiveResultComplete(result: Pick<LiveResult, "progress" | "sections">) {
+  return result.progress === "final" || (
+    result.sections.total > 0 &&
+    result.sections.counted >= result.sections.total &&
+    result.sections.percentage >= 100
+  );
+}
 
 type Json = Record<string, unknown>;
 export function object(value: unknown): Json {

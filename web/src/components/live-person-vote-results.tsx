@@ -6,6 +6,7 @@ import type { PersonVoteResult } from "@/lib/queries";
 import { LiveSectionVoteBreakdown } from "@/components/live-election/section-vote-breakdown";
 import {
   LIVE_POLL_SECONDS,
+  isLiveResultComplete,
   normalizeLiveSearch,
   type LiveResult,
   type PublicConfig,
@@ -94,6 +95,7 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
   useEffect(() => {
     if (!open || !config || !state || !cargo || (municipality && !selectedMunicipality) || (zone && !zones.includes(zone))) return;
     let stopped = false;
+    let completed = false;
     let timer: number | undefined;
     const controller = new AbortController();
     const refresh = async () => {
@@ -110,13 +112,16 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
         const response = await fetch(`/api/apuracao/results?${params}`, { signal: controller.signal, cache: "no-store" });
         const data = await response.json().catch(() => null) as (LiveResult & ApiMessage) | null;
         if (!response.ok || !data || !Array.isArray(data.candidates)) throw new Error(data?.error || "Não foi possível consultar a apuração agora.");
-        if (!stopped) setLive(data);
+        if (!stopped) {
+          setLive(data);
+          completed = isLiveResultComplete(data);
+        }
       } catch (error) {
         if (!stopped && !controller.signal.aborted) setResultError(error instanceof Error ? error.message : "Não foi possível consultar a apuração agora.");
       } finally {
         if (!stopped) {
           setLoading(false);
-          timer = window.setTimeout(refresh, LIVE_POLL_SECONDS * 1000);
+          if (!completed) timer = window.setTimeout(refresh, LIVE_POLL_SECONDS * 1000);
         }
       }
     };
@@ -143,9 +148,9 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium text-[var(--fg-1)]">2026 · {officeName} · {turn}º turno</span>
-          <span className="mt-1 block truncate font-mono text-[10px] text-[var(--muted-2)]">Apuração atualizada pela totalização do TSE</span>
+          <span className="mt-1 block truncate font-mono text-[10px] text-[var(--muted-2)]">{live && isLiveResultComplete(live) ? live.completedAt ? "Resultado armazenado no histórico" : "Votação encerrada · totalização do TSE" : "Apuração atualizada pela totalização do TSE"}</span>
         </span>
-        <span className="hidden shrink-0 rounded-full border border-[var(--accent-2)]/30 px-2 py-1 font-mono text-[9px] text-[var(--accent-2)] sm:inline-flex">AO VIVO</span>
+        {live ? <span className={`hidden shrink-0 rounded-full border px-2 py-1 font-mono text-[9px] sm:inline-flex ${isLiveResultComplete(live) ? "border-[var(--border-1)] text-[var(--muted)]" : "border-[var(--accent-2)]/30 text-[var(--accent-2)]"}`}>{isLiveResultComplete(live) ? "ENCERRADA" : "AO VIVO"}</span> : null}
         <ChevronDown className="h-4 w-4 shrink-0 text-[var(--muted-2)] transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
 
@@ -214,7 +219,7 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-[var(--accent-2)]">
                       <span className="h-2 w-2 rounded-full bg-[var(--accent-2)]" />
-                      {live.progress === "final" ? "totalização final" : "totalização em andamento"}
+                      {live.progress === "final" ? "resultado final do TSE" : isLiveResultComplete(live) ? "seções totalizadas" : "totalização em andamento"}
                     </div>
                     <h3 className="mt-2 break-words text-[15px] font-medium text-[var(--fg-1)]">{candidate.name || profileName}</h3>
                     <p className="mt-1 text-[11px] text-[var(--muted)]">{candidate.party || profile.partyAbbr || "Partido não informado"} · {live.areaName}</p>
@@ -228,13 +233,17 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
                   <span>{live.sections.counted.toLocaleString("pt-BR")} de {live.sections.total.toLocaleString("pt-BR")} seções totalizadas · {live.sections.percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
                   <span>Dados gerados pelo TSE: {formatDate(live.generatedAt)} · portal consultou: {formatDate(live.checkedAt)}{live.stale ? " · último dado disponível" : ""}</span>
                 </div>
-                <LiveSectionVoteBreakdown selection={live.selection} candidate={candidate}/>
+                <LiveSectionVoteBreakdown selection={live.selection} candidate={candidate} finalized={isLiveResultComplete(live)}/>
               </div>
             ) : null}
 
             <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
               <p className="max-w-2xl text-[10px] leading-relaxed text-[var(--muted-2)]">
-                A cada {LIVE_POLL_SECONDS} segundos o Politica007 consulta a totalização. Os boletins por urna são conferidos a cada minuto quando a consulta por seção está aberta; o TSE pode publicar ou republicar esses arquivos em horários diferentes.
+                {live && isLiveResultComplete(live)
+                  ? live.completedAt
+                    ? `Resultado encerrado e salvo no banco do Politica007 em ${formatDate(live.completedAt)}. Os boletins oficiais permanecem disponíveis para consulta por seção.`
+                    : "Todas as seções foram totalizadas pelo TSE. Os boletins oficiais permanecem disponíveis para consulta por seção."
+                  : `A cada ${LIVE_POLL_SECONDS} segundos o Politica007 consulta a totalização. Os boletins por urna são conferidos a cada minuto quando a consulta por seção está aberta; o TSE pode publicar ou republicar esses arquivos em horários diferentes.`}
               </p>
               <a href={referenceLink} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-[var(--accent-2)] hover:underline">
                 Resultado oficial do TSE <ExternalLink className="h-3 w-3" aria-hidden="true" />
