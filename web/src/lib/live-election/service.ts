@@ -4,15 +4,19 @@ import {ELECTION_YEAR, findElection, object, parseElections, parseOverview, pars
 
 type FileRecord = {payload: string | null; checked_at: string | null; attempted_at: string; retry_at: number; etag: string | null; modified: string | null; error: string | null};
 type OfficialFile = {data: unknown; checkedAt: string; stale: boolean};
+type BinaryRecord = {payload: string | null; checked_at: string | null; attempted_at: string; retry_at: number; error: string | null};
+export type OfficialBinaryFile = {data: Buffer; checkedAt: string; stale: boolean};
 export type LiveResultSnapshotSummary = {id: number; firstSeenAt: string; lastSeenAt: string; generatedAt: string | null; totalizedAt: string | null; sourceCheckedAt: string; officeName: string; areaName: string; progress: LiveResult["progress"]; sectionsCounted: number; sectionsTotal: number; sectionsPercentage: number; candidateCount: number; stale: boolean};
 export type LiveResultSnapshot = LiveResultSnapshotSummary & {result: LiveResult};
 let initialized = false;
 const memory = new Map<string, FileRecord>();
 const pending = new Map<string, Promise<OfficialFile>>();
+const binaryPending = new Map<string, Promise<OfficialBinaryFile>>();
 let nextRequestAt = 0;
 let blockedUntil = 0;
 let activeRequests = 0;
 const requestQueue: (() => void)[] = [];
+let lastSectionCacheCleanup = 0;
 
 export class SourceUnavailable extends Error {
   constructor(public readonly kind: string, public readonly retryAfterSeconds = 60) { super("A fonte oficial está temporariamente indisponível para esta consulta."); }
@@ -23,11 +27,20 @@ function storage() {
   if (!initialized) {
     store.exec(`CREATE TABLE IF NOT EXISTS live_tse_file(url TEXT PRIMARY KEY,payload TEXT,checked_at TEXT,attempted_at TEXT NOT NULL,retry_at INTEGER NOT NULL,etag TEXT,modified TEXT,error TEXT);
       CREATE INDEX IF NOT EXISTS ix_live_tse_retry ON live_tse_file(retry_at);
+      CREATE TABLE IF NOT EXISTS live_tse_binary_file(url TEXT PRIMARY KEY,payload TEXT,checked_at TEXT,attempted_at TEXT NOT NULL,retry_at INTEGER NOT NULL,error TEXT);
+      CREATE INDEX IF NOT EXISTS ix_live_tse_binary_retry ON live_tse_binary_file(retry_at);
       CREATE TABLE IF NOT EXISTS live_result_snapshot(id INTEGER PRIMARY KEY,election_year INTEGER NOT NULL,turn INTEGER NOT NULL,office TEXT NOT NULL,state TEXT NOT NULL,municipality TEXT NOT NULL,zone TEXT NOT NULL,source_url TEXT NOT NULL,fingerprint TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,generated_at TEXT,totalized_at TEXT,source_checked_at TEXT NOT NULL,office_name TEXT NOT NULL,area_name TEXT NOT NULL,progress TEXT NOT NULL,sections_counted INTEGER NOT NULL,sections_total INTEGER NOT NULL,sections_percentage REAL NOT NULL,candidate_count INTEGER NOT NULL,stale INTEGER NOT NULL,payload TEXT NOT NULL,UNIQUE(source_url,fingerprint));
       CREATE INDEX IF NOT EXISTS ix_live_result_snapshot_selection ON live_result_snapshot(election_year,turn,office,state,municipality,zone,id DESC);`);
     initialized = true;
   }
   return store;
+}
+export function cleanupLiveSectionCache() {
+  if (Date.now() - lastSectionCacheCleanup < 60000) return;
+  const store = storage();
+  store.exec(`DELETE FROM live_tse_file WHERE url LIKE '%-aux.json' AND url NOT IN (SELECT url FROM live_tse_file WHERE url LIKE '%-aux.json' ORDER BY attempted_at DESC LIMIT 10000);
+    DELETE FROM live_tse_binary_file WHERE url NOT IN (SELECT url FROM live_tse_binary_file WHERE payload IS NOT NULL ORDER BY checked_at DESC LIMIT 5000);`);
+  lastSectionCacheCleanup = Date.now();
 }
 function remember(url: string, row: FileRecord) {
   memory.delete(url); memory.set(url, row);
@@ -115,6 +128,59 @@ async function officialFile(url: string, ttl: number, validate: (value: unknown)
   })();
   pending.set(url, operation);
   try { return await operation; } finally { pending.delete(url); }
+}
+
+function readBinaryRecord(url: string): BinaryRecord | undefined {
+  return storage().prepare("SELECT payload,checked_at,attempted_at,retry_at,error FROM live_tse_binary_file WHERE url=?").get(url) as BinaryRecord | undefined;
+}
+function writeBinaryRecord(url: string, row: BinaryRecord) {
+  storage().prepare("INSERT INTO live_tse_binary_file VALUES(?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET payload=excluded.payload,checked_at=excluded.checked_at,attempted_at=excluded.attempted_at,retry_at=excluded.retry_at,error=excluded.error").run(url, row.payload, row.checked_at, row.attempted_at, row.retry_at, row.error);
+}
+function availableBinary(row: BinaryRecord): OfficialBinaryFile {
+  if (!row.payload || !row.checked_at) throw new SourceUnavailable(row.error || "not-published", Math.max(30, Math.ceil((row.retry_at - Date.now()) / 1000)));
+  return {data: Buffer.from(row.payload, "base64"), checkedAt: row.checked_at, stale: Boolean(row.error)};
+}
+
+// EA18 points to an immutable BU using its hash. Cache these bounded binary
+// payloads and share the same request queue used for the official JSON files.
+export async function officialBinaryFile(url: string, ttl = 86400000, maxBytes = 4000000): Promise<OfficialBinaryFile> {
+  if (!url.startsWith(`${TSE_RESULTS_BASE}/`)) throw new Error("Fonte não autorizada.");
+  const prior = readBinaryRecord(url);
+  if (prior && Date.now() < prior.retry_at) return availableBinary(prior);
+  const running = binaryPending.get(url);
+  if (running) return running;
+  const operation = (async () => {
+    let acquired = false;
+    try {
+      if (Date.now() < blockedUntil) throw new SourceUnavailable("rate-limit", Math.ceil((blockedUntil - Date.now()) / 1000));
+      await acquireRequest(); acquired = true;
+      if (Date.now() < blockedUntil) throw new SourceUnavailable("rate-limit", Math.ceil((blockedUntil - Date.now()) / 1000));
+      const response = await fetch(url, {headers: {Accept: "application/octet-stream", "User-Agent": "Politica007/1.0 (+https://politica007.com.br/apuracao)"}, cache: "no-store", signal: AbortSignal.timeout(15000), redirect: "error"});
+      if (response.status === 403 || response.status === 429) {
+        blockedUntil = Date.now() + Math.max(600000, Number(response.headers.get("retry-after")) * 1000 || 0);
+        throw new SourceUnavailable("rate-limit", Math.ceil((blockedUntil - Date.now()) / 1000));
+      }
+      if (response.status === 404) throw new SourceUnavailable("not-published", 60);
+      if (!response.ok) throw new SourceUnavailable("upstream", 60);
+      const declaredSize = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declaredSize) && declaredSize > maxBytes) throw new SourceUnavailable("invalid", 300);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!bytes.length || bytes.length > maxBytes) throw new SourceUnavailable("invalid", 300);
+      const now = new Date().toISOString(), row: BinaryRecord = {payload: bytes.toString("base64"), checked_at: now, attempted_at: now, retry_at: Date.now() + ttl, error: null};
+      writeBinaryRecord(url, row); return availableBinary(row);
+    } catch (error) {
+      const failure = error instanceof SourceUnavailable ? error : new SourceUnavailable("connection", 60);
+      const row: BinaryRecord = {payload: prior?.payload ?? null, checked_at: prior?.checked_at ?? null, attempted_at: new Date().toISOString(), retry_at: Date.now() + failure.retryAfterSeconds * 1000, error: failure.kind};
+      writeBinaryRecord(url, row);
+      return availableBinary(row);
+    } finally { if (acquired) releaseRequest(); }
+  })();
+  binaryPending.set(url, operation);
+  try { return await operation; } finally { binaryPending.delete(url); }
+}
+
+export async function officialJsonFile(url: string, ttl: number, validate: (value: unknown) => unknown) {
+  return officialFile(url, ttl, validate);
 }
 
 export async function getLiveConfig(turn = 1): Promise<LiveConfig> {

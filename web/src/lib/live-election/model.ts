@@ -6,13 +6,13 @@ export const TSE_TECHNICAL_SOURCE = "https://www.tse.jus.br/eleicoes/informacoes
 
 export type ElectionSelection = { turn: number; office: string; state: string; municipality: string; zone: string };
 export type ElectionOffice = { code: string; name: string; proportional: boolean };
-export type OfficialElection = { code: string; cycle: string; date: string; turn: number; offices: ElectionOffice[] };
+export type OfficialElection = { code: string; cycle: string; pleito: string; date: string; turn: number; offices: ElectionOffice[] };
 export type Municipality = { code: string; name: string; zones: string[]; ibgeCode?: string };
 export type ElectionState = { code: string; name: string; municipalities: Municipality[] };
 export type LiveConfig = { elections: OfficialElection[]; states: ElectionState[]; sourceUrl: string; generatedAt: string | null; checkedAt: string; stale: boolean };
 export type PublicConfig = Omit<LiveConfig, "states"> & { states: {code: string; name: string}[]; municipalities: Municipality[]; exteriorMunicipalities: Municipality[] };
 export type LiveCandidate = {
-  id: string; number: string; name: string; legalName: string; party: string; partyName: string;
+  id: string; number: string; partyNumber: string; name: string; legalName: string; party: string; partyName: string;
   coalition: string; votes: number | null; percentage: number | null; destination: string;
   status: string; photoUrl: string | null; runningMates: {name: string; party: string; role: string}[];
 };
@@ -71,12 +71,14 @@ export function parseElections(value: unknown): OfficialElection[] {
   for (const pleito of list(root.pl)) {
     const cycle = str(pleito.c);
     if (cycle !== `ele${ELECTION_YEAR}`) continue;
+    const pleitoCode = str(pleito.cd);
+    if (!/^\d{1,6}$/.test(pleitoCode)) continue;
     for (const election of list(pleito.e)) {
       const code = str(election.cd), turn = Number(election.t);
       if (!/^\d{1,6}$/.test(code) || ![1, 2].includes(turn)) continue;
       const offices = list(election.abr).flatMap(area => list(area.cp)).map(office => ({code: str(office.cd), name: str(office.ds), proportional: office.tp === "2"}));
       if (!offices.length) continue;
-      elections.push({code, cycle, date: str(pleito.dt), turn, offices: Array.from(new Map(offices.map(office => [office.code, office])).values())});
+      elections.push({code, cycle, pleito: pleitoCode, date: str(pleito.dt), turn, offices: Array.from(new Map(offices.map(office => [office.code, office])).values())});
     }
   }
   if (!elections.length) throw new Error("O TSE ainda não publicou a configuração desta eleição.");
@@ -151,7 +153,7 @@ export function parseResult(value: unknown, election: OfficialElection, selectio
       const id = str(candidate.sqcand), number = str(candidate.n);
       if (!/^\d+$/.test(number) || id && !/^\d+$/.test(id)) throw new Error("Identificador de candidato inválido na fonte oficial.");
       if (votingReleased && officialCount(candidate.vap) === null) throw new Error("Votação de candidato inválida na fonte oficial.");
-      candidates.push({id: id || `${party.n}-${number}`, number, name: str(candidate.nmu) || str(candidate.nm), legalName: str(candidate.nm), party: str(party.sg), partyName: str(party.nm), coalition: str(coalition.nm), votes: voteCount(candidate.vap), percentage: votingReleased ? officialPercentage(candidate.pvapn ?? candidate.pvap) : null, destination: str(candidate.dvt), status: votingReleased && root.tf === "s" ? str(candidate.st) : "", photoUrl: id ? `${TSE_RESULTS_BASE}/${election.cycle}/${election.code}/fotos/${selection.office === "1" ? "br" : selection.state}/${id}.jpeg` : null, runningMates: list(candidate.vs).map(mate => ({name: str(mate.nmu) || str(mate.nm), party: str(mate.sgp), role: mate.tp === "v" ? "Vice" : mate.tp === "s1" ? "1º suplente" : "2º suplente"}))});
+      candidates.push({id: id || `${party.n}-${number}`, number, partyNumber: str(party.n), name: str(candidate.nmu) || str(candidate.nm), legalName: str(candidate.nm), party: str(party.sg), partyName: str(party.nm), coalition: str(coalition.nm), votes: voteCount(candidate.vap), percentage: votingReleased ? officialPercentage(candidate.pvapn ?? candidate.pvap) : null, destination: str(candidate.dvt), status: votingReleased && root.tf === "s" ? str(candidate.st) : "", photoUrl: id ? `${TSE_RESULTS_BASE}/${election.cycle}/${election.code}/fotos/${selection.office === "1" ? "br" : selection.state}/${id}.jpeg` : null, runningMates: list(candidate.vs).map(mate => ({name: str(mate.nmu) || str(mate.nm), party: str(mate.sgp), role: mate.tp === "v" ? "Vice" : mate.tp === "s1" ? "1º suplente" : "2º suplente"}))});
     }
   }
   candidates.sort((a, b) => votingReleased ? (b.votes ?? 0) - (a.votes ?? 0) || a.name.localeCompare(b.name, "pt-BR") : a.name.localeCompare(b.name, "pt-BR"));

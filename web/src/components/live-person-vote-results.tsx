@@ -3,6 +3,7 @@
 import { ChevronDown, ExternalLink, MapPin, Radio } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { PersonVoteResult } from "@/lib/queries";
+import { LiveSectionVoteBreakdown } from "@/components/live-election/section-vote-breakdown";
 import {
   LIVE_POLL_SECONDS,
   normalizeLiveSearch,
@@ -227,12 +228,13 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
                   <span>{live.sections.counted.toLocaleString("pt-BR")} de {live.sections.total.toLocaleString("pt-BR")} seções totalizadas · {live.sections.percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
                   <span>Dados gerados pelo TSE: {formatDate(live.generatedAt)} · portal consultou: {formatDate(live.checkedAt)}{live.stale ? " · último dado disponível" : ""}</span>
                 </div>
+                <LiveSectionVoteBreakdown selection={live.selection} candidate={candidate}/>
               </div>
             ) : null}
 
             <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
               <p className="max-w-2xl text-[10px] leading-relaxed text-[var(--muted-2)]">
-                A cada {LIVE_POLL_SECONDS} segundos o Politica007 consulta a totalização oficial. Este recorte mostra o total por Brasil, estado, município ou zona; o TSE publica os boletins por seção em arquivos separados, que podem chegar em horários diferentes.
+                A cada {LIVE_POLL_SECONDS} segundos o Politica007 consulta a totalização. Os boletins por urna são conferidos a cada minuto quando a consulta por seção está aberta; o TSE pode publicar ou republicar esses arquivos em horários diferentes.
               </p>
               <a href={referenceLink} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-[var(--accent-2)] hover:underline">
                 Resultado oficial do TSE <ExternalLink className="h-3 w-3" aria-hidden="true" />
