@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, MapPin, Search } from "lucide-react";
 import type { CandidateVoteSection, PersonVoteResult } from "@/lib/queries";
 import { SourceZone } from "@/components/source-zone";
+import { LivePersonVoteResults } from "@/components/live-person-vote-results";
 
 type VoteSectionsResponse = {
   sections: CandidateVoteSection[];
@@ -19,19 +20,19 @@ export function PersonVoteResults({ results }: { results: PersonVoteResult[] }) 
     <section id="votos-por-local" data-toc-title="votos por local" className="animate-in py-7">
       <div className="section-title mb-2">votos por local</div>
       <p className="mb-4 max-w-3xl text-[12px] leading-relaxed text-[var(--muted)]">
-        Votos nominais divulgados pelo TSE por seção eleitoral. Cada número é um total agregado:
-        não identifica o voto de nenhuma pessoa.
+        Consulte resultados históricos por seção e a apuração de 2026 por estado, município e zona.
+        Os dados são agregados e não identificam o voto de nenhuma pessoa.
       </p>
       <div className="flex flex-col gap-3">
-        {results.map((result, index) => (
-          <ElectionVote key={result.historyId} result={result} initiallyOpen={index === 0} />
-        ))}
+        {results.map((result, index) => result.year === 2026
+          ? <LivePersonVoteResults key={result.historyId} result={result} initiallyOpen={index === 0} />
+          : <HistoricalElectionVote key={result.historyId} result={result} initiallyOpen={index === 0} />)}
       </div>
     </section>
   );
 }
 
-function ElectionVote({ result, initiallyOpen }: { result: PersonVoteResult; initiallyOpen: boolean }) {
+function HistoricalElectionVote({ result, initiallyOpen }: { result: PersonVoteResult; initiallyOpen: boolean }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [sections, setSections] = useState<CandidateVoteSection[]>([]);

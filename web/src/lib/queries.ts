@@ -1,6 +1,7 @@
 import { companyPartners, personCompanies, partnerById, partnerOtherCompanies } from "./platform/relations";
 import { db, hasTable,dataVersion } from "./db";
 import { digitsOnly, normalizeName } from "./normalize";
+import { ELECTION_YEAR } from "./live-election/model";
 
 export type Provenance = {
   sourceName: string;
@@ -579,26 +580,38 @@ export type PersonVoteResult = {
   state: string | null;
   partyAbbr: string | null;
   candidateNumber: string | null;
+  tseCandidacyId: string | null;
+  fullName: string | null;
+  ballotName: string | null;
   result: string | null;
   totalVotes: number;
   sectionCount: number;
 };
 
 export function getPersonVoteResults(personId: number): PersonVoteResult[] {
-  if (!hasTable("election_vote_section")) return [];
+  const hasSections = hasTable("election_vote_section");
+  const totalVotes = hasSections
+    ? "(SELECT COALESCE(SUM(t.votes), 0) FROM election_vote_section t WHERE t.history_id = h.id)"
+    : "0";
+  const sectionCount = hasSections
+    ? "(SELECT COUNT(*) FROM election_vote_section t WHERE t.history_id = h.id)"
+    : "0";
+  const historyFilter = hasSections
+    ? `h.year = ? OR EXISTS (SELECT 1 FROM election_vote_section t WHERE t.history_id = h.id)`
+    : "h.year = ?";
 
   const rows = db()
     .prepare(
       `SELECT h.id AS historyId, h.year, h.round, h.office,
-              h.state, h.party_abbr AS partyAbbr, h.candidate_number AS candidateNumber, h.result,
-              (SELECT COALESCE(SUM(t.votes), 0) FROM election_vote_section t WHERE t.history_id = h.id) AS totalVotes,
-              (SELECT COUNT(*) FROM election_vote_section t WHERE t.history_id = h.id) AS sectionCount
+              h.state, h.party_abbr AS partyAbbr, h.candidate_number AS candidateNumber,
+              h.tse_candidacy_id AS tseCandidacyId, h.full_name AS fullName, h.ballot_name AS ballotName,
+              h.result, ${totalVotes} AS totalVotes, ${sectionCount} AS sectionCount
        FROM politician_history h
        WHERE h.person_id = ?
-         AND EXISTS (SELECT 1 FROM election_vote_section t WHERE t.history_id = h.id)
+         AND (${historyFilter})
        ORDER BY h.year DESC, h.round DESC, h.office`
     )
-    .all(personId) as Array<Record<string, unknown>>;
+    .all(personId, ELECTION_YEAR) as Array<Record<string, unknown>>;
 
   return rows.map((row) => ({
     historyId: row.historyId as number,
@@ -608,6 +621,9 @@ export function getPersonVoteResults(personId: number): PersonVoteResult[] {
     state: (row.state as string) ?? null,
     partyAbbr: (row.partyAbbr as string) ?? null,
     candidateNumber: (row.candidateNumber as string) ?? null,
+    tseCandidacyId: (row.tseCandidacyId as string) ?? null,
+    fullName: (row.fullName as string) ?? null,
+    ballotName: (row.ballotName as string) ?? null,
     result: (row.result as string) ?? null,
     totalVotes: row.totalVotes as number,
     sectionCount: row.sectionCount as number,
@@ -1108,7 +1124,8 @@ export function getCandidateComparison(personIds: number[], year?: number): Cand
 
     const candidacies = getPersonCandidacies(personId);
     const finance = getPersonFinance(personId, year);
-    const votes = getPersonVoteResults(personId);
+    // The 2026 profile row enables live TSE lookup; it is not a section total.
+    const votes = getPersonVoteResults(personId).filter((item) => item.sectionCount > 0);
     const assetsByYear = getPersonAssets(personId).declaredAssetsByYear;
     const latest = candidacies.find(item => !year || item.year === year);
     const latestVote = votes.find(item => !year || item.year === year);
