@@ -7,7 +7,7 @@ import QRCode from "qrcode";
 import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
 import {BrandMark} from "@/components/brand/brand-lockup";
 import {ThemeToggle} from "@/components/shell/theme-toggle";
-import {displayName, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
+import {displayName, ELECTION_YEAR, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
 import {LocationPicker} from "./location-picker";
 import {ElectionMap} from "./election-map";
 import {changeElectionSelection} from "@/lib/live-election/geography";
@@ -156,7 +156,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     if (configRequestKey.current === key) return;
     const controller = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const cacheKey = localCacheKey("config", [selection.turn, selection.state]);
+    const cacheKey = localCacheKey("config", [ELECTION_YEAR, selection.turn, selection.state]);
     const cached = readLocalCache(cacheKey, validConfig);
     if (cached && (!configRef.current || configIdentityRef.current !== id)) {
       const fallback = stale(cached); configRef.current = fallback; configIdentityRef.current = id;
@@ -177,8 +177,8 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined, running = false;
     const params = selectionParams(selection).toString();
-    const resultKey = localCacheKey("result", [selection.turn, selection.office, selection.state, selection.municipality, selection.zone]);
-    const overviewKey = localCacheKey("overview", [selection.turn, selection.state]);
+    const resultKey = localCacheKey("result", [ELECTION_YEAR, selection.turn, selection.office, selection.state, selection.municipality, selection.zone]);
+    const overviewKey = localCacheKey("overview", [ELECTION_YEAR, selection.turn, selection.state]);
     const cachedResult = readLocalCache(resultKey, validResult);
     const cachedOverview = readLocalCache(overviewKey, validOverview);
     if (cachedResult && sameSelection(cachedResult.selection, selection) && (!dataRef.current || !sameSelection(dataRef.current.selection, selection))) {
