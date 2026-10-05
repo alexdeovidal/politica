@@ -98,7 +98,7 @@ function getCandidateFacts(personId:number,views:number):StoryFacts|null{
   return facts;
 }
 
-function topicStories(facts:StoryFacts,publishedAt:string):DailyNewsArticle[]{
+function topicStories(facts:StoryFacts,publishedAt:string,includePopularityNote=true):DailyNewsArticle[]{
   const {candidate:c}=facts;const stories:DailyNewsArticle[]=[];
   const make=(slugPart:string,category:string,title:string,summary:string,body:string,highlight:NewsHighlight,sourceItem:NewsSource)=>stories.push({
     slug:`p${c.id}-${slugPart}`,personId:c.id,personName:c.name,title,summary,category,publishedAt,
@@ -144,7 +144,7 @@ function topicStories(facts:StoryFacts,publishedAt:string):DailyNewsArticle[]{
       `O registro oficial de candidatura mais recente disponível na base é de ${c.year}, para ${candidacy||"cargo não informado"}${c.result?`, com resultado publicado como “${c.result}”`:""}. A ficha reúne o histórico eleitoral conhecido e permite conferir os campos na fonte do TSE.`,
       {label:"Registro mais recente",value:String(c.year),detail:candidacy||"Cargo, partido e unidade eleitoral não informados"},{label:"Candidaturas · TSE",url:datasetUrl("candidatos",c.year)});
   }
-  return stories.map(s=>({...s,summary:`${s.summary} Pauta escolhida entre os perfis mais consultados no Politica007 nos últimos 30 dias.`}));
+  return includePopularityNote?stories.map(s=>({...s,summary:`${s.summary} Pauta escolhida entre os perfis mais consultados no Politica007 nos últimos 30 dias.`})):stories;
 }
 
 function readStored(row:{day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined):DailyNewsFeed|null{
@@ -180,6 +180,25 @@ export function getStoredNewsArticle(day:string,slug:string):DailyNewsArticle|nu
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p\d+(-[a-z-]+)?$/.test(slug))return null;
   const row=platformStore().prepare("SELECT payload FROM daily_news WHERE day=?").get(day) as {payload:string}|undefined;
   if(!row)return null;try{return (JSON.parse(row.payload) as DailyNewsArticle[]).find(x=>x.slug===slug)||null;}catch{return null;}
+}
+
+/**
+ * Resolve a saved story first, then rebuild it from the public source tables.
+ * The news feed and detail route can land on different app instances, while
+ * daily_news lives in the lightweight platform store. A missing replica-local
+ * copy must not turn a link that was just shown in /news into a 404.
+ */
+export function getNewsArticle(day:string,slug:string):DailyNewsArticle|null{
+  const stored=getStoredNewsArticle(day,slug);
+  if(stored)return stored;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p(\d+)-([a-z-]+)$/.test(slug))return null;
+  if(day===openingEditionDay&&slug===openingArticleSlug)return openingEditionArticle(new Date(`${day}T00:05:00-03:00`).toISOString());
+  const personId=Number(/^p(\d+)-/.exec(slug)?.[1]);
+  if(!Number.isSafeInteger(personId)||personId<1)return null;
+  const facts=getCandidateFacts(personId,0);
+  if(!facts)return null;
+  const publishedAt=new Date(`${day}T00:05:00-03:00`).toISOString();
+  return topicStories(facts,publishedAt,false).find(article=>article.slug===slug)||null;
 }
 
 function daysBefore(day:string,days:number):string{const d=new Date(`${day}T12:00:00Z`);d.setUTCDate(d.getUTCDate()-days);return d.toISOString().slice(0,10);}

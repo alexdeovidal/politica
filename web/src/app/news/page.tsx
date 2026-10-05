@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {ArrowUpRight,Newspaper,Search} from "lucide-react";
 import {PageHeader} from "@/components/shell/shell-context";
-import {NewsStoryCover,OPENING_NEWS_SLUG} from "@/components/news-story-cover";
+import {NewsStoryCover} from "@/components/news-story-cover";
 import {getDailyNews} from "@/lib/platform/news";
 
 export const dynamic="force-dynamic";
@@ -26,7 +26,7 @@ export default function NewsPage(){
     <div className="news-editorial-note"><span className="news-editorial-note__dot"/><p>Os textos são montados a partir de registros identificados e links oficiais. Um processo não significa culpa; um alerta de gasto não comprova irregularidade. Leia os documentos e o contexto antes de compartilhar.</p></div>
     {feed.articles.length?<section className="news-grid" aria-label="Matérias de hoje">
       {feed.articles.map((article,index)=><article className={`news-card${index===0?" news-card--lead":""}`} key={article.slug}>
-        {article.slug===OPENING_NEWS_SLUG&&<Link className="news-card__cover-link" href={`/news/${feed.day}/${article.slug}`} aria-label={`Abrir matéria: ${article.title}`}><NewsStoryCover/></Link>}
+        <Link className="news-card__cover-link" href={`/news/${feed.day}/${article.slug}`} aria-label={`Abrir matéria: ${article.title}`}><NewsStoryCover article={article}/></Link>
         <div className="news-card__top"><span className="news-card__category">{article.category}</span><time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",day:"2-digit",month:"short"})}</time></div>
         <h2><Link href={`/news/${feed.day}/${article.slug}`}>{article.title}</Link></h2>
         <p className="news-card__summary">{article.summary}</p>
