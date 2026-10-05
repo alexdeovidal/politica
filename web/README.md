@@ -1,8 +1,10 @@
 # Politica007 — portal independente de dados públicos
 
-App Next.js, **só leitura**. Não escreve no banco, não roda os crawlers — isso é
-trabalho do pipeline Python em [`/elosys`](../README.md). Este app só abre
-`../elosys.db` (SQLite, arquivo único) e serve busca + ficha do candidato.
+O app Next.js consulta `../elosys.db` (SQLite, somente leitura) para busca e
+fichas. Dados operacionais que precisam sobreviver entre implantações — como o
+cache da fonte oficial e o histórico da apuração ao vivo — ficam no banco
+separado `politica-platform.db`. O pipeline Python em [`/elosys`](../README.md)
+continua responsável pelos crawlers da base eleitoral.
 
 ## Rodando
 
@@ -117,6 +119,17 @@ Se `elosys.db` não existir ainda, rode o pipeline Python primeiro (ver
 - `src/components/top-suppliers.tsx` — o ranking "empresas que mais faturaram
   com campanhas" (agrupa `campaign_expense` por CNPJ do fornecedor, não por
   nome — o nome varia de grafia entre anos/encoding, o CNPJ não).
+
+## Histórico da apuração ao vivo
+
+As consultas válidas em `/api/apuracao/results` guardam no banco persistente
+cada versão diferente recebida do TSE, sem duplicar respostas iguais. O arquivo
+oficial mais recente continua em `live_tse_file`; as versões anteriores ficam
+em `live_result_snapshot`. A página `/apuracao/historico` lista e exibe essas
+versões para o recorte escolhido; a API `GET /api/apuracao/history?turno=1&cargo=1&uf=br`
+lista os registros e `GET /api/apuracao/history?id=<id>` devolve o resultado
+completo de uma versão. A coleta acompanha as consultas já feitas à apuração:
+uma versão é salva quando o site solicita aquele recorte.
 
 ## Por que cada campo mostra a fonte
 

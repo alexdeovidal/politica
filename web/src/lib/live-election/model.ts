@@ -94,6 +94,11 @@ export function parseStates(value: unknown): ElectionState[] {
 export function selectionFromParams(params: {get(name: string): string | null}): ElectionSelection {
   return {turn: Number(params.get("turno") || 1), office: params.get("cargo") || "1", state: (params.get("uf") || "br").toLowerCase(), municipality: params.get("municipio") || "", zone: params.get("zona") || ""};
 }
+export function historySelectionFromParams(params: {get(name: string): string | null}): ElectionSelection {
+  const selection = selectionFromParams(params);
+  if (![1, 2].includes(selection.turn) || !/^\d{1,4}$/.test(selection.office) || !/^(br|[a-z]{2})$/.test(selection.state) || selection.municipality && !/^\d{5}$/.test(selection.municipality) || selection.zone && !/^\d{4}$/.test(selection.zone) || selection.zone && !selection.municipality || selection.state === "br" && (selection.office !== "1" || selection.municipality || selection.zone)) throw new Error("Selecione um recorte eleitoral válido.");
+  return selection;
+}
 export function findElection(elections: OfficialElection[], selection: ElectionSelection): OfficialElection {
   const election = elections.find(item => item.turn === selection.turn && item.offices.some(office => office.code === selection.office));
   if (!election) throw new Error("Este cargo ou turno ainda não está disponível na configuração do TSE.");

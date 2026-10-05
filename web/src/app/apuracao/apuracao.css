@@ -537,3 +537,39 @@
 @media (max-width: 620px) {
   .live-election .live-search input, .live-election .live-picker__search input { font-size: 16px; }
 }
+.live-history-panel { margin-top: 30px; padding: clamp(22px, 4vw, 42px); border: 1px solid var(--live-line); border-radius: 14px; background: var(--live-panel); }
+.live-history-panel > h1 { max-width: 900px; margin: 11px 0 9px; font-size: clamp(25px, 4vw, 38px); line-height: 1.15; letter-spacing: -.035em; }
+.live-history-caption { color: var(--muted); font-size: 12px; line-height: 1.7; margin-bottom: 23px; }
+.live-history-list, .live-history-candidates ol { list-style: none; margin: 0; padding: 0; }
+.live-history-list > li { border-top: 1px solid var(--live-line); }
+.live-history-list > li > a { display: grid; grid-template-columns: minmax(0,1fr) minmax(130px,auto) auto; align-items: center; gap: 20px; min-height: 78px; padding: 13px 4px; color: var(--fg-1); text-decoration: none; }
+.live-history-list > li > a:hover strong, .live-history-list > li > a:hover > span:last-child { color: var(--live-accent); }
+.live-history-list > li > a strong, .live-history-list > li > a small { display: block; }
+.live-history-list > li > a strong { font-size: 13px; font-weight: 600; }
+.live-history-list > li > a small, .live-history-list__stats { margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.live-history-list__stats { margin-top: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.live-history-list > li > a > span:last-child { color: var(--muted); font-size: 24px; }
+.live-history-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin: 25px 0 32px; overflow: hidden; border: 1px solid var(--live-line); border-radius: 10px; background: var(--live-line); }
+.live-history-metrics > div { min-width: 0; padding: 17px; background: var(--live-panel); }
+.live-history-metrics strong, .live-history-metrics span { display: block; }
+.live-history-metrics strong { color: var(--fg-1); font-size: clamp(14px, 2vw, 20px); font-variant-numeric: tabular-nums; }
+.live-history-metrics span { margin-top: 6px; color: var(--muted); font-size: 10px; }
+.live-history-candidates { margin-top: 20px; }
+.live-history-candidates > .live-section-heading { margin-bottom: 9px; }
+.live-history-candidates li { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 62px; padding: 10px 4px; border-top: 1px solid var(--live-line); }
+.live-history-rank { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.live-history-candidates li strong, .live-history-candidates li small { display: block; }
+.live-history-candidates li strong { color: var(--fg-1); font-size: 12px; font-weight: 600; }
+.live-history-candidates li small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.live-history-votes { text-align: right; font-variant-numeric: tabular-nums; }
+.live-history-actions { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 25px; }
+@media (max-width: 620px) {
+  .live-history-panel { margin-top: 18px; padding: 20px 15px; }
+  .live-history-list > li > a { grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
+  .live-history-list__stats { grid-column: 1 / 2; grid-row: 2; text-align: left; }
+  .live-history-list > li > a > span:first-child { grid-column: 1; grid-row: 1; }
+  .live-history-list > li > a > span:last-child { grid-column: 2; grid-row: 1 / span 2; }
+  .live-history-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .live-history-candidates li { grid-template-columns: 22px minmax(0,1fr) auto; gap: 8px; }
+  .live-history-candidates .live-section-heading { flex-direction: column; gap: 4px; }
+}

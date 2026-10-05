@@ -4,7 +4,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
-import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
+import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, History, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
 import {BrandMark} from "@/components/brand/brand-lockup";
 import {ThemeToggle} from "@/components/shell/theme-toggle";
 import {displayName, ELECTION_YEAR, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
@@ -257,6 +257,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
         <span className={`live-badge${started ? " is-counting" : ""}`}><span/> {started && !unhealthy ? status === "final" ? "RESULTADO FINAL" : status === "counted" ? "SEÇÕES TOTALIZADAS" : "EM APURAÇÃO" : unhealthy ? "RECONECTANDO" : "ELEIÇÕES 2026"}</span>
         <div className="live-header__actions">
           {!tv && <><Link href="/" className="live-button live-button--portal"><ArrowLeft size={16}/>Portal</Link><ThemeToggle/></>}
+          {!tv && <Link href={`/apuracao/historico?${selectionParams(selection)}`} className="live-button" aria-label="Consultar versões salvas desta apuração"><History size={16}/><span>Histórico</span></Link>}
           <button type="button" className="live-button live-button--share" onClick={share} aria-label="Compartilhar esta apuração">{copied ? <Check size={17}/> : <Share2 size={17}/>}<span>{copied ? "Link copiado" : "Compartilhar"}</span></button>
           {tv && <button type="button" className="live-button" aria-label="Filtros da apuração" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><SlidersHorizontal size={17}/><span>Filtros</span></button>}
           <button type="button" className="live-button live-button--primary" aria-label={tv ? "Sair do modo TV" : "Modo TV"} onClick={toggleTv}><Monitor size={18}/><span>{tv ? "Sair do modo TV" : "Modo TV"}</span></button>
