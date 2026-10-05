@@ -24,12 +24,66 @@ function selectionParams(selection: ElectionSelection) {
   return params;
 }
 async function json<T>(url: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(url, {signal, cache: "no-store"}), text = await response.text();
-  let body: {error?: string} & T;
-  try { body = JSON.parse(text); } catch { throw new Error("Não foi possível consultar os dados agora. Tentaremos novamente automaticamente."); }
-  if (!response.ok || body.error) throw new Error(body.error || "A fonte está temporariamente indisponível. Tentaremos novamente automaticamente.");
-  return body;
+  const request = new AbortController(), abort = () => request.abort(), timeout = window.setTimeout(abort, 15000);
+  signal.addEventListener("abort", abort, {once: true});
+  try {
+    const response = await fetch(url, {signal: request.signal, cache: "no-store"}), text = await response.text();
+    let body: {error?: string} & T;
+    try { body = JSON.parse(text); } catch { throw new Error("Não foi possível consultar os dados agora. Tentaremos novamente automaticamente."); }
+    if (!response.ok || body.error) throw new Error(body.error || "A fonte está temporariamente indisponível. Tentaremos novamente automaticamente.");
+    return body;
+  } catch (failure) {
+    if (request.signal.aborted && !signal.aborted) throw new Error("A consulta demorou além do esperado. Exibindo os últimos dados salvos e tentando novamente.");
+    throw failure;
+  } finally {window.clearTimeout(timeout); signal.removeEventListener("abort", abort);}
 }
+
+const LOCAL_CACHE_PREFIX = "politica007:live-election:v1:";
+const CACHE_FALLBACK_MESSAGE = "A fonte oficial está indisponível. Exibindo os últimos dados salvos neste dispositivo; novas tentativas continuarão automaticamente.";
+function localCacheKey(kind: "config" | "result" | "overview", parts: (string | number)[]) {
+  return `${LOCAL_CACHE_PREFIX}${kind}:${parts.map(part => encodeURIComponent(String(part))).join(":")}`;
+}
+function validConfig(value: unknown): value is PublicConfig {
+  return Boolean(value && typeof value === "object" && Array.isArray((value as PublicConfig).elections) && Array.isArray((value as PublicConfig).states) && Array.isArray((value as PublicConfig).municipalities) && Array.isArray((value as PublicConfig).exteriorMunicipalities));
+}
+function validResult(value: unknown): value is LiveResult {
+  return Boolean(value && typeof value === "object" && typeof (value as LiveResult).checkedAt === "string" && Array.isArray((value as LiveResult).candidates) && (value as LiveResult).selection);
+}
+function validOverview(value: unknown): value is LiveOverview {
+  return Boolean(value && typeof value === "object" && typeof (value as LiveOverview).checkedAt === "string" && Array.isArray((value as LiveOverview).territories));
+}
+function readLocalCache<T>(key: string, valid: (value: unknown) => value is T): T | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const record = JSON.parse(raw) as {value?: unknown};
+    if (!valid(record.value)) {window.localStorage.removeItem(key); return null;}
+    return record.value;
+  } catch {return null;}
+}
+function trimLocalCache(kind: string, limit: number) {
+  try {
+    const prefix = `${LOCAL_CACHE_PREFIX}${kind}:`, entries: {key: string; savedAt: number}[] = [];
+    for (let index = 0; index < window.localStorage.length; index++) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(prefix)) continue;
+      let savedAt = 0;
+      try {savedAt = Number((JSON.parse(window.localStorage.getItem(key) || "{}") as {savedAt?: number}).savedAt) || 0;} catch {}
+      entries.push({key, savedAt});
+    }
+    entries.sort((a, b) => a.savedAt - b.savedAt);
+    for (const entry of entries.slice(0, Math.max(0, entries.length - limit))) window.localStorage.removeItem(entry.key);
+  } catch {}
+}
+function writeLocalCache<T>(kind: "config" | "result" | "overview", key: string, value: T) {
+  try {window.localStorage.setItem(key, JSON.stringify({savedAt: Date.now(), value}));}
+  catch {
+    trimLocalCache(kind, 3);
+    try {window.localStorage.setItem(key, JSON.stringify({savedAt: Date.now(), value}));} catch {return;}
+  }
+  trimLocalCache(kind, kind === "config" ? 6 : 8);
+}
+function stale<T extends {stale: boolean}>(value: T): T {return {...value, stale: true};}
 
 export function LiveElectionDashboard({initialSelection, initialConfig, initialResult, initialOverview, initialError, initialTv, initialQuery, initialParty, initialCountry, initialNow}: {
   initialSelection: ElectionSelection; initialConfig: PublicConfig | null; initialResult: LiveResult | null;
@@ -38,6 +92,9 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   const [selection, setSelection] = useState(initialSelection), [config, setConfig] = useState(initialConfig);
   const [data, setData] = useState(initialResult), [overview, setOverview] = useState(initialOverview);
   const [error, setError] = useState(initialError), [overviewError, setOverviewError] = useState<string | null>(null);
+  const dataRef = useRef(data), overviewRef = useRef(overview);
+  useEffect(() => {dataRef.current = data;}, [data]);
+  useEffect(() => {overviewRef.current = overview;}, [overview]);
   const [configError, setConfigError] = useState<string | null>(null), [loading, setLoading] = useState(!initialResult), [refreshKey, setRefreshKey] = useState(0);
   const [tv, setTv] = useState(initialTv), [filtersOpen, setFiltersOpen] = useState(false), [now, setNow] = useState(initialNow), [nextPoll, setNextPoll] = useState(initialNow + LIVE_POLL_SECONDS * 1000);
   const [query, setQuery] = useState(initialQuery), [party, setParty] = useState(initialParty), [sort, setSort] = useState("votes"), [visibleCount, setVisibleCount] = useState(30);
@@ -46,6 +103,9 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   const [fullscreen, setFullscreen] = useState(false);
   const [mapCountry, setMapCountry] = useState(initialCountry);
   const [configIdentity, setConfigIdentity] = useState(`${initialSelection.turn}:${initialSelection.state}`);
+  const configRef = useRef(config), configIdentityRef = useRef(configIdentity);
+  useEffect(() => {configRef.current = config;}, [config]);
+  useEffect(() => {configIdentityRef.current = configIdentity;}, [configIdentity]);
   const [configTick, setConfigTick] = useState(0);
   const configRequestKey = useRef(initialConfig ? `${initialSelection.turn}:${initialSelection.state}:0:0` : "");
   const mounted = useRef(false);
@@ -96,8 +156,14 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     if (configRequestKey.current === key) return;
     const controller = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
+    const cacheKey = localCacheKey("config", [selection.turn, selection.state]);
+    const cached = readLocalCache(cacheKey, validConfig);
+    if (cached && (!configRef.current || configIdentityRef.current !== id)) {
+      const fallback = stale(cached); configRef.current = fallback; configIdentityRef.current = id;
+      setConfigIdentity(id); setConfig(fallback); setConfigError(CACHE_FALLBACK_MESSAGE);
+    }
     json<PublicConfig>(`/api/apuracao/config?turno=${selection.turn}&uf=${selection.state}`, controller.signal).then(value => {
-      configRequestKey.current = key; setConfigIdentity(id); setConfig(value); setConfigError(null);
+      configRequestKey.current = key; writeLocalCache("config", cacheKey, value); configRef.current = value; configIdentityRef.current = id; setConfigIdentity(id); setConfig(value); setConfigError(null);
     }).catch(failure => {if (!controller.signal.aborted) {setConfigError(failure.message); retry = setTimeout(() => setRefreshKey(value => value + 1), 60000);}});
     return () => {controller.abort(); clearTimeout(retry);};
   }, [selection.turn, selection.state, refreshKey, configTick]);
@@ -111,6 +177,16 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined, running = false;
     const params = selectionParams(selection).toString();
+    const resultKey = localCacheKey("result", [selection.turn, selection.office, selection.state, selection.municipality, selection.zone]);
+    const overviewKey = localCacheKey("overview", [selection.turn, selection.state]);
+    const cachedResult = readLocalCache(resultKey, validResult);
+    const cachedOverview = readLocalCache(overviewKey, validOverview);
+    if (cachedResult && sameSelection(cachedResult.selection, selection) && (!dataRef.current || !sameSelection(dataRef.current.selection, selection))) {
+      setData(stale(cachedResult)); setError(CACHE_FALLBACK_MESSAGE); setLoading(false);
+    }
+    if (cachedOverview && !overviewRef.current) {
+      setOverview(stale(cachedOverview)); setOverviewError(CACHE_FALLBACK_MESSAGE);
+    }
     async function refresh() {
       if (controller.signal.aborted || running) return;
       if (document.hidden && !tv) {timer = setTimeout(refresh, LIVE_POLL_SECONDS * 1000); return;}
@@ -120,8 +196,8 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
         json<LiveOverview>(`/api/apuracao/overview?${params}`, controller.signal),
       ]);
       if (!controller.signal.aborted) {
-        if (responses[0].status === "fulfilled") {setData(responses[0].value); setError(null);} else setError(responses[0].reason.message);
-        if (responses[1].status === "fulfilled") {setOverview(responses[1].value); setOverviewError(null);} else {setOverview(current => current ? {...current, stale: true} : null); setOverviewError(responses[1].reason.message);}
+        if (responses[0].status === "fulfilled") {writeLocalCache("result", resultKey, responses[0].value); setData(responses[0].value); setError(null);} else setError(responses[0].reason.message);
+        if (responses[1].status === "fulfilled") {writeLocalCache("overview", overviewKey, responses[1].value); setOverview(responses[1].value); setOverviewError(null);} else {setOverview(current => current ? stale(current) : null); setOverviewError(responses[1].reason.message);}
         setLoading(false); setNextPoll(Date.now() + LIVE_POLL_SECONDS * 1000);
         timer = setTimeout(refresh, LIVE_POLL_SECONDS * 1000);
       }
