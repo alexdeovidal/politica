@@ -3,6 +3,7 @@ import {ArrowLeft,ArrowUpRight,ExternalLink,Newspaper} from "lucide-react";
 import {notFound} from "next/navigation";
 import {PageHeader} from "@/components/shell/shell-context";
 import {NewsShareActions} from "@/components/news-share-actions";
+import {NewsStoryCover,OPENING_NEWS_SLUG} from "@/components/news-story-cover";
 import {getStoredNewsArticle} from "@/lib/platform/news";
 import {shareMetadata} from "@/lib/platform/share";
 
@@ -17,6 +18,7 @@ export default async function NewsArticlePage({params}:Params){
     <Link className="news-back" href="/news"><ArrowLeft size={15}/> Voltar às notícias</Link>
     <article className="news-article">
       <div className="news-article__eyebrow"><Newspaper size={15}/><span>{article.category}</span><span>·</span><time dateTime={article.publishedAt}>{published}</time></div>
+      {article.slug===OPENING_NEWS_SLUG&&<NewsStoryCover/>}
       <h1>{article.title}</h1>
       <p className="news-article__summary">{article.summary}</p>
       <div className="news-article__byline"><span>Matéria automatizada do Politica007</span><Link href={`/politico/${article.personId}`}>Ver ficha de {article.personName}<ArrowUpRight size={14}/></Link></div>
