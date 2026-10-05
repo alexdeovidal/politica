@@ -32,10 +32,39 @@ import { PageHeader } from "@/components/shell/shell-context";
 import { YearSelect } from "@/components/ui/year-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
+import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
+import { getCompletedLiveResult } from "@/lib/live-election/service";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
 const getCachedPersonFinance = cache((personId: number, year?: number) => getPersonFinance(personId, year));
+
+function liveOfficeCode(value: string | null) {
+  const office = normalizeLiveSearch(value || "");
+  if (office.includes("presidente")) return "1";
+  if (office.includes("governador")) return "3";
+  if (office.includes("senador")) return "5";
+  if (office.includes("deputado federal")) return "6";
+  if (office.includes("deputado distrital")) return "8";
+  if (office.includes("deputado estadual")) return "7";
+  return null;
+}
+
+function completedCandidate(result: LiveResult | null, candidacy: ReturnType<typeof getPersonCandidacies>[number]) {
+  if (!result) return null;
+  if (candidacy.tseCandidacyId) {
+    const exact = result.candidates.find(candidate => candidate.id === candidacy.tseCandidacyId);
+    if (exact) return exact;
+  }
+  if (!candidacy.candidateNumber) return null;
+  const byNumberAndParty = result.candidates.filter(candidate =>
+    candidate.number === candidacy.candidateNumber &&
+    (!candidacy.partyAbbr || normalizeLiveSearch(candidate.party) === normalizeLiveSearch(candidacy.partyAbbr)),
+  );
+  if (byNumberAndParty.length === 1) return byNumberAndParty[0];
+  const names = [candidacy.ballotName, candidacy.fullName].filter((name): name is string => Boolean(name)).map(normalizeLiveSearch);
+  return byNumberAndParty.find(candidate => [candidate.name, candidate.legalName].some(name => names.includes(normalizeLiveSearch(name)))) || null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -304,6 +333,7 @@ async function CandidaciesSection({ personId }: { personId: number }) {
   if (candidacies.length === 0) return null;
   const campaignOrgs = getPersonCampaignOrgs(personId);
   const cnpjByYear = new Map(campaignOrgs.map((o) => [o.year, o.cnpj]));
+  const completedResults = new Map<string, LiveResult | null>();
 
   return (
     <Section id="candidaturas" title="candidaturas por eleição">
@@ -313,12 +343,23 @@ async function CandidaciesSection({ personId }: { personId: number }) {
           const toneColor =
             tone === "green" ? "text-elo-green" : tone === "red" ? "text-elo-red" : "text-[var(--muted)]";
           const cnpj = cnpjByYear.get(c.year);
+          const office = c.year === ELECTION_YEAR ? liveOfficeCode(c.office) : null;
+          const state = c.state?.toLowerCase() || "";
+          const selectionKey = office && state ? `${c.round ?? 1}:${office}:${state}` : "";
+          if (office && state && !completedResults.has(selectionKey)) {
+            const selection: ElectionSelection = {turn: c.round ?? 1, office, state, municipality: "", zone: ""};
+            completedResults.set(selectionKey, getCompletedLiveResult(selection));
+          }
+          const finalCandidate = selectionKey ? completedCandidate(completedResults.get(selectionKey) || null, c) : null;
+          const finalVoteLabel = finalCandidate
+            ? `${finalCandidate.votes?.toLocaleString("pt-BR") ?? "Resultado final"}${finalCandidate.votes == null ? "" : " votos"} · resultado final`
+            : null;
           return (
             <SourceZone key={c.id} provenance={c.provenance}>
               <div className="card flex flex-col gap-1.5" style={{ padding: "12px 14px" }}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[13px] text-[var(--fg-2)]">{c.year}</span>
-                  <span className={`font-mono text-[10.5px] ${toneColor}`}>{c.result ?? "sem resultado"}</span>
+                  {c.result ? <span className={`font-mono text-[10.5px] ${toneColor}`}>{c.result}</span> : finalVoteLabel ? <Link href="#votos-por-local" className="font-mono text-[10px] text-[var(--accent-2)] hover:underline">{finalVoteLabel}</Link> : <span className={`font-mono text-[10.5px] ${toneColor}`}>sem resultado</span>}
                 </div>
                 <div className="truncate text-[13.5px]">{c.office ?? "cargo não informado"}</div>
                 <div className="truncate font-mono text-[10px] text-[var(--muted-2)]">

@@ -217,7 +217,7 @@ export async function getLiveResult(selection: ElectionSelection): Promise<LiveR
   }
 }
 
-function getCompletedLiveResult(selection: ElectionSelection): LiveResult | null {
+export function getCompletedLiveResult(selection: ElectionSelection): LiveResult | null {
   const row = storage().prepare(`SELECT payload,source_checked_at AS sourceCheckedAt,completed_at AS completedAt
     FROM live_result_snapshot WHERE election_year=? AND turn=? AND office=? AND state=? AND municipality=? AND zone=?
       AND completed_at IS NOT NULL AND stale=0 ORDER BY completed_at DESC,id DESC LIMIT 1`).get(
