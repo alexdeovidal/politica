@@ -177,7 +177,7 @@ export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
 }
 
 export function getStoredNewsArticle(day:string,slug:string):DailyNewsArticle|null{
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p\d+(-[a-z-]+)?$/.test(slug))return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p\d+(-[a-z0-9-]+)?$/.test(slug))return null;
   const row=platformStore().prepare("SELECT payload FROM daily_news WHERE day=?").get(day) as {payload:string}|undefined;
   if(!row)return null;try{return (JSON.parse(row.payload) as DailyNewsArticle[]).find(x=>x.slug===slug)||null;}catch{return null;}
 }
@@ -191,7 +191,7 @@ export function getStoredNewsArticle(day:string,slug:string):DailyNewsArticle|nu
 export function getNewsArticle(day:string,slug:string):DailyNewsArticle|null{
   const stored=getStoredNewsArticle(day,slug);
   if(stored)return stored;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p(\d+)-([a-z-]+)$/.test(slug))return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p(\d+)-([a-z0-9-]+)$/.test(slug))return null;
   if(day===openingEditionDay&&slug===openingArticleSlug)return openingEditionArticle(new Date(`${day}T00:05:00-03:00`).toISOString());
   const personId=Number(/^p(\d+)-/.exec(slug)?.[1]);
   if(!Number.isSafeInteger(personId)||personId<1)return null;

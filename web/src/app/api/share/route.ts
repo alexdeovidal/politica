@@ -66,7 +66,7 @@ export function GET(request:Request){
   const year=Number.isInteger(value)&&value>=1994&&value<=2100?value:undefined;
   let title="Dados públicos para consulta cidadã",detail="Candidatos, pessoas físicas, empresas e redes de relações",source="TSE · fontes públicas identificadas";
   const person=/^\/politico\/([0-9]+)$/.exec(path),company=/^\/cnpj\/([0-9]{14})$/.exec(path);
-  const news=/^\/news\/(\d{4}-\d{2}-\d{2})\/(p\d+(?:-[a-z-]+)?)$/.exec(path);
+  const news=/^\/news\/(\d{4}-\d{2}-\d{2})\/(p\d+(?:-[a-z0-9-]+)?)$/.exec(path);
   if(news){
     const article=getNewsArticle(news[1],news[2]);
     if(article)return newsImage(article);
