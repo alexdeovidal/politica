@@ -228,7 +228,7 @@ async function sectionVote(
   }
 }
 
-export async function getLiveSectionVotePage(selection: ElectionSelection, candidateId: string, page: number): Promise<LiveSectionVotePage> {
+export async function getLiveSectionVotePage(selection: ElectionSelection, candidateId: string, page: number, sectionQuery = ""): Promise<LiveSectionVotePage> {
   if (selection.state === "br" || !selection.municipality || !selection.zone) throw new Error("Escolha estado, município e zona eleitoral para ver os votos por seção.");
   cleanupLiveSectionCache();
   const config = await getLiveConfig(selection.turn), election = findElection(config.elections, selection);
@@ -243,7 +243,12 @@ export async function getLiveSectionVotePage(selection: ElectionSelection, candi
     if (root.f !== "o" || !Array.isArray(root.abr)) throw new Error("Configuração de seções inválida.");
     return value;
   });
-  const sections = parseSections(configFile.data, selection.state, selection.municipality, selection.zone);
+  let sections = parseSections(configFile.data, selection.state, selection.municipality, selection.zone);
+  const normalizedQuery = sectionQuery.replace(/\D/g, "").slice(-4);
+  if (normalizedQuery) {
+    const target = formatSection(normalizedQuery);
+    sections = sections.filter(section => section.number === target || section.merged.includes(target));
+  }
   if (!sections.length) return {electionYear: Number(election.cycle.slice(3)), candidate: {id: candidate.id, name: candidate.name, number: candidate.number, party: candidate.party, partyNumber: candidate.partyNumber}, selection, page, pageSize: SECTION_PAGE_SIZE, total: 0, totalPages: 0, checkedAt: configFile.checkedAt, refreshSeconds: SECTION_REFRESH_MS / 1000, locationSource: LOCATION_SOURCE, rows: []};
   const totalPages = Math.ceil(sections.length / SECTION_PAGE_SIZE), safePage = Math.max(1, Math.min(totalPages, page));
   const selectedSections = sections.slice((safePage - 1) * SECTION_PAGE_SIZE, safePage * SECTION_PAGE_SIZE);

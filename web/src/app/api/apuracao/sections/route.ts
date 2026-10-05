@@ -11,9 +11,10 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const candidateId = params.get("candidato") || "";
   const page = Number(params.get("pagina") || 1);
-  if (!/^[\d-]{1,40}$/.test(candidateId) || !Number.isSafeInteger(page) || page < 1 || page > 10000) return Response.json({error: "Consulta de seção inválida."}, {status: 400, headers: {"Cache-Control": "no-store"}});
+  const sectionQuery = (params.get("q") || "").trim();
+  if (!/^[\d-]{1,40}$/.test(candidateId) || !Number.isSafeInteger(page) || page < 1 || page > 10000 || sectionQuery.length > 20 || (sectionQuery && !/^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(sectionQuery))) return Response.json({error: "Informe o número da seção, por exemplo 593."}, {status: 400, headers: {"Cache-Control": "no-store"}});
   try {
-    const payload = await getLiveSectionVotePage(selectionFromParams(params), candidateId, page);
+    const payload = await getLiveSectionVotePage(selectionFromParams(params), candidateId, page, sectionQuery);
     return Response.json(payload, {headers: {"Cache-Control": "no-store"}});
   } catch (error) {
     const body = unavailableResultMessage(error);
