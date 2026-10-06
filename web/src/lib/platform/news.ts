@@ -1,5 +1,6 @@
 import {db,hasTable} from "@/lib/db";
 import {platformStore} from "@/lib/platform/store";
+import {cache} from "react";
 
 export type NewsSource={label:string;url:string};
 export type NewsHighlight={label:string;value:string;detail:string};
@@ -9,6 +10,7 @@ export type DailyNewsArticle={
   publishedAt:string;body:string[];highlights:NewsHighlight[];sources:NewsSource[];marketComparisons?:NewsMarketComparison[];
 };
 export type DailyNewsFeed={day:string;generatedAt:string|null;trackedProfiles:number;articles:DailyNewsArticle[]};
+export type DailyNewsArchiveEntry={day:string;generatedAt:string;articleCount:number};
 
 const openingEditionDay="2026-10-04";
 const openingArticleSlug="p28350-adesivos-estreia";
@@ -213,14 +215,19 @@ function readStored(row:{day:string;payload:string;generated_at:string;tracked_p
 
 export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
   const store=platformStore();
-  const stored=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=?) AS tracked_profiles FROM daily_news WHERE day=?").get(daysBefore(day,29),day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
+  const stored=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=? AND day<=?) AS tracked_profiles FROM daily_news WHERE day=?").get(daysBefore(day,29),day,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
   if(stored)return readStored(stored)!;
   const since=daysBefore(day,29);
   const popular=store.prepare("SELECT person_id AS personId,sum(views) AS views FROM candidate_profile_access_daily WHERE day>=? AND day<=? GROUP BY person_id ORDER BY views DESC,person_id LIMIT 40").all(since,day) as PopularProfile[];
   const trackedProfiles=popular.length;
   const generatedAt=new Date().toISOString();
   const openingEdition=day===openingEditionDay?[openingEditionArticle(generatedAt)]:[];
-  if(!popular.length&&!openingEdition.length)return {day,generatedAt:null,trackedProfiles:0,articles:[]};
+  if(!popular.length&&!openingEdition.length){
+    if(day===saoPauloDay())return {day,generatedAt:null,trackedProfiles:0,articles:[]};
+    store.prepare("INSERT OR IGNORE INTO daily_news(day,payload,generated_at) VALUES(?,?,?)").run(day,"[]",generatedAt);
+    const empty=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=? AND day<=?) AS tracked_profiles FROM daily_news WHERE day=?").get(since,day,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
+    return readStored(empty)!;
+  }
   const candidates=popular.map(x=>getCandidateFacts(x.personId,x.views)).filter((x):x is StoryFacts=>x!==null);
   const storyLists=candidates.map(x=>topicStories(x,generatedAt));const articles:DailyNewsArticle[]=[...openingEdition];
   for(let topic=0;articles.length<5;topic++){
@@ -232,15 +239,30 @@ export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
   const encoded=JSON.stringify(articles);
   const insert=store.prepare("INSERT OR IGNORE INTO daily_news(day,payload,generated_at) VALUES(?,?,?)");
   store.transaction(()=>insert.run(day,encoded,generatedAt))();
-  const final=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=?) AS tracked_profiles FROM daily_news WHERE day=?").get(since,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
+  const final=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=? AND day<=?) AS tracked_profiles FROM daily_news WHERE day=?").get(since,day,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
   return readStored(final)!;
 }
 
-export function getStoredNewsArticle(day:string,slug:string):DailyNewsArticle|null{
+export function getDailyNewsEdition(day:string):DailyNewsFeed|null{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;
+  const timestamp=Date.parse(`${day}T12:00:00Z`);
+  if(!Number.isFinite(timestamp)||new Date(timestamp).toISOString().slice(0,10)!==day||day>saoPauloDay())return null;
+  return getDailyNews(day);
+}
+
+export function getPreviousNewsEditionDay(day=saoPauloDay()):string{return daysBefore(day,1);}
+
+export function getDailyNewsArchive(before=saoPauloDay(),limit=14):DailyNewsArchiveEntry[]{
+  const boundedLimit=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,60)):14;
+  const rows=platformStore().prepare("SELECT day,payload,generated_at FROM daily_news WHERE day<? ORDER BY day DESC LIMIT ?").all(before,boundedLimit) as Array<{day:string;payload:string;generated_at:string}>;
+  return rows.flatMap(row=>{try{return [{day:row.day,generatedAt:row.generated_at,articleCount:(JSON.parse(row.payload) as DailyNewsArticle[]).length}];}catch{return [];}});
+}
+
+export const getStoredNewsArticle=cache((day:string,slug:string):DailyNewsArticle|null=>{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p\d+(-[a-z0-9-]+)?$/.test(slug))return null;
   const row=platformStore().prepare("SELECT payload FROM daily_news WHERE day=?").get(day) as {payload:string}|undefined;
   if(!row)return null;try{const article=(JSON.parse(row.payload) as DailyNewsArticle[]).find(x=>x.slug===slug);return article?refreshStoredArticle(article):null;}catch{return null;}
-}
+});
 
 /**
  * Resolve a saved story first, then rebuild it from the public source tables.
@@ -248,10 +270,12 @@ export function getStoredNewsArticle(day:string,slug:string):DailyNewsArticle|nu
  * daily_news lives in the lightweight platform store. A missing replica-local
  * copy must not turn a link that was just shown in /news into a 404.
  */
-export function getNewsArticle(day:string,slug:string):DailyNewsArticle|null{
+export const getNewsArticle=cache((day:string,slug:string):DailyNewsArticle|null=>{
   const stored=getStoredNewsArticle(day,slug);
   if(stored)return stored;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p(\d+)-([a-z0-9-]+)$/.test(slug))return null;
+  const dayTime=Date.parse(`${day}T12:00:00Z`);
+  if(!Number.isFinite(dayTime)||new Date(dayTime).toISOString().slice(0,10)!==day)return null;
   if(day===openingEditionDay&&slug===openingArticleSlug)return openingEditionArticle(new Date(`${day}T00:05:00-03:00`).toISOString());
   const personId=Number(/^p(\d+)-/.exec(slug)?.[1]);
   if(!Number.isSafeInteger(personId)||personId<1)return null;
@@ -259,6 +283,6 @@ export function getNewsArticle(day:string,slug:string):DailyNewsArticle|null{
   if(!facts)return null;
   const publishedAt=new Date(`${day}T00:05:00-03:00`).toISOString();
   return topicStories(facts,publishedAt).find(article=>article.slug===slug)||null;
-}
+});
 
 function daysBefore(day:string,days:number):string{const d=new Date(`${day}T12:00:00Z`);d.setUTCDate(d.getUTCDate()-days);return d.toISOString().slice(0,10);}

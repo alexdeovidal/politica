@@ -3,7 +3,8 @@ import {ArrowLeft,ArrowUpRight,ExternalLink,Newspaper,Store} from "lucide-react"
 import {notFound} from "next/navigation";
 import {PageHeader} from "@/components/shell/shell-context";
 import {NewsShareActions} from "@/components/news-share-actions";
-import {NewsStoryCover} from "@/components/news-story-cover";
+import {NewsArticleImage} from "@/components/news-article-image";
+import {NewsStoryCover,OPENING_NEWS_SLUG} from "@/components/news-story-cover";
 import {getNewsArticle} from "@/lib/platform/news";
 import {shareMetadata} from "@/lib/platform/share";
 
@@ -15,10 +16,11 @@ export default async function NewsArticlePage({params}:Params){
   const published=new Date(article.publishedAt).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"long",timeStyle:"short"});
   return <main className="news-article-page">
     <PageHeader group="Notícias" current={article.personName}/>
-    <Link className="news-back" href="/news"><ArrowLeft size={15}/> Voltar às notícias</Link>
+    <Link className="news-back" href={`/news/${day}`}><ArrowLeft size={15}/> Voltar à edição de {new Date(`${day}T12:00:00-03:00`).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",day:"numeric",month:"long"})}</Link>
     <article className="news-article">
       <div className="news-article__eyebrow"><Newspaper size={15}/><span>{article.category}</span><span>·</span><time dateTime={article.publishedAt}>{published}</time></div>
-      <NewsStoryCover article={article}/>
+      {article.slug===OPENING_NEWS_SLUG&&<NewsStoryCover article={article}/>}
+      {article.slug!==OPENING_NEWS_SLUG&&<NewsArticleImage day={day} article={article} priority/>}
       <h1>{article.title}</h1>
       <p className="news-article__summary">{article.summary}</p>
       <div className="news-article__byline"><span>Matéria automatizada do Politica007</span><Link href={`/politico/${article.personId}`}>Ver ficha de {article.personName}<ArrowUpRight size={14}/></Link></div>
@@ -27,7 +29,7 @@ export default async function NewsArticlePage({params}:Params){
       <div className="news-article__facts"><h2>Dados em destaque</h2>{article.highlights.map((fact,index)=><div className="news-article__fact" key={`${fact.label}-${index}`}><span>{fact.label}</span><strong>{fact.value}</strong><small>{fact.detail}</small></div>)}</div>
       <section className="news-article__sources"><h2>Confira nas fontes oficiais</h2>{article.sources.map((item,index)=><a href={item.url} key={`${item.url}-${index}`} target="_blank" rel="noopener noreferrer"><span>{item.label}</span><ExternalLink size={15}/></a>)}</section>
       <div className="news-article__notice"><strong>Leia o contexto antes de concluir</strong><p>Esta matéria organiza registros públicos para facilitar a consulta. A existência de processo, diferença estatística ou despesa atípica não prova crime ou irregularidade. Consulte os documentos oficiais e o andamento atualizado.</p></div>
-      <section className="news-article__share"><div><span>ESPALHE A INFORMAÇÃO COM A FONTE</span><h2>Compartilhe esta matéria</h2><p>O link abre esta notícia no Politica007 e mantém as fontes oficiais ao alcance.</p></div><NewsShareActions title={article.title}/></section>
+      <section className="news-article__share"><div><span>ESPALHE A INFORMAÇÃO COM A FONTE</span><h2>Compartilhe esta matéria</h2><p>O link abre esta notícia no Politica007 e mantém as fontes oficiais ao alcance.</p></div><NewsShareActions title={article.title} url={`https://politica007.com.br/news/${day}/${slug}`}/></section>
     </article>
   </main>;
 }

@@ -28,7 +28,7 @@ function newsImage(article:DailyNewsArticle):ImageResponse{
         h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,paddingTop:15,borderTop:"1px solid rgba(209,232,235,0.35)"}},
           h("span",{style:{display:"flex",fontSize:15,color:"#e5eeee"}},"Registros declarados · não comprovam irregularidade"),
           h("span",{style:{display:"flex",fontSize:19,fontWeight:650,letterSpacing:1.2,color:"#9bd7d8"}},"POLITICA007.COM.BR")))),
-    {width:1200,height:630});
+    {width:1200,height:630,headers:{"Cache-Control":"public, max-age=300, s-maxage=86400, stale-while-revalidate=604800"}});
   }
 
   const fact=article.highlights[0];
@@ -56,7 +56,7 @@ function newsImage(article:DailyNewsArticle):ImageResponse{
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,paddingTop:15,borderTop:"1px solid rgba(209,232,235,.35)"}},
         h("span",{style:{display:"flex",fontSize:15,color:"#e5eeee"}},"Dados públicos · confira o contexto e as fontes na matéria"),
         h("span",{style:{display:"flex",fontSize:19,fontWeight:650,letterSpacing:1.2,color:"#9bd7d8"}},"POLITICA007.COM.BR")))),
-  {width:1200,height:630});
+  {width:1200,height:630,headers:{"Cache-Control":"public, max-age=300, s-maxage=86400, stale-while-revalidate=604800"}});
 }
 
 export function GET(request:Request){

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="background" x1="148" y1="72" x2="866" y2="965" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#214F65"/>
+      <stop offset="1" stop-color="#102F40"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="288" y1="247" x2="735" y2="773" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B465C"/>
+      <stop offset="1" stop-color="#173F55"/>
+    </linearGradient>
+    <filter id="shadow" x="238" y="173" width="548" height="680" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="17"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#background)"/>
+  <circle cx="512" cy="512" r="426" fill="url(#badge)" stroke="#53B4A6" stroke-opacity=".45" stroke-width="3"/>
+  <circle cx="512" cy="512" r="390" stroke="#DDECEF" stroke-opacity=".08" stroke-width="2"/>
+  <circle cx="512" cy="512" r="350" stroke="#DDECEF" stroke-opacity=".045" stroke-width="2"/>
+
+  <path d="M345 260h236l107 107v387H345V260Z" fill="#0B2635" fill-opacity=".48" filter="url(#shadow)"/>
+  <path d="M352 254h228l104 104v386H352V254Z" fill="#173F55" stroke="#F8FBFC" stroke-width="24" stroke-linejoin="round"/>
+  <path d="M580 254v104h104M421 443h196M421 520h196M421 597h123" stroke="#DDECEF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="611" cy="598" r="34" fill="#53B4A6" stroke="#173F55" stroke-width="14"/>
+  <circle cx="512" cy="512" r="426" stroke="#F8FBFC" stroke-opacity=".12" stroke-width="2"/>
+</svg>

@@ -3,9 +3,8 @@
 import {useState} from "react";
 import {Check,Copy,Share2} from "lucide-react";
 
-export function NewsShareActions({title}:{title:string}){
+export function NewsShareActions({title,url}:{title:string;url:string}){
   const [copied,setCopied]=useState(false);
-  const url=typeof window==="undefined"?"https://politica007.com.br":`${location.origin}${location.pathname}`;
   const text=`${title} · Política007`;
   const copy=async()=>{try{await navigator.clipboard.writeText(url);setCopied(true);window.setTimeout(()=>setCopied(false),2200);}catch{setCopied(false);}};
   const share=async()=>{try{if(navigator.share)await navigator.share({title,text,url});else await copy();}catch{}}
