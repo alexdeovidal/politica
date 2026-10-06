@@ -210,7 +210,13 @@ function refreshStoredArticle(article:DailyNewsArticle):DailyNewsArticle{
 }
 
 function readStored(row:{day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined):DailyNewsFeed|null{
-  if(!row)return null;try{return {day:row.day,generatedAt:row.generated_at,trackedProfiles:row.tracked_profiles,articles:(JSON.parse(row.payload) as DailyNewsArticle[]).map(refreshStoredArticle)};}catch{return null;}
+  if(!row)return null;
+  try{
+    const articles=(JSON.parse(row.payload) as DailyNewsArticle[]).map(refreshStoredArticle);
+    const payload=JSON.stringify(articles);
+    if(payload!==row.payload)platformStore().prepare("UPDATE daily_news SET payload=? WHERE day=? AND payload=?").run(payload,row.day,row.payload);
+    return {day:row.day,generatedAt:row.generated_at,trackedProfiles:row.tracked_profiles,articles};
+  }catch{return null;}
 }
 
 export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
@@ -261,7 +267,18 @@ export function getDailyNewsArchive(before=saoPauloDay(),limit=14):DailyNewsArch
 export const getStoredNewsArticle=cache((day:string,slug:string):DailyNewsArticle|null=>{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p\d+(-[a-z0-9-]+)?$/.test(slug))return null;
   const row=platformStore().prepare("SELECT payload FROM daily_news WHERE day=?").get(day) as {payload:string}|undefined;
-  if(!row)return null;try{const article=(JSON.parse(row.payload) as DailyNewsArticle[]).find(x=>x.slug===slug);return article?refreshStoredArticle(article):null;}catch{return null;}
+  if(!row)return null;
+  try{
+    const articles=JSON.parse(row.payload) as DailyNewsArticle[];
+    const index=articles.findIndex(article=>article.slug===slug);
+    if(index<0)return null;
+    const article=refreshStoredArticle(articles[index]);
+    if(JSON.stringify(article)!==JSON.stringify(articles[index])){
+      articles[index]=article;
+      platformStore().prepare("UPDATE daily_news SET payload=? WHERE day=? AND payload=?").run(JSON.stringify(articles),day,row.payload);
+    }
+    return article;
+  }catch{return null;}
 });
 
 /**
