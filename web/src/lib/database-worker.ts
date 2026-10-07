@@ -151,6 +151,7 @@ export async function runCachedDatabaseWorker<T>(
   scriptName: string,
   workerData: Record<string, unknown> = {},
   source = "local database worker snapshot",
+  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean } = {},
 ): Promise<T> {
   const fingerprint = databaseFingerprint();
   const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
@@ -163,7 +164,7 @@ export async function runCachedDatabaseWorker<T>(
   const flight = runDatabaseWorker<T>(scriptName, {
     databasePath: databasePath(),
     ...workerData,
-  }).then((value) => {
+  }, options).then((value) => {
     cacheResult(cacheKey, { fingerprint, value } satisfies WorkerSnapshot<T>, source);
     return value;
   }).finally(() => cachedWorkerFlights.delete(flightKey));

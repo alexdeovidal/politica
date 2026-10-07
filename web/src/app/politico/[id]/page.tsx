@@ -10,7 +10,7 @@ import { PersonCompanies } from "@/components/platform/relations";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  getPersonHeader, getPersonFinance, getPersonCandidacies, getPersonCampaignOrgs,
+  getPersonHeader, getPersonCandidacies, getPersonCampaignOrgs,
   getPersonSocialMedia, getPersonAssets, getPersonSignals, getCycleEdgeAmounts,
   getPoliticianDonationNetwork, getDiscourseSignals, getDiscourseCount, getExpenseYears,
   getPersonPhotoUrl, getPersonPhotoProvenance, getPersonEarmarks,
@@ -34,10 +34,20 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
 import { getCompletedLiveResult } from "@/lib/live-election/service";
+import { runCachedDatabaseWorker } from "@/lib/database-worker";
+import type { FinanceSummary } from "@/lib/queries";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
-const getCachedPersonFinance = cache((personId: number, year?: number) => getPersonFinance(personId, year));
+const getCachedPersonFinance = cache((personId: number, year?: number) =>
+  runCachedDatabaseWorker<FinanceSummary>(
+    `derived:person-finance:v1:${personId}:${year ?? 0}`,
+    "person-finance-worker.cjs",
+    { personId, year },
+    "local candidate finance summary",
+    { priority: 100 },
+  ),
+);
 
 async function yieldToStreamingRenderer() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -206,7 +216,7 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
 
 async function ProfileFinanceSummary({ personId, year }: { personId: number; year?: number }) {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  const finance = getCachedPersonFinance(personId, year);
+  const finance = await getCachedPersonFinance(personId, year);
   if (finance.donationsCount === 0 && finance.expensesCount === 0) return null;
   return (
     <div className="kpis kpis--profile mt-2">
@@ -487,7 +497,7 @@ async function FinanceSection({
   personId, year,
 }: { personId: number; year: number | undefined }) {
   await yieldToStreamingRenderer();
-  const finance = getCachedPersonFinance(personId, year);
+  const finance = await getCachedPersonFinance(personId, year);
   return (
     <div id="financas" data-toc-title="finanças">
       {finance.donationsCount > 0 ? (
