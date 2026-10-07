@@ -101,6 +101,9 @@ function queryOptions() {
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_filter_scope'",
   ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_filter_scope LIMIT 1").get());
   const optionsTable = scopeReady ? "election_vote_filter_scope" : catalogReady ? catalogTable : "election_vote_section";
+  const officeScopeReady = Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_office_scope'",
+  ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_office_scope LIMIT 1").get());
   const candidateYears = catalogReady ? [] : database.prepare(
     "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
   ).all().map(row => row.year);
@@ -115,15 +118,22 @@ function queryOptions() {
     ? database.prepare(`SELECT DISTINCT round FROM ${optionsTable} WHERE year = ? ORDER BY round`).all(year).map(row => row.round)
     : [];
   const officeCodes = year
-    ? database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
+    ? officeScopeReady
+      ? database.prepare(`
+          SELECT office_code AS code, max(office) AS label
+          FROM election_vote_office_scope
+          WHERE ${round ? "year = ? AND round = ?" : "year = ?"}
+          GROUP BY office_code ORDER BY office_code
+        `).all(...roundArgs)
+      : database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
     : [];
-  const labelForOffice = database.prepare(`
+  const labelForOffice = officeScopeReady ? null : database.prepare(`
     SELECT office AS label FROM election_vote_section
     WHERE ${roundWhere} AND office_code = ? AND office IS NOT NULL LIMIT 1
   `);
-  const offices = officeCodes.map(({ code }) => ({
+  const offices = officeCodes.map(({ code, label }) => ({
     code: String(code),
-    label: labelForOffice.get(...roundArgs, code)?.label || String(code),
+    label: officeScopeReady ? String(label || code) : labelForOffice.get(...roundArgs, code)?.label || String(code),
   })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   const officeLabel = offices.find(item => item.code === office)?.label || "";
 
