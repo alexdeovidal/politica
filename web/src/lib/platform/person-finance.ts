@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { runCachedDatabaseWorker } from "@/lib/database-worker";
+import { runCachedDatabaseWorkerSnapshot } from "@/lib/database-worker";
 import type { FinanceSummary } from "@/lib/queries";
 
 export type PersonFinanceInsights = {
@@ -10,21 +10,21 @@ export type PersonFinanceInsights = {
 };
 
 export const getCachedPersonFinanceSummary = cache((personId: number, year?: number) =>
-  runCachedDatabaseWorker<FinanceSummary>(
+  runCachedDatabaseWorkerSnapshot<FinanceSummary>(
     `derived:person-finance-summary:v1:${personId}:${year ?? 0}`,
     "person-finance-worker.cjs",
     { personId, year, part: "summary" },
     "local candidate finance summary",
-    { priority: 100 },
+    { priority: 100, staleWhileRevalidate: true },
   ),
 );
 
 export const getCachedPersonFinanceInsights = cache((personId: number, year?: number) =>
-  runCachedDatabaseWorker<PersonFinanceInsights>(
+  runCachedDatabaseWorkerSnapshot<PersonFinanceInsights>(
     `derived:person-finance-insights:v1:${personId}:${year ?? 0}`,
     "person-finance-worker.cjs",
     { personId, year, part: "insights" },
     "local candidate finance insights",
-    { priority: 10 },
+    { priority: 10, staleWhileRevalidate: true },
   ),
 );

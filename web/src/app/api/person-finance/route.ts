@@ -20,10 +20,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = part === "summary"
+    const result = part === "summary"
       ? await getCachedPersonFinanceSummary(personId, year)
       : await getCachedPersonFinanceInsights(personId, year);
-    return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(result.value, {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Snapshot-Stale": result.stale ? "1" : "0",
+      },
+    });
   } catch {
     return NextResponse.json(
       { error: "Não foi possível carregar os dados financeiros agora." },

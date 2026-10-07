@@ -12,25 +12,53 @@ function endpoint(personId: number, year: number | undefined, part: "summary" | 
   return `/api/person-finance?${params}`;
 }
 
+async function requestFinance<T>(url: string, signal: AbortSignal) {
+  const response = await fetch(url, { signal, cache: "no-store" });
+  if (!response.ok) throw new Error("Finance data unavailable");
+  return {
+    value: await response.json() as T,
+    stale: response.headers.get("x-snapshot-stale") === "1",
+  };
+}
+
 export function ProfileFinanceSummary({ personId, year }: { personId: number; year?: number }) {
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshAttempts = 0;
+    let hasFinance = false;
     setFinance(null);
     setFailed(false);
-    fetch(endpoint(personId, year, "summary"), { signal: controller.signal, cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Finance summary unavailable");
-        return response.json() as Promise<FinanceSummary>;
-      })
-      .then(setFinance)
-      .catch(() => {
-        if (!controller.signal.aborted) setFailed(true);
-      });
-    return () => controller.abort();
+    setRefreshing(false);
+
+    const load = async () => {
+      try {
+        const result = await requestFinance<FinanceSummary>(endpoint(personId, year, "summary"), controller.signal);
+        hasFinance = true;
+        setFinance(result.value);
+        setRefreshing(result.stale && refreshAttempts < 5);
+        if (result.stale && refreshAttempts < 5) {
+          refreshAttempts += 1;
+          refreshTimer = setTimeout(() => void load(), 2500);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          if (!hasFinance) setFailed(true);
+          setRefreshing(false);
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      controller.abort();
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
   }, [personId, year, retry]);
 
   if (failed) {
@@ -59,23 +87,26 @@ export function ProfileFinanceSummary({ personId, year }: { personId: number; ye
   if (finance.donationsCount === 0 && finance.expensesCount === 0) return null;
 
   return (
-    <div className="kpis kpis--profile mt-2">
-      <div className="kpi">
-        <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
-        <div className="kpi__value kpi__value--green">{formatBRL(finance.donationsTotalCents)}</div>
-        <div className="kpi__sub">{finance.donationsCount.toLocaleString("pt-BR")} doações</div>
+    <>
+      <div className="kpis kpis--profile mt-2">
+        <div className="kpi">
+          <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
+          <div className="kpi__value kpi__value--green">{formatBRL(finance.donationsTotalCents)}</div>
+          <div className="kpi__sub">{finance.donationsCount.toLocaleString("pt-BR")} doações</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__label">despesas contratadas</div>
+          <div className="kpi__value">{formatBRL(finance.expensesTotalCents)}</div>
+          <div className="kpi__sub">{finance.expensesCount.toLocaleString("pt-BR")} despesas</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__label">pago até agora</div>
+          <div className="kpi__value">{formatBRL(finance.paymentsTotalCents)}</div>
+          <div className="kpi__sub">regime de caixa</div>
+        </div>
       </div>
-      <div className="kpi">
-        <div className="kpi__label">despesas contratadas</div>
-        <div className="kpi__value">{formatBRL(finance.expensesTotalCents)}</div>
-        <div className="kpi__sub">{finance.expensesCount.toLocaleString("pt-BR")} despesas</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi__label">pago até agora</div>
-        <div className="kpi__value">{formatBRL(finance.paymentsTotalCents)}</div>
-        <div className="kpi__sub">regime de caixa</div>
-      </div>
-    </div>
+      {refreshing ? <p className="mt-2 text-xs">Atualizando os dados financeiros…</p> : null}
+    </>
   );
 }
 
@@ -83,6 +114,7 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
   const section = useRef<HTMLElement>(null);
   const [finance, setFinance] = useState<PersonFinanceInsightsData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
 
@@ -90,6 +122,9 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
     const element = section.current;
     if (!element) return;
     const controller = new AbortController();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshAttempts = 0;
+    let hasFinance = false;
     let started = false;
 
     const load = () => {
@@ -97,18 +132,26 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
       started = true;
       setLoading(true);
       setFailed(false);
-      fetch(endpoint(personId, year, "insights"), { signal: controller.signal, cache: "no-store" })
-        .then((response) => {
-          if (!response.ok) throw new Error("Finance insights unavailable");
-          return response.json() as Promise<PersonFinanceInsightsData>;
-        })
-        .then(setFinance)
-        .catch(() => {
-          if (!controller.signal.aborted) setFailed(true);
-        })
-        .finally(() => {
+      const loadSnapshot = async () => {
+        try {
+          const result = await requestFinance<PersonFinanceInsightsData>(endpoint(personId, year, "insights"), controller.signal);
+          hasFinance = true;
+          setFinance(result.value);
+          setRefreshing(result.stale && refreshAttempts < 5);
+          if (result.stale && refreshAttempts < 5) {
+            refreshAttempts += 1;
+            refreshTimer = setTimeout(() => void loadSnapshot(), 2500);
+          }
+        } catch {
+          if (!controller.signal.aborted) {
+            if (!hasFinance) setFailed(true);
+            setRefreshing(false);
+          }
+        } finally {
           if (!controller.signal.aborted) setLoading(false);
-        });
+        }
+      };
+      void loadSnapshot();
     };
 
     if (typeof IntersectionObserver === "undefined") {
@@ -124,10 +167,14 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
       return () => {
         observer.disconnect();
         controller.abort();
+        if (refreshTimer) clearTimeout(refreshTimer);
       };
     }
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
   }, [personId, year, retry]);
 
   const total = finance?.expensesTotalCents ?? 0;
@@ -145,6 +192,7 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
           : "Análise detalhada das despesas e doações."} Concentração não demonstra irregularidade.
       </p>
       {loading && !finance ? <p role="status">Carregando análise financeira…</p> : null}
+      {refreshing && finance ? <p role="status">Atualizando os dados financeiros…</p> : null}
       {failed ? (
         <div role="alert" className="card">
           <p>Não foi possível carregar a análise financeira.</p>

@@ -5,6 +5,7 @@ import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/
 import { cached, cacheResult } from "@/lib/platform/store";
 
 type WorkerSnapshot<T> = { fingerprint: string; value: T };
+export type CachedDatabaseWorkerResult<T> = { value: T; stale: boolean };
 const cachedWorkerFlights = new Map<string, Promise<unknown>>();
 // Database workers share the same large SQLite files and are CPU and disk intensive.
 // Keep only one active by default so background aggregates cannot starve navigation.
@@ -146,29 +147,51 @@ export function runDatabaseWorker<T>(
   });
 }
 
+export async function runCachedDatabaseWorkerSnapshot<T>(
+  cacheKey: string,
+  scriptName: string,
+  workerData: Record<string, unknown> = {},
+  source = "local database worker snapshot",
+  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean; staleWhileRevalidate?: boolean } = {},
+): Promise<CachedDatabaseWorkerResult<T>> {
+  const fingerprint = databaseFingerprint();
+  const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
+  if (stored?.value && databaseFingerprintsMatch(stored.fingerprint, fingerprint)) {
+    return { value: stored.value, stale: false };
+  }
+
+  const flightKey = `${cacheKey}:${fingerprint}`;
+  let flight = cachedWorkerFlights.get(flightKey) as Promise<T> | undefined;
+
+  if (!flight) {
+    flight = runDatabaseWorker<T>(scriptName, {
+      databasePath: databasePath(),
+      ...workerData,
+    }, options).then((value) => {
+      cacheResult(cacheKey, { fingerprint, value } satisfies WorkerSnapshot<T>, source);
+      return value;
+    }).finally(() => cachedWorkerFlights.delete(flightKey));
+
+    cachedWorkerFlights.set(flightKey, flight);
+  }
+
+  if (stored?.value && options.staleWhileRevalidate) {
+    void flight.catch((error) => {
+      console.error(`Unable to refresh ${source}:`, error);
+    });
+    return { value: stored.value, stale: true };
+  }
+
+  return { value: await flight, stale: false };
+}
+
 export async function runCachedDatabaseWorker<T>(
   cacheKey: string,
   scriptName: string,
   workerData: Record<string, unknown> = {},
   source = "local database worker snapshot",
-  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean } = {},
+  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean; staleWhileRevalidate?: boolean } = {},
 ): Promise<T> {
-  const fingerprint = databaseFingerprint();
-  const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
-  if (stored?.value && databaseFingerprintsMatch(stored.fingerprint, fingerprint)) return stored.value;
-
-  const flightKey = `${cacheKey}:${fingerprint}`;
-  const existing = cachedWorkerFlights.get(flightKey) as Promise<T> | undefined;
-  if (existing) return existing;
-
-  const flight = runDatabaseWorker<T>(scriptName, {
-    databasePath: databasePath(),
-    ...workerData,
-  }, options).then((value) => {
-    cacheResult(cacheKey, { fingerprint, value } satisfies WorkerSnapshot<T>, source);
-    return value;
-  }).finally(() => cachedWorkerFlights.delete(flightKey));
-
-  cachedWorkerFlights.set(flightKey, flight);
-  return flight;
+  const result = await runCachedDatabaseWorkerSnapshot<T>(cacheKey, scriptName, workerData, source, options);
+  return result.value;
 }
