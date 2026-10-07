@@ -73,14 +73,45 @@ function dispatchPersistentSearchQueue(worker = persistentSearchWorker) {
 }
 
 function settlePersistentSearchWorker(worker: Worker, error: Error) {
-  if (persistentSearchWorker === worker) persistentSearchWorker = null;
-  if (activeSearchRequestId !== null) activeSearchRequestId = null;
+  if (persistentSearchWorker !== worker) return;
+  persistentSearchWorker = null;
+  activeSearchRequestId = null;
   persistentSearchQueue.length = 0;
   for (const [requestId, request] of pendingSearchRequests) {
     pendingSearchRequests.delete(requestId);
     if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
     request.reject(error);
   }
+}
+
+function rejectPendingSearchRequests(error: Error) {
+  activeSearchRequestId = null;
+  persistentSearchQueue.length = 0;
+  for (const [requestId, request] of pendingSearchRequests) {
+    pendingSearchRequests.delete(requestId);
+    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+    request.reject(error);
+  }
+}
+
+function cancelActiveSearch(worker: Worker) {
+  if (persistentSearchWorker !== worker) return;
+  // better-sqlite3 runs synchronously inside the worker, so it cannot process a
+  // cancellation message until the query finishes. Terminating the worker is
+  // the only way to stop an abandoned full-table query from continuing to use
+  // CPU after the browser has moved on.
+  persistentSearchWorker = null;
+  activeSearchRequestId = null;
+  void worker.terminate().then(() => {
+    if (persistentSearchWorker !== null || !persistentSearchQueue.length) return;
+    try {
+      dispatchPersistentSearchQueue(getPersistentSearchWorker());
+    } catch (error) {
+      rejectPendingSearchRequests(error instanceof Error ? error : new Error("Could not restart persistent search worker"));
+    }
+  }, (error: unknown) => {
+    rejectPendingSearchRequests(error instanceof Error ? error : new Error("Could not stop persistent search worker"));
+  });
 }
 
 function createPersistentSearchWorker() {
@@ -155,8 +186,12 @@ export function runPersistentSearchWorker<T>(
       const queuedIndex = persistentSearchQueue.indexOf(requestId);
       if (queuedIndex >= 0) persistentSearchQueue.splice(queuedIndex, 1);
       reject(abortedError());
-      if (!pendingSearchRequests.size && activeSearchRequestId === null) worker.unref();
-      dispatchPersistentSearchQueue(worker);
+      if (activeSearchRequestId === requestId) {
+        cancelActiveSearch(worker);
+      } else {
+        if (!pendingSearchRequests.size && activeSearchRequestId === null) worker.unref();
+        dispatchPersistentSearchQueue(worker);
+      }
     };
     request.onAbort = onAbort;
     pendingSearchRequests.set(requestId, request);
