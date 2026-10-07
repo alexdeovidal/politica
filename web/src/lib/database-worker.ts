@@ -21,7 +21,8 @@ export function runDatabaseWorker<T>(scriptName: string, workerData: unknown): P
 
     worker.once("message", (result: T | { error: string }) => {
       if (result && typeof result === "object" && "error" in result) {
-        fail(new Error(result.error));
+        const message = (result as { error?: unknown }).error;
+        fail(new Error(typeof message === "string" ? message : "Database worker failed"));
         return;
       }
       settled = true;
