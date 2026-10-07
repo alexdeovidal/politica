@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { SearchResult } from "@/lib/queries";
 import { formatCpfCnpj } from "@/lib/format";
 import { SearchAvatar } from "@/components/search-avatar";
@@ -38,7 +37,6 @@ export function useCommandPaletteShortcut() {
 
 export function CommandPalette() {
   const { aiReviewEnabled, setPaletteOpen } = useShell();
-  const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -90,7 +88,7 @@ export function CommandPalette() {
 
   const go = (href: string) => {
     setPaletteOpen(false);
-    router.push(href);
+    window.location.assign(href);
   };
 
   const shortcuts = SHORTCUTS.filter(
