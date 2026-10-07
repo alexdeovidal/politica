@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import type { SidebarCounts } from "@/lib/stats";
 import { ContributionReminder } from "@/components/contribution-card";
 import { ShellProvider } from "./shell-context";
 import { Metrics } from "@/components/platform/metrics";
@@ -11,11 +10,9 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 
 export function AppShell({
-  counts,
   aiReviewEnabled,
   children,
 }: {
-  counts: SidebarCounts;
   aiReviewEnabled: boolean;
   children: ReactNode;
 }) {
@@ -28,7 +25,7 @@ export function AppShell({
       <ContributionReminder />
       <Metrics/>
       <div className="shell-layout">
-        <Sidebar counts={counts} />
+        <Sidebar />
         <div className="shell-main">
           <Topbar />
           <ContentBody>{pathname?.startsWith("/news")?null:<PageTools />}{children}</ContentBody>

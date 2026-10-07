@@ -3,7 +3,7 @@ import {createHash} from "node:crypto";
 import { getPersonVoteSectionsPage } from "@/lib/queries";
 
 type VoteSectionsPage=ReturnType<typeof getPersonVoteSectionsPage>;
-const PAGE_CACHE_TTL_MS=60_000;
+const PAGE_CACHE_TTL_MS=30*60_000;
 const pageCache=new Map<string,{expiresAt:number;value:VoteSectionsPage}>();
 
 function readPageCache(key:string):VoteSectionsPage|null{
@@ -39,6 +39,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(result, {
-    headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
+    headers: { "Cache-Control": "public, max-age=60, s-maxage=1800, stale-while-revalidate=3600" },
   });
 }

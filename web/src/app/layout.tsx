@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
-import { getSidebarCounts } from "@/lib/stats";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -34,7 +33,6 @@ try {
 `;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  const counts = getSidebarCounts();
   const aiReviewEnabled = Boolean(process.env.DEEPSEEK_API_KEY?.trim());
 
   return (
@@ -47,7 +45,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full bg-background text-foreground font-sans">
-        <AppShell counts={counts} aiReviewEnabled={aiReviewEnabled}>
+        <AppShell aiReviewEnabled={aiReviewEnabled}>
           {children}
         </AppShell>
       </body>

@@ -35,7 +35,7 @@ type NavLink = {
   alert?: boolean;
 };
 
-export function Sidebar({ counts }: { counts: SidebarCounts }) {
+export function Sidebar({ counts }: { counts?: SidebarCounts }) {
   const pathname = usePathname();
   const { aiReviewEnabled, setPaletteOpen, mobileNavOpen, setMobileNavOpen } = useShell();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
