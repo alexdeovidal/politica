@@ -10,6 +10,24 @@ function normalizeName(value) {
   return String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim().replace(/\s+/g, " ");
 }
 
+function electionOfficesForYear(year) {
+  if (year < 2012 || year % 2 !== 0) return null;
+  if (year % 4 === 0) {
+    return [
+      { code: "11", label: "Prefeito" },
+      { code: "13", label: "Vereador" },
+    ];
+  }
+  return [
+    { code: "8", label: "Deputado Distrital" },
+    { code: "7", label: "Deputado Estadual" },
+    { code: "6", label: "Deputado Federal" },
+    { code: "3", label: "Governador" },
+    { code: "1", label: "Presidente" },
+    { code: "5", label: "Senador" },
+  ];
+}
+
 database.function("normalize_public_name", { deterministic: true }, normalizeName);
 
 const filters = workerData.filters || {};
@@ -101,9 +119,6 @@ function queryOptions() {
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_filter_scope'",
   ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_filter_scope LIMIT 1").get());
   const optionsTable = scopeReady ? "election_vote_filter_scope" : catalogReady ? catalogTable : "election_vote_section";
-  const officeScopeReady = Boolean(database.prepare(
-    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_office_scope'",
-  ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_office_scope LIMIT 1").get());
   const candidateYears = catalogReady ? [] : database.prepare(
     "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
   ).all().map(row => row.year);
@@ -117,23 +132,17 @@ function queryOptions() {
   const rounds = year
     ? database.prepare(`SELECT DISTINCT round FROM ${optionsTable} WHERE year = ? ORDER BY round`).all(year).map(row => row.round)
     : [];
+  const standardOffices = electionOfficesForYear(year);
   const officeCodes = year
-    ? officeScopeReady
-      ? database.prepare(`
-          SELECT office_code AS code, max(office) AS label
-          FROM election_vote_office_scope
-          WHERE ${round ? "year = ? AND round = ?" : "year = ?"}
-          GROUP BY office_code ORDER BY office_code
-        `).all(...roundArgs)
-      : database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
+    ? standardOffices || database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
     : [];
-  const labelForOffice = officeScopeReady ? null : database.prepare(`
+  const labelForOffice = standardOffices ? null : database.prepare(`
     SELECT office AS label FROM election_vote_section
     WHERE ${roundWhere} AND office_code = ? AND office IS NOT NULL LIMIT 1
   `);
   const offices = officeCodes.map(({ code, label }) => ({
     code: String(code),
-    label: officeScopeReady ? String(label || code) : labelForOffice.get(...roundArgs, code)?.label || String(code),
+    label: String(label || labelForOffice.get(...roundArgs, code)?.label || code),
   })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   const officeLabel = offices.find(item => item.code === office)?.label || "";
 

@@ -351,13 +351,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_election_vote_filter_scope_key
     ON election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number);
 CREATE INDEX IF NOT EXISTS ix_election_vote_filter_scope_options
     ON election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number);
-CREATE TABLE IF NOT EXISTS election_vote_office_scope (
-    year        INTEGER NOT NULL,
-    round       INTEGER NOT NULL,
-    office_code TEXT NOT NULL,
-    office      TEXT NOT NULL,
-    PRIMARY KEY (year, round, office_code)
-);
 CREATE VIRTUAL TABLE IF NOT EXISTS election_vote_section_fts USING fts5(
     polling_place_name,
     polling_place_address,
@@ -415,40 +408,6 @@ AFTER UPDATE ON election_vote_section_catalog BEGIN
     INSERT OR IGNORE INTO election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number)
     VALUES (new.year, new.round, coalesce(new.state, ''), coalesce(new.municipality_code, ''), coalesce(new.municipality, ''), new.zone_number);
 END;
-CREATE TRIGGER IF NOT EXISTS election_vote_office_scope_ai
-AFTER INSERT ON election_vote_section
-WHEN new.office_code IS NOT NULL BEGIN
-    INSERT INTO election_vote_office_scope (year, round, office_code, office)
-    VALUES (new.year, new.round, new.office_code, coalesce(new.office, new.office_code))
-    ON CONFLICT(year, round, office_code) DO UPDATE SET
-        office = CASE WHEN election_vote_office_scope.office = '' THEN excluded.office ELSE election_vote_office_scope.office END;
-END;
-CREATE TRIGGER IF NOT EXISTS election_vote_office_scope_ad
-AFTER DELETE ON election_vote_section
-WHEN old.office_code IS NOT NULL BEGIN
-    DELETE FROM election_vote_office_scope
-    WHERE year=old.year AND round=old.round AND office_code=old.office_code
-      AND NOT EXISTS (
-        SELECT 1 FROM election_vote_section v
-        WHERE v.year=old.year AND v.round=old.round AND v.office_code=old.office_code
-      );
-END;
-CREATE TRIGGER IF NOT EXISTS election_vote_office_scope_au
-AFTER UPDATE OF year, round, office_code, office ON election_vote_section BEGIN
-    DELETE FROM election_vote_office_scope
-    WHERE year=old.year AND round=old.round AND office_code=old.office_code
-      AND old.office_code IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1 FROM election_vote_section v
-        WHERE v.year=old.year AND v.round=old.round AND v.office_code=old.office_code
-      );
-    INSERT INTO election_vote_office_scope (year, round, office_code, office)
-    SELECT new.year, new.round, new.office_code, coalesce(new.office, new.office_code)
-    WHERE new.office_code IS NOT NULL
-    ON CONFLICT(year, round, office_code) DO UPDATE SET
-        office = CASE WHEN election_vote_office_scope.office = '' THEN excluded.office ELSE election_vote_office_scope.office END;
-END;
-
 -- DERIVED DATA: detection rules (see ADs/dados_derivados.md)
 
 CREATE TABLE IF NOT EXISTS rule_run (
