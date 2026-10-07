@@ -103,7 +103,7 @@ function searchPeople(rawQuery, limit = 25, filters = {}) {
     if (value) { filterClauses.push(`filter_history.${field}=?`); filterParams.push(value); }
   }
   const historyFilter = filterClauses.length
-    ? ` AND id IN (SELECT filter_history.person_id FROM politician_history filter_history WHERE ${filterClauses.join(" AND ")})`
+    ? ` AND EXISTS (SELECT 1 FROM politician_history filter_history WHERE filter_history.person_id=people.id AND ${filterClauses.join(" AND ")})`
     : "";
   matchParams.splice(matchParams.length - 1, 0, ...filterParams);
   const sql = `WITH matches AS (
