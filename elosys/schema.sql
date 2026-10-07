@@ -459,6 +459,8 @@ CREATE TABLE IF NOT EXISTS parliamentary_earmark_beneficiary (
 CREATE INDEX IF NOT EXISTS ix_earmark_beneficiary_code ON parliamentary_earmark_beneficiary (earmark_code);
 CREATE INDEX IF NOT EXISTS ix_earmark_beneficiary_company
     ON parliamentary_earmark_beneficiary (beneficiary_company_id) WHERE beneficiary_company_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_earmark_beneficiary_doc_code
+    ON parliamentary_earmark_beneficiary (beneficiary_doc, earmark_code);
 
 -- DATA: declared assets - bem_candidato (see ADs/politician.md §3)
 

@@ -9,10 +9,10 @@ import {getNewsArticle} from "@/lib/platform/news";
 import {shareMetadata} from "@/lib/platform/share";
 
 type Params={params:Promise<{day:string;slug:string}>};
-export async function generateMetadata({params}:Params){const {day,slug}=await params;const article=getNewsArticle(day,slug);return article?shareMetadata(article.title,`/news/${day}/${slug}`,article.summary):{title:"Notícia não encontrada · Politica007"};}
+export async function generateMetadata({params}:Params){const {day,slug}=await params;const article=await getNewsArticle(day,slug);return article?shareMetadata(article.title,`/news/${day}/${slug}`,article.summary):{title:"Notícia não encontrada · Politica007"};}
 
 export default async function NewsArticlePage({params}:Params){
-  const {day,slug}=await params;const article=getNewsArticle(day,slug);if(!article)notFound();
+  const {day,slug}=await params;const article=await getNewsArticle(day,slug);if(!article)notFound();
   const published=new Date(article.publishedAt).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"long",timeStyle:"short"});
   return <main className="news-article-page">
     <PageHeader group="Notícias" current={article.personName}/>

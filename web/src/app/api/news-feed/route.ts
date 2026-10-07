@@ -3,8 +3,8 @@ import {getDailyNews} from "@/lib/platform/news";
 export const dynamic="force-dynamic";
 export const runtime="nodejs";
 
-export function GET(request:Request){
-  const feed=getDailyNews();
+export async function GET(request:Request){
+  const feed=await getDailyNews();
   const requested=Number(new URL(request.url).searchParams.get("limit"))||5;
   const limit=Math.max(1,Math.min(20,Math.floor(requested)));
   const articles=feed.articles.slice(0,limit).map(article=>{

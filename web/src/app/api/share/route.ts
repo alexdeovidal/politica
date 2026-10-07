@@ -59,7 +59,7 @@ function newsImage(article:DailyNewsArticle):ImageResponse{
   {width:1200,height:630,headers:{"Cache-Control":"public, max-age=300, s-maxage=86400, stale-while-revalidate=604800"}});
 }
 
-export function GET(request:Request){
+export async function GET(request:Request){
   const params=new URL(request.url).searchParams;
   const path=params.get("path")||"/";
   const value=Number(params.get("ano"));
@@ -68,7 +68,7 @@ export function GET(request:Request){
   const person=/^\/politico\/([0-9]+)$/.exec(path),company=/^\/cnpj\/([0-9]{14})$/.exec(path);
   const news=/^\/news\/(\d{4}-\d{2}-\d{2})\/(p\d+(?:-[a-z0-9-]+)?)$/.exec(path);
   if(news){
-    const article=getNewsArticle(news[1],news[2]);
+    const article=await getNewsArticle(news[1],news[2]);
     if(article)return newsImage(article);
   }
   if(person){const id=Number(person[1]),header=getPersonHeader(id);if(header){title=header.person.canonicalName||"Perfil público";const finance=getPersonFinance(id,year);detail=`Recebido: ${formatBRL(finance.donationsTotalCents)} · contratado: ${formatBRL(finance.expensesTotalCents)}`;}}

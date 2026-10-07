@@ -10,8 +10,8 @@ export const metadata={title:"Notícias dos dados públicos · Politica007",desc
 function dateLabel(day:string){return new Date(`${day}T12:00:00-03:00`).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",weekday:"long",day:"numeric",month:"long",year:"numeric"});}
 function timeLabel(value:string|null){if(!value)return null;return new Date(value).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"});}
 
-export default function NewsPage(){
-  const feed=getDailyNews();
+export default async function NewsPage(){
+  const feed=await getDailyNews();
   const previousDay=getPreviousNewsEditionDay(feed.day);
   const archives=getDailyNewsArchive(feed.day,14);
   if(!archives.some(entry=>entry.day===previousDay))archives.unshift({day:previousDay,generatedAt:"",articleCount:0});

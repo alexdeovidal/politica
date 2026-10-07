@@ -3,10 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { candidatePersonId, getEntityProfile, getExpenseYears } from "@/lib/queries";
 import { EntityProfileView } from "@/components/entity-profile-view";
 import { digitsOnly } from "@/lib/normalize";
+import { cache } from "react";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({params,searchParams}:PageProps<"/cnpj/[cnpj]">){const {cnpj}=await params;const sp=await searchParams;const profile=getEntityProfile(digitsOnly(cnpj));return shareMetadata(profile?.displayName||"Empresa",`/cnpj/${cnpj}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
+const getCachedEntityProfile = cache((digits: string, year?: number) => getEntityProfile(digits, { year }));
+
+export async function generateMetadata({params,searchParams}:PageProps<"/cnpj/[cnpj]">){const {cnpj}=await params;const sp=await searchParams;const profile=getCachedEntityProfile(digitsOnly(cnpj),undefined);return shareMetadata(profile?.displayName||"Empresa",`/cnpj/${cnpj}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
 
 export default async function CnpjPage({ params, searchParams }: PageProps<"/cnpj/[cnpj]">) {
   const { cnpj } = await params;
@@ -21,7 +24,7 @@ export default async function CnpjPage({ params, searchParams }: PageProps<"/cnp
   const years = getExpenseYears();
   const year = Number.isInteger(anoParam) && years.includes(anoParam) ? anoParam : undefined;
 
-  const profile = getEntityProfile(digits, { year });
+  const profile = getCachedEntityProfile(digits, year);
   if (!profile) notFound();
 
   return <EntityProfileView profile={profile} years={years} year={year} />;

@@ -1,6 +1,6 @@
-import {db,hasTable} from "@/lib/db";
 import {platformStore} from "@/lib/platform/store";
 import {cache} from "react";
+import {runCachedDatabaseWorker} from "@/lib/database-worker";
 
 export type NewsSource={label:string;url:string};
 export type NewsHighlight={label:string;value:string;detail:string};
@@ -67,58 +67,8 @@ function source(label:string,url:string|null|undefined):NewsSource|null{
   if(!url)return null;
   try{const u=new URL(url);if(!/(^|\.)tse\.jus\.br$/.test(u.hostname))return null;return {label,url:u.toString()};}catch{return null;}
 }
-function getCandidateFacts(personId:number,views:number):StoryFacts|null{
-  const candidate=db().prepare(`SELECT p.id,p.canonical_name AS name,h.id AS historyId,h.year,h.office,h.party_abbr AS party,h.state,h.municipality,h.result
-    FROM people p JOIN politician_history h ON h.id=(SELECT hh.id FROM politician_history hh WHERE hh.person_id=p.id ORDER BY hh.year DESC,hh.round DESC,hh.id DESC LIMIT 1)
-    WHERE p.id=?`).get(personId) as Candidate|undefined;
-  if(!candidate?.name)return null;
-  const facts:StoryFacts={candidate,views,processCount:0,openProcessCount:0,signals:[]};
-
-  if(["electoral_case","electoral_case_candidate"].every(hasTable)){
-    const totals=db().prepare(`SELECT count(*) AS total,sum(is_open) AS open FROM (
-      SELECT ec.id,max(CASE WHEN ec.closed_at IS NULL THEN 1 ELSE 0 END) AS is_open
-      FROM electoral_case_candidate cc JOIN electoral_case ec ON ec.id=cc.case_id WHERE cc.person_id=? GROUP BY ec.id
-    )`).get(personId) as {total:number;open:number};
-    facts.processCount=totals.total||0;facts.openProcessCount=totals.open||0;
-    const latest=db().prepare(`SELECT ec.case_number AS number,ec.source_dataset_year AS year,ec.filed_at AS filedAt,ec.closed_at AS closedAt,ec.class_name AS className,
-      ec.main_subject AS subject,ec.last_decision_at AS lastDecisionAt,ec.last_decision_type AS lastDecisionType,cc.pole,
-      COALESCE(NULLIF(ec.source_url,''),col.url) AS sourceUrl
-      FROM electoral_case_candidate cc JOIN electoral_case ec ON ec.id=cc.case_id
-      LEFT JOIN parse pa ON pa.id=ec.provenance_id LEFT JOIN collection col ON col.id=pa.collection_id
-      WHERE cc.person_id=? ORDER BY COALESCE(ec.last_decision_at,ec.filed_at,ec.distributed_at,'') DESC,ec.case_number LIMIT 1`).get(personId) as StoryFacts["recentProcess"];
-    facts.recentProcess=latest;
-  }
-
-  if(["signal","signal_actor","signal_evidence","campaign_expense","rule_run"].every(hasTable)){
-    facts.signals=db().prepare(`SELECT ce.year,ce.description,ce.amount_cents AS amountCents,s.explanation,coalesce(col.url,'') AS sourceUrl
-      FROM signal_actor sa JOIN signal s ON s.id=sa.signal_id JOIN rule_run rr ON rr.id=s.rule_run_id
-      JOIN signal_evidence se ON se.signal_id=s.id AND se.table_name='campaign_expense'
-      JOIN campaign_expense ce ON ce.id=se.record_id LEFT JOIN parse pa ON pa.id=ce.provenance_id LEFT JOIN collection col ON col.id=pa.collection_id
-      WHERE sa.type='person' AND sa.actor_id=? AND rr.rule='disproportionate_expense'
-      ORDER BY ce.amount_cents DESC,ce.year DESC LIMIT 3`).all(personId) as StoryFacts["signals"];
-  }
-
-  if(hasTable("election_vote_section")){
-    const vote=db().prepare(`SELECT ph.year,sum(v.votes) AS votes,count(*) AS sections,count(DISTINCT v.municipality_code) AS municipalities
-      FROM politician_history ph JOIN election_vote_section v ON v.history_id=ph.id WHERE ph.person_id=?
-      GROUP BY ph.id,ph.year ORDER BY ph.year DESC LIMIT 1`).get(personId) as StoryFacts["votes"];
-    if(vote&&vote.sections>0)facts.votes=vote;
-  }
-
-  const donation=db().prepare(`SELECT co.year,count(*) AS count,coalesce(sum(d.amount_cents),0) AS amountCents
-    FROM campaign_donation d JOIN campaign_org co ON co.id=d.campaign_org_id WHERE co.person_id=?
-    GROUP BY co.year ORDER BY co.year DESC LIMIT 1`).get(personId) as StoryFacts["donations"];
-  if(donation?.count)facts.donations=donation;
-  const expense=db().prepare(`SELECT co.year,count(*) AS count,coalesce(sum(e.amount_cents),0) AS amountCents
-    FROM campaign_expense e JOIN campaign_org co ON co.id=e.campaign_org_id WHERE co.person_id=?
-    GROUP BY co.year ORDER BY co.year DESC LIMIT 1`).get(personId) as StoryFacts["expenses"];
-  if(expense?.count)facts.expenses=expense;
-  if(hasTable("declared_assets")){
-    const assets=db().prepare(`SELECT year,count(*) AS count,count(value_cents) AS valuedCount,coalesce(sum(value_cents),0) AS amountCents
-      FROM declared_assets WHERE person_id=? GROUP BY year ORDER BY year DESC LIMIT 1`).get(personId) as StoryFacts["assets"];
-    if(assets?.count)facts.assets=assets;
-  }
-  return facts;
+function getNewsFacts(profiles:PopularProfile[],cacheKey:string):Promise<StoryFacts[]>{
+  return runCachedDatabaseWorker<StoryFacts[]>(`derived:news-facts:v1:${cacheKey}`,"news-facts-worker.cjs",{profiles},"local news facts",{priority:20});
 }
 
 function topicStories(facts:StoryFacts,publishedAt:string):DailyNewsArticle[]{
@@ -212,7 +162,7 @@ function readStored(row:{day:string;payload:string;generated_at:string;tracked_p
   }catch{return null;}
 }
 
-export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
+export async function getDailyNews(day=saoPauloDay()):Promise<DailyNewsFeed>{
   const store=platformStore();
   const stored=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=? AND day<=?) AS tracked_profiles FROM daily_news WHERE day=?").get(daysBefore(day,29),day,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
   if(stored)return readStored(stored)!;
@@ -227,7 +177,7 @@ export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
     const empty=store.prepare("SELECT day,payload,generated_at,(SELECT count(DISTINCT person_id) FROM candidate_profile_access_daily WHERE day>=? AND day<=?) AS tracked_profiles FROM daily_news WHERE day=?").get(since,day,day) as {day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined;
     return readStored(empty)!;
   }
-  const candidates=popular.map(x=>getCandidateFacts(x.personId,x.views)).filter((x):x is StoryFacts=>x!==null);
+  const candidates=await getNewsFacts(popular,`edition:${day}`);
   const storyLists=candidates.map(x=>topicStories(x,generatedAt));const articles:DailyNewsArticle[]=[...openingEdition];
   for(let topic=0;articles.length<5;topic++){
     let added=false;
@@ -242,11 +192,11 @@ export function getDailyNews(day=saoPauloDay()):DailyNewsFeed{
   return readStored(final)!;
 }
 
-export function getDailyNewsEdition(day:string):DailyNewsFeed|null{
+export async function getDailyNewsEdition(day:string):Promise<DailyNewsFeed|null>{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;
   const timestamp=Date.parse(`${day}T12:00:00Z`);
   if(!Number.isFinite(timestamp)||new Date(timestamp).toISOString().slice(0,10)!==day||day>saoPauloDay())return null;
-  return getDailyNews(day);
+  return await getDailyNews(day);
 }
 
 export function getPreviousNewsEditionDay(day=saoPauloDay()):string{return daysBefore(day,1);}
@@ -274,7 +224,7 @@ export const getStoredNewsArticle=cache((day:string,slug:string):DailyNewsArticl
  * daily_news lives in the lightweight platform store. A missing replica-local
  * copy must not turn a link that was just shown in /news into a 404.
  */
-export const getNewsArticle=cache((day:string,slug:string):DailyNewsArticle|null=>{
+export const getNewsArticle=cache(async(day:string,slug:string):Promise<DailyNewsArticle|null>=>{
   const stored=getStoredNewsArticle(day,slug);
   if(stored)return stored;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^p(\d+)-([a-z0-9-]+)$/.test(slug))return null;
@@ -283,7 +233,7 @@ export const getNewsArticle=cache((day:string,slug:string):DailyNewsArticle|null
   if(day===openingEditionDay&&slug===openingArticleSlug)return openingEditionArticle(new Date(`${day}T00:05:00-03:00`).toISOString());
   const personId=Number(/^p(\d+)-/.exec(slug)?.[1]);
   if(!Number.isSafeInteger(personId)||personId<1)return null;
-  const facts=getCandidateFacts(personId,0);
+  const [facts]=await getNewsFacts([{personId,views:0}],`person:${personId}`);
   if(!facts)return null;
   const publishedAt=new Date(`${day}T00:05:00-03:00`).toISOString();
   return topicStories(facts,publishedAt).find(article=>article.slug===slug)||null;

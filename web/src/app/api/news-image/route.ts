@@ -14,9 +14,9 @@ function wrap(value:string,maxChars:number,maxLines:number):string[]{
 }
 function spans(lines:string[],x:number,step:number):string{return lines.map((line,index)=>`<tspan x="${x}" dy="${index?step:0}">${escapeXml(line)}</tspan>`).join("");}
 
-export function GET(request:Request){
+export async function GET(request:Request){
   const params=new URL(request.url).searchParams;const day=params.get("day")||"";const slug=params.get("slug")||"";
-  const article=getNewsArticle(day,slug);
+  const article=await getNewsArticle(day,slug);
   if(!article)return Response.json({error:"Notícia não encontrada."},{status:404});
   const key=`${article.personId}:${article.slug}`;const hash=[...key].reduce((sum,char)=>(sum*31+char.charCodeAt(0))>>>0,7);const hue=hash%360;
   const palette={background:"#10232d",accent:`hsl(${hue},68%,76%)`,glow:`hsl(${hue},48%,32%)`};

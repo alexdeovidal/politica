@@ -13,7 +13,7 @@ function timeLabel(value:string|null){if(!value)return null;return new Date(valu
 
 export default async function NewsEditionPage({params}:{params:Promise<{day:string}>}){
   const {day}=await params;
-  const feed=getDailyNewsEdition(day);
+  const feed=await getDailyNewsEdition(day);
   if(!feed)notFound();
   const previousEditions=getDailyNewsArchive(day,14);
   return <main className="news-page">

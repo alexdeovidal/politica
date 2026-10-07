@@ -1242,6 +1242,7 @@ export function getCompanyEarmarks(cnpj: string): { earmarks: CompanyEarmark[]; 
          SELECT earmark_code, author_name, author_person_id, year,
                 row_number() OVER (PARTITION BY earmark_code ORDER BY id) AS rn
          FROM parliamentary_earmark
+         WHERE earmark_code IN (SELECT earmark_code FROM agg)
        )
        SELECT agg.earmark_code AS earmarkCode, agg.amountCents, agg.monthsCount, agg.state, agg.municipality,
               author.author_name AS authorName, author.author_person_id AS authorPersonId, author.year AS earmarkYear
