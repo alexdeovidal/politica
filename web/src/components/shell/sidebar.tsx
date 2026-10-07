@@ -112,11 +112,11 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
     { href: "/comparar", label: "Comparar candidaturas", icon: GitCompareArrows, description: "Compare até três candidaturas, incluindo votos, bens declarados, doações e despesas registradas." },
   ];
   const sinais: NavLink[] = [
-    { href: "/sinais/doacao-circular", label: "Ciclos de recursos eleitorais", icon: CircleDollarSign, description: "Mostra ciclos entre doações e despesas contratadas identificados entre candidaturas e pessoas ou organizações. É um sinal para consulta, não prova de irregularidade.", count: counts.circularDonations, alert: true },
-    { href: "/sinais/despesa-desproporcional", label: "Despesas fora do padrão", icon: ReceiptText, description: "Aponta despesas com valores atípicos para a categoria informada. Cada caso precisa ser conferido na fonte oficial.", count: counts.disproportionateExpense },
-    { href: "/sinais/socio-fornecedor", label: "Sócios de fornecedores", icon: Building2, description: "Relaciona fornecedores de campanhas a informações públicas de quadro societário. Coincidências de nome podem exigir verificação.", count: counts.supplierPartner },
-    ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise automatizada de sinais", icon: BrainCircuit, description: "Apresenta uma leitura automatizada de sinais já encontrados nos dados. Não constitui conclusão nem acusação.", count: counts.aiReview }] : []),
-    { href: "/sinais/discurso", label: "Atividade em redes sociais", icon: MessageSquareText, description: "Consulte publicações públicas associadas a candidatos e aos temas acompanhados pelo portal.", count: counts.discourse, alert: true },
+    { href: "/sinais/doacao-circular", label: "Ciclos de recursos eleitorais", icon: CircleDollarSign, description: "Mostra ciclos entre doações e despesas contratadas identificados entre candidaturas e pessoas ou organizações. É um sinal para consulta, não prova de irregularidade.", count: counts?.circularDonations, alert: true },
+    { href: "/sinais/despesa-desproporcional", label: "Despesas fora do padrão", icon: ReceiptText, description: "Aponta despesas com valores atípicos para a categoria informada. Cada caso precisa ser conferido na fonte oficial.", count: counts?.disproportionateExpense },
+    { href: "/sinais/socio-fornecedor", label: "Sócios de fornecedores", icon: Building2, description: "Relaciona fornecedores de campanhas a informações públicas de quadro societário. Coincidências de nome podem exigir verificação.", count: counts?.supplierPartner },
+    ...(aiReviewEnabled ? [{ href: "/sinais/analise-ia", label: "Análise automatizada de sinais", icon: BrainCircuit, description: "Apresenta uma leitura automatizada de sinais já encontrados nos dados. Não constitui conclusão nem acusação.", count: counts?.aiReview }] : []),
+    { href: "/sinais/discurso", label: "Atividade em redes sociais", icon: MessageSquareText, description: "Consulte publicações públicas associadas a candidatos e aos temas acompanhados pelo portal.", count: counts?.discourse, alert: true },
   ];
 
   return (
