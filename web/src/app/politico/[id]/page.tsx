@@ -166,7 +166,9 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
           <EarmarksSection personId={person.id} />
         </Suspense>
 
-        <PersonCompanies personId={person.id} />
+        <Suspense fallback={<SectionSkeleton id="empresas-relacionadas" title="empresas e participações" rows={2} />}>
+          <PersonCompanies personId={person.id} />
+        </Suspense>
         <OfficialRecords personId={person.id} />
         <Proposals personId={person.id}/>
         <PublicStatements personId={person.id}/>

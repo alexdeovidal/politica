@@ -17,7 +17,8 @@ export function CompanyRelations({ cnpj }: { cnpj: string }) {
   return <RelationList rows={rows}/>;
 }
 
-export function PersonCompanies({ personId }: {personId:number}) {
+export async function PersonCompanies({ personId }: {personId:number}) {
+  await new Promise<void>(resolve=>setTimeout(resolve,0));
   const rows=personCompanies(personId);
   return <section id="empresas-relacionadas" data-toc-title="Empresas e participações" className="py-7"><h2 className="section-title mb-3">Empresas e participações encontradas</h2><p className="mb-4 text-sm text-[var(--muted)]">Vínculos societários nas empresas consultadas. A cobertura e o critério de identidade acompanham cada registro.</p>{rows.length ? <RelationList rows={rows} direction="company"/> : <p className="text-sm">Nenhuma correspondência encontrada no quadro societário coletado. Isso não equivale à ausência de participações empresariais.</p>}</section>;
 }

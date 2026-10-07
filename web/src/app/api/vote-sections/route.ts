@@ -1,5 +1,23 @@
 import { NextResponse } from "next/server";
+import {createHash} from "node:crypto";
 import { getPersonVoteSectionsPage } from "@/lib/queries";
+
+type VoteSectionsPage=ReturnType<typeof getPersonVoteSectionsPage>;
+const PAGE_CACHE_TTL_MS=60_000;
+const pageCache=new Map<string,{expiresAt:number;value:VoteSectionsPage}>();
+
+function readPageCache(key:string):VoteSectionsPage|null{
+  const entry=pageCache.get(key);
+  if(!entry)return null;
+  if(entry.expiresAt<=Date.now()){pageCache.delete(key);return null;}
+  pageCache.delete(key);pageCache.set(key,entry);
+  return entry.value;
+}
+
+function writePageCache(key:string,value:VoteSectionsPage){
+  pageCache.delete(key);pageCache.set(key,{expiresAt:Date.now()+PAGE_CACHE_TTL_MS,value});
+  while(pageCache.size>500)pageCache.delete(pageCache.keys().next().value!);
+}
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -12,7 +30,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ sections: [], total: 0, pageSize: 25 }, { status: 400 });
   }
 
-  return NextResponse.json(getPersonVoteSectionsPage(historyId, page, query), {
+  const trimmedQuery=query.trim().slice(0,100);
+  const cacheKey=createHash("sha256").update(`${historyId}:${page}:${trimmedQuery}`).digest("hex");
+  let result=readPageCache(cacheKey);
+  if(!result){
+    result=getPersonVoteSectionsPage(historyId,page,trimmedQuery);
+    writePageCache(cacheKey,result);
+  }
+
+  return NextResponse.json(result, {
     headers: { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" },
   });
 }

@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import {statSync} from "node:fs";
 import {normalizeName,normalizePublicTimestamp} from "./normalize";
 
 const DB_PATH = process.env.ELOSYS_DB_PATH ?? path.join(process.cwd(), "..", "elosys.db");
@@ -33,3 +34,12 @@ export function hasTable(name: string): boolean {
 }
 
 export function dataVersion():number{return db().pragma("data_version",{simple:true}) as number;}
+
+export function databaseFingerprint():string{
+  return [DB_PATH,`${DB_PATH}-wal`].map(filename=>{
+    try{
+      const file=statSync(filename);
+      return [file.dev,file.ino,file.size,file.mtimeMs,file.ctimeMs].join(":");
+    }catch{return "missing";}
+  }).join("|");
+}

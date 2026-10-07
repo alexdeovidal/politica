@@ -67,7 +67,7 @@ function HistoricalElectionVote({ result, initiallyOpen }: { result: PersonVoteR
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
         });
-    }, search.trim() ? 250 : 0);
+    }, search.trim() ? 400 : 0);
 
     return () => {
       window.clearTimeout(timer);

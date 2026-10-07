@@ -1,7 +1,8 @@
 import { companyPartners, personCompanies, partnerById, partnerOtherCompanies } from "./platform/relations";
-import { db, hasTable,dataVersion } from "./db";
+import { db, hasTable,dataVersion,databaseFingerprint } from "./db";
 import { digitsOnly, normalizeName } from "./normalize";
 import { ELECTION_YEAR } from "./live-election/model";
+import { cached as cachedPersistent,cacheResult } from "./platform/store";
 
 export type Provenance = {
   sourceName: string;
@@ -1524,15 +1525,30 @@ export type TopSupplier = {
 
 let yearsVersion=0;
 function invalidateYearCaches(){const version=dataVersion();if(version===yearsVersion)return;cachedCandidacyYears=null;cachedExpenseYears=null;cachedAssetYears=null;yearsVersion=version;}
+const YEAR_SNAPSHOT_TTL_MS=365*24*60*60*1000;
+type YearSnapshot={fingerprint:string;years:number[]};
+
+function readYearSnapshot(key:string):number[]|null{
+  const snapshot=cachedPersistent<YearSnapshot>(key,YEAR_SNAPSHOT_TTL_MS);
+  return snapshot?.fingerprint===databaseFingerprint()&&Array.isArray(snapshot.years)?snapshot.years:null;
+}
+
+function writeYearSnapshot(key:string,years:number[]){
+  cacheResult(key,{fingerprint:databaseFingerprint(),years},"local database year list snapshot");
+}
+
 let cachedCandidacyYears: number[] | null = null;
 
 export function getCandidacyYears(): number[] {
   invalidateYearCaches();
   if (cachedCandidacyYears) return cachedCandidacyYears;
+  const persistent=readYearSnapshot("derived:candidacy-years:v1");
+  if(persistent){cachedCandidacyYears=persistent;return persistent;}
   const rows = db()
     .prepare("SELECT DISTINCT year FROM politician_history ORDER BY year DESC")
     .all() as Array<{ year: number }>;
   cachedCandidacyYears = rows.map((row) => row.year);
+  writeYearSnapshot("derived:candidacy-years:v1",cachedCandidacyYears);
   return cachedCandidacyYears;
 }
 
@@ -1541,10 +1557,13 @@ let cachedExpenseYears: number[] | null = null;
 export function getExpenseYears(): number[] {
   invalidateYearCaches();
   if (cachedExpenseYears) return cachedExpenseYears;
+  const persistent=readYearSnapshot("derived:expense-years:v1");
+  if(persistent){cachedExpenseYears=persistent;return persistent;}
   const rows = db()
     .prepare("SELECT DISTINCT year FROM campaign_expense ORDER BY year DESC")
     .all() as Array<{ year: number }>;
   cachedExpenseYears = rows.map((r) => r.year);
+  writeYearSnapshot("derived:expense-years:v1",cachedExpenseYears);
   return cachedExpenseYears;
 }
 
@@ -1553,10 +1572,13 @@ let cachedAssetYears: number[] | null = null;
 export function getAssetYears(): number[] {
   invalidateYearCaches();
   if (cachedAssetYears) return cachedAssetYears;
+  const persistent=readYearSnapshot("derived:asset-years:v1");
+  if(persistent){cachedAssetYears=persistent;return persistent;}
   const rows = db()
     .prepare("SELECT DISTINCT year FROM declared_assets ORDER BY year DESC")
     .all() as Array<{ year: number }>;
   cachedAssetYears = rows.map((r) => r.year);
+  writeYearSnapshot("derived:asset-years:v1",cachedAssetYears);
   return cachedAssetYears;
 }
 

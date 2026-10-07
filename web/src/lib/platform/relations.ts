@@ -54,7 +54,23 @@ export function personCompanies(personId: number): PartnerRecord[] {
   if (!hasTable("company_partner")) return [];
   const person = db().prepare("SELECT canonical_name AS name FROM people WHERE id=?").get(personId) as { name: string } | undefined;
   if (!person?.name) return [];
-  const rows = db().prepare(`${SELECT_PARTNER} WHERE normalize_public_name(cp.partner_name)=? ORDER BY cp.entry_date DESC`).all(person.name) as Parameters<typeof resolvePartner>[0][];
+  const normalizedName = normalizeName(person.name);
+  const tokens = [...new Set(normalizedName.split(" ").filter(Boolean))];
+  if(!tokens.length)return [];
+  const indexed = hasTable("company_partner_name_search") && hasTable("_politica_search_index") &&
+    !!db().prepare("SELECT 1 FROM _politica_search_index WHERE id=1 AND version>=2").get();
+  const rows = indexed
+    ? db().prepare(`${SELECT_PARTNER}
+        WHERE cp.id IN (
+          SELECT rowid FROM company_partner_name_search
+          WHERE company_partner_name_search MATCH ?
+        ) AND normalize_public_name(cp.partner_name)=?
+        ORDER BY cp.entry_date DESC`).all(
+      tokens.map(token => `"${token.replace(/"/g, '""')}"*`).join(" "), normalizedName,
+    ) as Parameters<typeof resolvePartner>[0][]
+    : db().prepare(`${SELECT_PARTNER}
+        WHERE normalize_public_name(cp.partner_name)=?
+        ORDER BY cp.entry_date DESC`).all(normalizedName) as Parameters<typeof resolvePartner>[0][];
   return rows.map(resolvePartner).filter(row=>row.personId===personId);
 }
 
