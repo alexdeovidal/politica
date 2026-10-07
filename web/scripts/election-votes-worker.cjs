@@ -97,18 +97,22 @@ function queryOptions() {
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_section_catalog'",
   ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_section_catalog LIMIT 1").get());
   const catalogTable = "election_vote_section_catalog";
+  const scopeReady = catalogReady && Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_filter_scope'",
+  ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_filter_scope LIMIT 1").get());
+  const optionsTable = scopeReady ? "election_vote_filter_scope" : catalogReady ? catalogTable : "election_vote_section";
   const candidateYears = catalogReady ? [] : database.prepare(
     "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
   ).all().map(row => row.year);
   const hasVotesInYear = catalogReady ? null : database.prepare("SELECT 1 FROM election_vote_section WHERE year = ? LIMIT 1");
   const years = catalogReady
-    ? database.prepare(`SELECT DISTINCT year FROM ${catalogTable} ORDER BY year DESC`).all().map(row => row.year)
+    ? database.prepare(`SELECT DISTINCT year FROM ${optionsTable} ORDER BY year DESC`).all().map(row => row.year)
     : candidateYears.filter(value => hasVotesInYear.get(value));
 
   const roundWhere = round ? "year = ? AND round = ?" : "year = ?";
   const roundArgs = round ? [year, round] : [year];
   const rounds = year
-    ? database.prepare(`SELECT DISTINCT round FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE year = ? ORDER BY round`).all(year).map(row => row.round)
+    ? database.prepare(`SELECT DISTINCT round FROM ${optionsTable} WHERE year = ? ORDER BY round`).all(year).map(row => row.round)
     : [];
   const officeCodes = year
     ? database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
@@ -127,7 +131,7 @@ function queryOptions() {
   const scopeArgs = [...roundArgs];
   if (office && !catalogReady) { scopeClauses.push("office_code = ?"); scopeArgs.push(office); }
   const states = year
-    ? database.prepare(`SELECT DISTINCT state FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE ${scopeClauses.join(" AND ")} AND state IS NOT NULL ORDER BY state`).all(...scopeArgs).map(row => row.state)
+    ? database.prepare(`SELECT DISTINCT state FROM ${optionsTable} WHERE ${scopeClauses.join(" AND ")} AND ${scopeReady ? "state <> ''" : "state IS NOT NULL"} ORDER BY state`).all(...scopeArgs).map(row => row.state)
     : [];
 
   const municipalityClauses = [...scopeClauses];
@@ -136,8 +140,8 @@ function queryOptions() {
   const municipalities = state && year
     ? database.prepare(`
         SELECT DISTINCT municipality_code AS code, municipality AS label
-        FROM ${catalogReady ? catalogTable : "election_vote_section"}
-        WHERE ${municipalityClauses.join(" AND ")} AND municipality_code IS NOT NULL
+        FROM ${optionsTable}
+        WHERE ${municipalityClauses.join(" AND ")} AND ${scopeReady ? "municipality_code <> ''" : "municipality_code IS NOT NULL"}
         ORDER BY label
       `).all(...municipalityArgs)
     : [];
@@ -146,7 +150,7 @@ function queryOptions() {
   const zoneArgs = [...municipalityArgs];
   if (municipalityCode) { zoneClauses.push("municipality_code = ?"); zoneArgs.push(municipalityCode); }
   const zones = municipalityCode && year
-    ? database.prepare(`SELECT DISTINCT zone_number AS zone FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE ${zoneClauses.join(" AND ")} ORDER BY CAST(zone_number AS INTEGER)`).all(...zoneArgs).map(row => row.zone)
+    ? database.prepare(`SELECT DISTINCT zone_number AS zone FROM ${optionsTable} WHERE ${zoneClauses.join(" AND ")} AND ${scopeReady ? "zone_number <> ''" : "1=1"} ORDER BY CAST(zone_number AS INTEGER)`).all(...zoneArgs).map(row => row.zone)
     : [];
 
   const partyClauses = ["year = ?"];

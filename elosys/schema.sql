@@ -339,6 +339,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_election_vote_section_catalog_key
     ON election_vote_section_catalog (year, round, state, municipality_code, zone_number, section_number);
 CREATE INDEX IF NOT EXISTS ix_election_vote_section_catalog_options
     ON election_vote_section_catalog (year, round, state, municipality_code, municipality, zone_number, section_number);
+CREATE TABLE IF NOT EXISTS election_vote_filter_scope (
+    year              INTEGER NOT NULL,
+    round             INTEGER NOT NULL,
+    state             TEXT NOT NULL DEFAULT '',
+    municipality_code TEXT NOT NULL DEFAULT '',
+    municipality      TEXT NOT NULL DEFAULT '',
+    zone_number       TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_election_vote_filter_scope_key
+    ON election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number);
+CREATE INDEX IF NOT EXISTS ix_election_vote_filter_scope_options
+    ON election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number);
 CREATE VIRTUAL TABLE IF NOT EXISTS election_vote_section_fts USING fts5(
     polling_place_name,
     polling_place_address,
@@ -362,6 +374,39 @@ AFTER UPDATE ON election_vote_section_catalog BEGIN
     VALUES ('delete', old.id, old.polling_place_name, old.polling_place_address, old.polling_place_number);
     INSERT INTO election_vote_section_fts (rowid, polling_place_name, polling_place_address, polling_place_number)
     VALUES (new.id, new.polling_place_name, new.polling_place_address, new.polling_place_number);
+END;
+CREATE TRIGGER IF NOT EXISTS election_vote_section_scope_ai
+AFTER INSERT ON election_vote_section_catalog BEGIN
+    INSERT OR IGNORE INTO election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number)
+    VALUES (new.year, new.round, coalesce(new.state, ''), coalesce(new.municipality_code, ''), coalesce(new.municipality, ''), new.zone_number);
+END;
+CREATE TRIGGER IF NOT EXISTS election_vote_section_scope_ad
+AFTER DELETE ON election_vote_section_catalog BEGIN
+    DELETE FROM election_vote_filter_scope
+    WHERE year=old.year AND round=old.round AND state=coalesce(old.state, '')
+      AND municipality_code=coalesce(old.municipality_code, '') AND municipality=coalesce(old.municipality, '')
+      AND zone_number=old.zone_number
+      AND NOT EXISTS (
+        SELECT 1 FROM election_vote_section_catalog c
+        WHERE c.year=old.year AND c.round=old.round AND c.state IS old.state
+          AND c.municipality_code IS old.municipality_code AND c.municipality IS old.municipality
+          AND c.zone_number=old.zone_number
+      );
+END;
+CREATE TRIGGER IF NOT EXISTS election_vote_section_scope_au
+AFTER UPDATE ON election_vote_section_catalog BEGIN
+    DELETE FROM election_vote_filter_scope
+    WHERE year=old.year AND round=old.round AND state=coalesce(old.state, '')
+      AND municipality_code=coalesce(old.municipality_code, '') AND municipality=coalesce(old.municipality, '')
+      AND zone_number=old.zone_number
+      AND NOT EXISTS (
+        SELECT 1 FROM election_vote_section_catalog c
+        WHERE c.year=old.year AND c.round=old.round AND c.state IS old.state
+          AND c.municipality_code IS old.municipality_code AND c.municipality IS old.municipality
+          AND c.zone_number=old.zone_number AND c.id<>new.id
+      );
+    INSERT OR IGNORE INTO election_vote_filter_scope (year, round, state, municipality_code, municipality, zone_number)
+    VALUES (new.year, new.round, coalesce(new.state, ''), coalesce(new.municipality_code, ''), coalesce(new.municipality, ''), new.zone_number);
 END;
 
 -- DERIVED DATA: detection rules (see ADs/dados_derivados.md)
