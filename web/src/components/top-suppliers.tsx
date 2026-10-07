@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { TopSupplier } from "@/lib/queries";
 import { formatBRL, formatCnpj } from "@/lib/format";
 import { Skeleton } from "./skeleton";
 
-export function TopSuppliers({ initialYear }: { initialYear?: number }) {
+export function TopSuppliers() {
+  const searchParams = useSearchParams();
+  const requestedYear = Number(searchParams.get("ano"));
+  const requestedYearParam = Number.isInteger(requestedYear) && requestedYear > 0 ? String(requestedYear) : "";
   // Default to the latest year: the all-time ranking takes several seconds.
-  const [year, setYear] = useState<string>(
-    initialYear ? String(initialYear) : "all"
-  );
+  const [year, setYear] = useState<string>("all");
   const [years, setYears] = useState<number[]>([]);
   const [yearsReady, setYearsReady] = useState(false);
   const [suppliers, setSuppliers] = useState<TopSupplier[]>([]);
@@ -22,7 +24,7 @@ export function TopSuppliers({ initialYear }: { initialYear?: number }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const yearQuery = initialYear ? `?ano=${initialYear}` : "";
+    const yearQuery = requestedYearParam ? `?ano=${requestedYearParam}` : "";
     fetch(`/api/home-summary${yearQuery}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Years unavailable");
@@ -31,7 +33,7 @@ export function TopSuppliers({ initialYear }: { initialYear?: number }) {
       .then((data) => {
         const availableYears = data.expenseYears ?? [];
         setYears(availableYears);
-        if (initialYear && availableYears.includes(initialYear)) setYear(String(initialYear));
+        if (requestedYearParam && availableYears.includes(Number(requestedYearParam))) setYear(requestedYearParam);
         else setYear(availableYears[0] ? String(availableYears[0]) : "all");
         setYearsReady(true);
       })
@@ -42,7 +44,7 @@ export function TopSuppliers({ initialYear }: { initialYear?: number }) {
         }
       });
     return () => controller.abort();
-  }, [initialYear, attempt]);
+  }, [requestedYearParam, attempt]);
 
   useEffect(() => {
     const section = sectionRef.current;

@@ -17,7 +17,7 @@ function refreshSuppliers(year: number | null, fingerprint: string, key: string,
   const flight = runDatabaseWorker<{ suppliers: TopSupplier[] }>("top-suppliers-worker.cjs", {
     databasePath: databasePath(),
     year,
-  }, { priority: preemptible ? -10 : 0, preemptible }).then(({ suppliers }) => {
+  }, { priority: -10, preemptible, lane: "bulk" }).then(({ suppliers }) => {
     cacheResult(key, { fingerprint, suppliers } satisfies StoredRanking, "local database supplier ranking snapshot");
     return suppliers;
   }).finally(() => inFlight.delete(flightKey));

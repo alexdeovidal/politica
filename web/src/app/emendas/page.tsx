@@ -60,6 +60,7 @@ async function getEarmarkPage({ q, year, type, includePublic, page }: {
     "earmark-page-worker.cjs",
     filters,
     "local database earmark page snapshot",
+    { lane: "bulk", priority: -10, staleWhileRevalidate: true },
   );
 }
 

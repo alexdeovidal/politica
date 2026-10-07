@@ -1,23 +1,20 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { SearchBox } from "@/components/search-box";
 import { TopSuppliers } from "@/components/top-suppliers";
 import { HomeMetrics, HomeYearSelect } from "@/components/home-overview";
 import { PageHeader } from "@/components/shell/shell-context";
 import { ContributionCard } from "@/components/contribution-card";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
-export default async function Home({ searchParams }: PageProps<"/">) {
-  const sp = await searchParams;
-  const parsedYear = typeof sp.ano === "string" ? Number(sp.ano) : 0;
-  const requestedYear = Number.isInteger(parsedYear) && parsedYear > 0 ? parsedYear : 0;
-
+export default function Home() {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
         group="Politica007"
         current="Visão geral"
-        actions={<HomeYearSelect requestedYear={requestedYear} />}
+        actions={<Suspense fallback={<span className="block h-8 w-36 animate-pulse rounded bg-[var(--hover)]" aria-hidden="true" />}><HomeYearSelect /></Suspense>}
       />
 
       <Link href="/apuracao" prefetch={false} className="live-home-link"><span className="live-home-link__dot"/><span><strong>Apuração das Eleições 2026</strong><small>Resultados oficiais do TSE · Estados, cidades e modo TV</small></span><span>Acompanhar →</span></Link>
@@ -55,11 +52,13 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
-      <HomeMetrics requestedYear={requestedYear} />
+      <Suspense fallback={<section className="flex flex-col gap-4" aria-hidden="true"><div className="kpis kpis--home">{Array.from({ length: 5 }, (_, index) => <div key={index} className="kpi"><div className="kpi__label">Indicador público</div><div className="kpi__value">…</div></div>)}</div></section>}>
+        <HomeMetrics />
+      </Suspense>
 
       <ContributionCard />
 
-      <div className="animate-in" style={{ animationDelay: "150ms" }}><TopSuppliers initialYear={requestedYear || undefined} /></div>
+      <div className="animate-in" style={{ animationDelay: "150ms" }}><Suspense fallback={<section className="card"><p className="text-sm text-[var(--muted)]">Preparando o ranking de fornecedores…</p></section>}><TopSuppliers /></Suspense></div>
 
       <div className="card animate-in max-w-2xl" style={{ animationDelay: "220ms" }}>
         <div className="label mb-3">indício não é prova</div>

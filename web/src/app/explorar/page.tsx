@@ -64,6 +64,7 @@ async function ExploreResultsPanel({ filters }: { filters: Filters }) {
     "explore-worker.cjs",
     { mode: "results", ...filters },
     "local database exploration results snapshot",
+    { lane: "bulk", priority: -10, staleWhileRevalidate: true },
   );
   const paramsForPage = (page: number) => {
     const params = new URLSearchParams();

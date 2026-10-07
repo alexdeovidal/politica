@@ -142,6 +142,7 @@ async function RankingResults({
     "assets-ranking-worker.cjs",
     { type: tipo, page, year, limit: PAGE_SIZE },
     "local database asset ranking snapshot",
+    { lane: "bulk", priority: -10, staleWhileRevalidate: true },
   );
   return tipo === "bens"
     ? <BensTable page={page} year={year} hrefFor={hrefFor} rows={(data as AssetsRankingPage).rows} total={data.total} />

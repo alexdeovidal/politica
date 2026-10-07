@@ -11,9 +11,12 @@ const cachedWorkerFlights = new Map<string, Promise<unknown>>();
 // separate slot for explicitly interactive lookups so a cold aggregate cannot
 // hold search requests in the queue for minutes.
 const maxConcurrentWorkers = 2;
-const maxWorkersByLane = { interactive: 1, shared: 1 } as const;
+// Large full-table rankings must not occupy the shared slot used by live
+// election configuration and ordinary page data. They still share the overall
+// worker ceiling, so one analytical query cannot fan out into many scans.
+const maxWorkersByLane = { interactive: 1, shared: 1, bulk: 1 } as const;
 let activeWorkers = 0;
-const activeWorkersByLane = { interactive: 0, shared: 0 };
+const activeWorkersByLane = { interactive: 0, shared: 0, bulk: 0 };
 let workerSequence = 0;
 
 type WorkerLane = keyof typeof maxWorkersByLane;

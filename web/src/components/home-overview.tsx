@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatBRL } from "@/lib/format";
 import type { TseUpdateStatus as Status } from "@/lib/tse-update-status";
 import { TseUpdateStatus } from "@/components/tse-update-status";
@@ -48,7 +49,14 @@ function useHomeSummary(requestedYear: number) {
   return { summary, error, retry: () => setAttempt((value) => value + 1) };
 }
 
-export function HomeYearSelect({ requestedYear }: { requestedYear: number }) {
+function useRequestedYear() {
+  const searchParams = useSearchParams();
+  const year = Number(searchParams.get("ano"));
+  return Number.isInteger(year) && year > 0 ? year : 0;
+}
+
+export function HomeYearSelect() {
+  const requestedYear = useRequestedYear();
   const { summary } = useHomeSummary(requestedYear);
   if (!summary) return <span className="block h-8 w-36 animate-pulse rounded bg-[var(--hover)]" aria-hidden="true" />;
 
@@ -56,7 +64,8 @@ export function HomeYearSelect({ requestedYear }: { requestedYear: number }) {
   return <YearSelect basePath="/" years={summary.expenseYears} value={selectedYear} allLabel="todos os anos" />;
 }
 
-export function HomeMetrics({ requestedYear }: { requestedYear: number }) {
+export function HomeMetrics() {
+  const requestedYear = useRequestedYear();
   const { summary, error, retry } = useHomeSummary(requestedYear);
 
   if (!summary) {
