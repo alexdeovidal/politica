@@ -41,80 +41,54 @@ type PendingSearchRequest = {
   onAbort?: () => void;
   workerData: unknown;
 };
-let persistentSearchWorker: Worker | null = null;
+type PersistentSearchWorkerSlot = { worker: Worker | null; requestId: number | null };
+const persistentSearchWorkers: PersistentSearchWorkerSlot[] = [
+  { worker: null, requestId: null },
+  { worker: null, requestId: null },
+];
 let persistentSearchSequence = 0;
 const pendingSearchRequests = new Map<number, PendingSearchRequest>();
 const persistentSearchQueue: number[] = [];
-let activeSearchRequestId: number | null = null;
 
-function dispatchPersistentSearchQueue(worker = persistentSearchWorker) {
-  if (!worker || worker !== persistentSearchWorker || activeSearchRequestId !== null) return;
+function rejectSearchRequest(requestId: number, error: Error) {
+  const request = pendingSearchRequests.get(requestId);
+  if (!request) return;
+  pendingSearchRequests.delete(requestId);
+  if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+  request.reject(error);
+}
 
-  while (persistentSearchQueue.length) {
-    const requestId = persistentSearchQueue.shift()!;
-    const request = pendingSearchRequests.get(requestId);
-    if (!request) continue;
+function dispatchPersistentSearchQueue() {
+  for (const slot of persistentSearchWorkers) {
+    const worker = slot.worker;
+    if (!worker || slot.requestId !== null) continue;
 
-    activeSearchRequestId = requestId;
-    worker.ref();
-    try {
-      worker.postMessage({ requestId, data: request.workerData });
-    } catch (error) {
-      activeSearchRequestId = null;
-      pendingSearchRequests.delete(requestId);
-      if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
-      request.reject(error instanceof Error ? error : new Error("Could not send search request to worker"));
-      continue;
+    while (persistentSearchQueue.length) {
+      const requestId = persistentSearchQueue.shift()!;
+      const request = pendingSearchRequests.get(requestId);
+      if (!request) continue;
+
+      slot.requestId = requestId;
+      worker.ref();
+      try {
+        worker.postMessage({ requestId, data: request.workerData });
+      } catch (error) {
+        slot.requestId = null;
+        rejectSearchRequest(requestId, error instanceof Error ? error : new Error("Could not send search request to worker"));
+        continue;
+      }
+      break;
     }
-    return;
   }
 
-  if (!pendingSearchRequests.size) worker.unref();
-}
-
-function settlePersistentSearchWorker(worker: Worker, error: Error) {
-  if (persistentSearchWorker !== worker) return;
-  persistentSearchWorker = null;
-  activeSearchRequestId = null;
-  persistentSearchQueue.length = 0;
-  for (const [requestId, request] of pendingSearchRequests) {
-    pendingSearchRequests.delete(requestId);
-    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
-    request.reject(error);
-  }
-}
-
-function rejectPendingSearchRequests(error: Error) {
-  activeSearchRequestId = null;
-  persistentSearchQueue.length = 0;
-  for (const [requestId, request] of pendingSearchRequests) {
-    pendingSearchRequests.delete(requestId);
-    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
-    request.reject(error);
-  }
-}
-
-function cancelActiveSearch(worker: Worker) {
-  if (persistentSearchWorker !== worker) return;
-  // better-sqlite3 runs synchronously inside the worker, so it cannot process a
-  // cancellation message until the query finishes. Terminating the worker is
-  // the only way to stop an abandoned full-table query from continuing to use
-  // CPU after the browser has moved on.
-  persistentSearchWorker = null;
-  activeSearchRequestId = null;
-  void worker.terminate().then(() => {
-    if (persistentSearchWorker !== null || !persistentSearchQueue.length) return;
-    try {
-      dispatchPersistentSearchQueue(getPersistentSearchWorker());
-    } catch (error) {
-      rejectPendingSearchRequests(error instanceof Error ? error : new Error("Could not restart persistent search worker"));
+  if (!pendingSearchRequests.size) {
+    for (const slot of persistentSearchWorkers) {
+      if (slot.worker && slot.requestId === null) slot.worker.unref();
     }
-  }, (error: unknown) => {
-    rejectPendingSearchRequests(error instanceof Error ? error : new Error("Could not stop persistent search worker"));
-  });
+  }
 }
 
-function createPersistentSearchWorker() {
+function createPersistentSearchWorker(slot: PersistentSearchWorkerSlot) {
   const candidates = [
     path.resolve(process.cwd(), "scripts", "search-worker.cjs"),
     path.resolve(process.cwd(), "web", "scripts", "search-worker.cjs"),
@@ -123,11 +97,12 @@ function createPersistentSearchWorker() {
   if (!scriptPath) throw new Error("Database worker not found: search-worker.cjs");
 
   const worker = new Worker(scriptPath, { workerData: { databasePath: databasePath(), persistent: true } });
-  persistentSearchWorker = worker;
+  slot.worker = worker;
+  slot.requestId = null;
   worker.unref();
   worker.on("message", (message: PersistentSearchReply) => {
-    if (persistentSearchWorker !== worker) return;
-    if (activeSearchRequestId === message.requestId) activeSearchRequestId = null;
+    if (slot.worker !== worker || slot.requestId !== message.requestId) return;
+    slot.requestId = null;
     const request = pendingSearchRequests.get(message.requestId);
     if (request) {
       pendingSearchRequests.delete(message.requestId);
@@ -135,24 +110,52 @@ function createPersistentSearchWorker() {
       if (typeof message.error === "string") request.reject(new Error(message.error));
       else request.resolve(message.result);
     }
-    dispatchPersistentSearchQueue(worker);
+    dispatchPersistentSearchQueue();
   });
-  worker.on("error", (error) => settlePersistentSearchWorker(worker, error));
-  worker.on("exit", (code) => {
-    if (persistentSearchWorker === worker) {
-      settlePersistentSearchWorker(worker, new Error(`Persistent search worker exited with code ${code}`));
+  const failWorker = (error: Error) => {
+    if (slot.worker !== worker) return;
+    const requestId = slot.requestId;
+    slot.worker = null;
+    slot.requestId = null;
+    if (requestId !== null) rejectSearchRequest(requestId, error);
+    if (pendingSearchRequests.size) {
+      try { createPersistentSearchWorker(slot); }
+      catch (restartError) {
+        const message = restartError instanceof Error ? restartError : new Error("Could not restart persistent search worker");
+        for (const id of persistentSearchQueue.splice(0)) rejectSearchRequest(id, message);
+      }
     }
+    dispatchPersistentSearchQueue();
+  };
+  worker.on("error", failWorker);
+  worker.on("exit", (code) => {
+    if (slot.worker === worker) failWorker(new Error(`Persistent search worker exited with code ${code}`));
   });
   return worker;
 }
 
-function getPersistentSearchWorker() {
-  return persistentSearchWorker ?? createPersistentSearchWorker();
+function ensurePersistentSearchWorkers() {
+  let created = 0;
+  let lastError: Error | null = null;
+  for (const slot of persistentSearchWorkers) {
+    if (!slot.worker) {
+      try {
+        createPersistentSearchWorker(slot);
+        created += 1;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Could not start persistent search worker");
+      }
+    }
+  }
+  if (created) dispatchPersistentSearchQueue();
+  if (!persistentSearchWorkers.some((slot) => slot.worker)) {
+    throw lastError ?? new Error("No persistent search workers are available");
+  }
 }
 
 export function warmSearchWorker() {
   try {
-    getPersistentSearchWorker();
+    ensurePersistentSearchWorkers();
   } catch (error) {
     console.error("Unable to warm the persistent search worker:", error);
   }
@@ -165,9 +168,8 @@ export function runPersistentSearchWorker<T>(
   const signal = options.signal;
   if (signal?.aborted) return Promise.reject(abortedError());
 
-  let worker: Worker;
   try {
-    worker = getPersistentSearchWorker();
+    ensurePersistentSearchWorkers();
   } catch (error) {
     return Promise.reject(error instanceof Error ? error : new Error("Could not start persistent search worker"));
   }
@@ -186,11 +188,26 @@ export function runPersistentSearchWorker<T>(
       const queuedIndex = persistentSearchQueue.indexOf(requestId);
       if (queuedIndex >= 0) persistentSearchQueue.splice(queuedIndex, 1);
       reject(abortedError());
-      if (activeSearchRequestId === requestId) {
-        cancelActiveSearch(worker);
+      const slot = persistentSearchWorkers.find((candidate) => candidate.requestId === requestId);
+      if (slot?.worker) {
+        // better-sqlite3 runs synchronously inside the worker. Terminating this
+        // one abandoned lookup stops its query without blocking other searches.
+        const worker = slot.worker;
+        slot.worker = null;
+        slot.requestId = null;
+        void worker.terminate().then(() => {
+          try { ensurePersistentSearchWorkers(); }
+          catch (error) {
+            const message = error instanceof Error ? error : new Error("Could not restart persistent search worker");
+            for (const id of persistentSearchQueue.splice(0)) rejectSearchRequest(id, message);
+          }
+          dispatchPersistentSearchQueue();
+        }, (error: unknown) => {
+          const message = error instanceof Error ? error : new Error("Could not stop persistent search worker");
+          for (const id of persistentSearchQueue.splice(0)) rejectSearchRequest(id, message);
+        });
       } else {
-        if (!pendingSearchRequests.size && activeSearchRequestId === null) worker.unref();
-        dispatchPersistentSearchQueue(worker);
+        dispatchPersistentSearchQueue();
       }
     };
     request.onAbort = onAbort;
@@ -202,7 +219,7 @@ export function runPersistentSearchWorker<T>(
     }
 
     persistentSearchQueue.push(requestId);
-    dispatchPersistentSearchQueue(worker);
+    dispatchPersistentSearchQueue();
   });
 }
 

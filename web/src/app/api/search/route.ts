@@ -9,6 +9,8 @@ const searchCache = new Map<string, { expiresAt: number; results: SearchResult[]
 type SearchWorkerResponse = { results: SearchResult[] };
 
 export async function GET(request: Request) {
+  const startedAt = performance.now();
+  let workerDurationMs = 0;
   const params = new URL(request.url).searchParams;
   const q = (params.get("q") ?? "").trim();
   const year = Number(params.get("ano")) || undefined;
@@ -34,11 +36,13 @@ export async function GET(request: Request) {
   } else {
     if (previous) searchCache.delete(cacheKey);
     try {
+      const workerStartedAt = performance.now();
       const response = await runPersistentSearchWorker<SearchWorkerResponse>({
         query: boundedQuery,
         limit: 25,
         filters: { year, office, state, city },
       }, { signal: request.signal });
+      workerDurationMs = performance.now() - workerStartedAt;
       results = response.results;
     } catch (error) {
       if (request.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
@@ -53,5 +57,8 @@ export async function GET(request: Request) {
   }
 
   const cacheControl = privateQuery ? "private, no-store" : "public, max-age=0, s-maxage=300, stale-while-revalidate=600";
-  return NextResponse.json({ results }, { headers: { "Cache-Control": cacheControl } });
+  return NextResponse.json({ results }, { headers: {
+    "Cache-Control": cacheControl,
+    "Server-Timing": `handler;dur=${(performance.now() - startedAt).toFixed(1)}, db-search;dur=${workerDurationMs.toFixed(1)}`,
+  } });
 }
