@@ -21,13 +21,13 @@ from ..util import clean_tse, normalize_name, now_utc
 log = get_logger("elosys.tse.voting")
 
 PARSER_NAME = "tse.voting_sections"
-PARSER_VERSION = "1.2"
+PARSER_VERSION = "1.3"
 URL_TEMPLATE = (
     "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/"
     "votacao_secao_{year}_{unit}.zip"
 )
 
-SUPPORTED_YEARS = (2014, 2016, 2018, 2020, 2022, 2024)
+SUPPORTED_YEARS = (2012, 2014, 2016, 2018, 2020, 2022, 2024)
 PRESIDENTIAL_YEARS = {2014, 2018, 2022}
 STATES = (
     "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT",
@@ -241,11 +241,12 @@ def _ingest_csv(
     parse_id: int,
     by_id: dict[tuple[str, int], int],
     by_fallback: dict[tuple, list[int]],
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int]:
     staged: list[dict] = []
     imported = 0
     rejected = 0
     ignored_without_candidate_id = 0
+    ignored_non_candidate_votes = 0
     collected_at = now_utc()
     with archive.open(filename) as raw:
         reader = csv.DictReader(
@@ -256,7 +257,13 @@ def _ingest_csv(
             votes = _integer(_g(row, "QT_VOTOS"), 0) or 0
             if votes <= 0:
                 continue
-            if not _g(row, "SQ_CANDIDATO") and year != 2014:
+            vote_label = normalize_name(_g(row, "NM_VOTAVEL") or "")
+            if vote_label.startswith(("VOTO ", "PARTIDO ", "LEGENDA ")):
+                # Older archives omit SQ_CANDIDATO and use special numbers that
+                # can collide with a candidate number. Keep nominal votes only.
+                ignored_non_candidate_votes += 1
+                continue
+            if not _g(row, "SQ_CANDIDATO") and year not in {2012, 2014}:
                 ignored_without_candidate_id += 1
                 continue
             history_id = _match_history(row, year, by_id, by_fallback)
@@ -296,7 +303,7 @@ def _ingest_csv(
         if staged:
             con.executemany(_INSERT, staged)
             imported += len(staged)
-    return imported, rejected, ignored_without_candidate_id
+    return imported, rejected, ignored_without_candidate_id, ignored_non_candidate_votes
 
 
 def _ingest_archive(
@@ -365,12 +372,12 @@ def _ingest_archive(
                 members = _csv_members(archive, unit)
                 if len(members) != 1:
                     raise ValueError(f"Esperado um CSV de votação em {zip_path.name}; encontrados {len(members)}")
-                imported, rejected, ignored_without_candidate_id = _ingest_csv(
+                imported, rejected, ignored_without_candidate_id, ignored_non_candidate_votes = _ingest_csv(
                     con, archive, members[0], year, parse_id, by_id, by_fallback
                 )
             con.execute(
                 "UPDATE parse SET rows_extracted = ?, rows_rejected = ? WHERE id = ?",
-                (imported, rejected + ignored_without_candidate_id, parse_id),
+                (imported, rejected + ignored_without_candidate_id + ignored_non_candidate_votes, parse_id),
             )
         return {
             "unit": unit,
@@ -378,6 +385,7 @@ def _ingest_archive(
             "rows": imported,
             "unmatched": rejected,
             "ignored_without_candidate_id": ignored_without_candidate_id,
+            "ignored_non_candidate_votes": ignored_non_candidate_votes,
         }
     finally:
         if remove_after:
@@ -417,11 +425,12 @@ def run(
                     log.info("  %s: arquivo já integrado (%s linhas)", unit, f"{result['rows']:,}")
                 else:
                     log.info(
-                        "  %s: %s votos nominais; %s sem vínculo; %s sem candidatura ignorados",
+                        "  %s: %s votos nominais; %s sem vínculo; %s sem candidatura; %s votos não nominais ignorados",
                         unit,
                         f"{result['rows']:,}",
                         f"{result['unmatched']:,}",
                         f"{result['ignored_without_candidate_id']:,}",
+                        f"{result['ignored_non_candidate_votes']:,}",
                     )
             except Exception as exc:
                 log.error("  %s: %s", unit, exc)

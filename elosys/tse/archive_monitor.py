@@ -14,7 +14,7 @@ from ..provenance import write_manifest
 
 def sources():
     result=[]
-    for year in (2026,2024,2022,2020,2018,2016,2014):
+    for year in (2026,2024,2022,2020,2018,2016,2014,2012):
         if year in processual.SUPPORTED_YEARS:
             result.append((f"processes_{year}",year,[processual.BASE_URL+t.format(year=year) for t in processual._RESOURCES.values()],processual.refresh_year,None))
         if year!=2026:

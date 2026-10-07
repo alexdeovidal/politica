@@ -27,7 +27,7 @@ PARSER_NAME = "tse.candidates"
 PARSER_VERSION = "2.0"
 
 URL_TEMPLATE = "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_{year}.zip"
-SUPPORTED_YEARS = (2014, 2016, 2018, 2020, 2022, 2024, 2026)
+SUPPORTED_YEARS = (2012, 2014, 2016, 2018, 2020, 2022, 2024, 2026)
 
 SOURCE = dict(
     name="TSE - consulta_cand",

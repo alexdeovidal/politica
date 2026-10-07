@@ -129,11 +129,11 @@ uv run elosys init-db --db elosys.db
 Os comandos completos de coleta abaixo reconstroem as tabelas de cada fonte. Sem `--years`, processam todos os anos suportados. Os monitores de produção usam atualização atômica por ano/conjunto e preservam as demais eleições.
 
 ```sh
-uv run elosys tse-candidates --db elosys.db      # candidaturas 2014–2026 (TSE consulta_cand)
+uv run elosys tse-candidates --db elosys.db      # candidaturas 2012–2026 (TSE consulta_cand)
 uv run elosys tse-accounts   --db elosys.db      # CNPJ de campanha, doações e despesas (a etapa mais longa)
 uv run elosys tse-social     --db elosys.db      # redes sociais declaradas
 uv run elosys tse-assets     --db elosys.db      # bens declarados
-uv run elosys tse-voting-sections --db elosys.db # votos por seção/local (2014, 2016, 2018, 2020, 2022, 2024)
+uv run elosys tse-voting-sections --db elosys.db # votos por seção/local (2012, 2014, 2016, 2018, 2020, 2022, 2024)
 uv run elosys tse-processual --db elosys.db      # processos eleitorais públicos e decisões (2018–2026)
 uv run elosys transparencia-sanctions --db elosys.db   # CEIS/CNEP
 uv run elosys transparencia-earmarks  --db elosys.db   # emendas parlamentares
@@ -150,7 +150,7 @@ uv run elosys tse-voting-sections --db elosys.db --years 2024 --states SP
 Execute `tse-candidates` antes, pois as linhas de votação são vinculadas à
 candidatura registrada. Nos anos presidenciais (2014, 2018 e 2022), o TSE publica
 um arquivo nacional separado; ele é incluído também numa coleta limitada a uma
-UF. O nome e endereço do local não constam no arquivo de 2014, então nesse ano
+UF. O nome e endereço do local não constam nos arquivos de 2012 e 2014, então nesses anos
 a ficha mostra o número do local, a zona e a seção. Depois de importar, atualize
 o artefato `elosys.db` usado pelo site para publicar a nova tabela junto com o
 app.

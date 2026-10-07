@@ -59,6 +59,21 @@ Se `elosys.db` não existir ainda, rode o pipeline Python primeiro (ver
   local de votação, zona e seção. Os dados usam a tabela opcional
   `election_vote_section`, preenchida pelo comando `elosys tse-voting-sections`;
   quando ela não existe no banco implantado, essa seção não aparece.
+- `src/app/votos/page.tsx` + `src/components/election-vote-explorer.tsx` —
+  consulta do **Raio-X Votos** (`/votos`): filtros encadeados por eleição,
+  turno, cargo, UF, município, zona, seção, partido, candidatura e local;
+  ranking paginado, comparação de até três candidaturas, favoritos no navegador,
+  links compartilháveis, CSV, mapas territoriais e trajetória quando a mesma
+  pessoa aparece em outras eleições. A API `/api/election-votes` consulta o
+  acervo local em um worker SQLite dedicado e usa o cache persistente do portal,
+  sem chamar o TSE durante cada busca. O acervo por seção é de 2012 a 2024 após
+  a sincronização desses arquivos; a apuração de 2026 permanece em `/apuracao`.
+  O TSE não fornece bairro nesses arquivos, por isso a tela não estima bairros.
+  A porcentagem mostrada no ranking é sobre votos nominais de candidaturas
+  identificados no recorte, não substitui o percentual oficial de votos válidos.
+  A análise automatizada é opcional, sob demanda, limitada por IP e depende da
+  chave de provedor já configurada no servidor; filtros e consultas funcionam
+  sem esse serviço.
 - `src/components/person-electoral-cases.tsx` — processos eleitorais públicos
   do TSE, com classe, órgão, assuntos, parte vinculada, decisões e recursos
   diretamente na ficha. Os dados usam `electoral_case*`, preenchidas por
