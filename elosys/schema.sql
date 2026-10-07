@@ -319,7 +319,7 @@ CREATE INDEX IF NOT EXISTS ix_election_vote_municipality
     ON election_vote_section (year, municipality_code, zone_number, section_number);
 CREATE INDEX IF NOT EXISTS ix_election_vote_explorer
     ON election_vote_section (year, round, office_code, state, municipality_code, zone_number,
-                              polling_place_number, section_number, history_id);
+                              section_number, history_id, municipality);
 
 -- DERIVED DATA: detection rules (see ADs/dados_derivados.md)
 

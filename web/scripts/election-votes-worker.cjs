@@ -57,31 +57,63 @@ function queryOptions() {
   const office = String(filters.officeCode || "");
   const state = String(filters.state || "");
   const municipalityCode = String(filters.municipalityCode || "");
-  const years = database.prepare("SELECT DISTINCT year FROM election_vote_section ORDER BY year DESC").all().map(row => row.year);
+  const candidateYears = database.prepare(
+    "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
+  ).all().map(row => row.year);
+  const hasVotesInYear = database.prepare("SELECT 1 FROM election_vote_section WHERE year = ? LIMIT 1");
+  const years = candidateYears.filter(value => hasVotesInYear.get(value));
+
+  const roundWhere = round ? "year = ? AND round = ?" : "year = ?";
+  const roundArgs = round ? [year, round] : [year];
   const rounds = year
     ? database.prepare("SELECT DISTINCT round FROM election_vote_section WHERE year = ? ORDER BY round").all(year).map(row => row.round)
     : [];
-  const offices = year
-    ? database.prepare("SELECT DISTINCT office_code AS code, office AS label FROM election_vote_section WHERE year = ? AND (? = 0 OR round = ?) AND office IS NOT NULL ORDER BY office").all(year, round, round)
+  const officeCodes = year
+    ? database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
     : [];
+  const labelForOffice = database.prepare(`
+    SELECT office AS label FROM election_vote_section
+    WHERE ${roundWhere} AND office_code = ? AND office IS NOT NULL LIMIT 1
+  `);
+  const offices = officeCodes.map(({ code }) => ({
+    code: String(code),
+    label: labelForOffice.get(...roundArgs, code)?.label || String(code),
+  })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  const officeLabel = offices.find(item => item.code === office)?.label || "";
+
+  const scopeClauses = [round ? "year = ? AND round = ?" : "year = ?"];
+  const scopeArgs = [...roundArgs];
+  if (office) { scopeClauses.push("office_code = ?"); scopeArgs.push(office); }
   const states = year
-    ? database.prepare("SELECT DISTINCT state FROM election_vote_section WHERE year = ? AND (? = 0 OR round = ?) AND (? = '' OR office_code = ?) AND state IS NOT NULL ORDER BY state").all(year, round, round, office, office).map(row => row.state)
+    ? database.prepare(`SELECT DISTINCT state FROM election_vote_section WHERE ${scopeClauses.join(" AND ")} AND state IS NOT NULL ORDER BY state`).all(...scopeArgs).map(row => row.state)
     : [];
+
+  const municipalityClauses = [...scopeClauses];
+  const municipalityArgs = [...scopeArgs];
+  if (state) { municipalityClauses.push("state = ?"); municipalityArgs.push(state); }
   const municipalities = state && year
-    ? database.prepare("SELECT municipality_code AS code, max(municipality) AS label FROM election_vote_section WHERE year = ? AND (? = 0 OR round = ?) AND (? = '' OR office_code = ?) AND state = ? AND municipality_code IS NOT NULL GROUP BY municipality_code ORDER BY label").all(year, round, round, office, office, state)
+    ? database.prepare(`
+        SELECT DISTINCT municipality_code AS code, municipality AS label
+        FROM election_vote_section
+        WHERE ${municipalityClauses.join(" AND ")} AND municipality_code IS NOT NULL
+        ORDER BY label
+      `).all(...municipalityArgs)
     : [];
+
+  const zoneClauses = [...municipalityClauses];
+  const zoneArgs = [...municipalityArgs];
+  if (municipalityCode) { zoneClauses.push("municipality_code = ?"); zoneArgs.push(municipalityCode); }
   const zones = municipalityCode && year
-    ? database.prepare("SELECT DISTINCT zone_number AS zone FROM election_vote_section WHERE year = ? AND (? = 0 OR round = ?) AND (? = '' OR office_code = ?) AND (? = '' OR state = ?) AND municipality_code = ? ORDER BY CAST(zone_number AS INTEGER)").all(year, round, round, office, office, state, state, municipalityCode).map(row => row.zone)
+    ? database.prepare(`SELECT DISTINCT zone_number AS zone FROM election_vote_section WHERE ${zoneClauses.join(" AND ")} ORDER BY CAST(zone_number AS INTEGER)`).all(...zoneArgs).map(row => row.zone)
     : [];
-  const partyClauses = [];
-  const partyArgs = [];
-  if (year) { partyClauses.push("h.year = ?"); partyArgs.push(year); }
-  if (round) { partyClauses.push("h.round = ?"); partyArgs.push(round); }
-  if (office) { partyClauses.push("v.office_code = ?"); partyArgs.push(office); }
-  if (state) { partyClauses.push("v.state = ?"); partyArgs.push(state); }
-  if (municipalityCode) { partyClauses.push("v.municipality_code = ?"); partyArgs.push(municipalityCode); }
-  const parties = year
-    ? database.prepare(`SELECT DISTINCT h.party_abbr AS party FROM politician_history h JOIN election_vote_section v ON v.history_id = h.id ${partyClauses.length ? `WHERE ${partyClauses.join(" AND ")}` : ""} AND h.party_abbr IS NOT NULL ORDER BY h.party_abbr`).all(...partyArgs).map(row => row.party)
+
+  const partyClauses = ["year = ?"];
+  const partyArgs = [year];
+  if (round) { partyClauses.push("coalesce(round, 1) = ?"); partyArgs.push(round); }
+  if (officeLabel) { partyClauses.push("office = ?"); partyArgs.push(officeLabel); }
+  if (state) { partyClauses.push("state = ?"); partyArgs.push(state); }
+  const parties = year && officeLabel
+    ? database.prepare(`SELECT DISTINCT party_abbr AS party FROM politician_history WHERE ${partyClauses.join(" AND ")} AND party_abbr IS NOT NULL ORDER BY party_abbr`).all(...partyArgs).map(row => row.party)
     : [];
   return { years, rounds, offices, states, municipalities, zones, parties, filterScope: { year, round, office, state, municipalityCode }, hasPlaceOptions: Boolean(state && municipalityCode) };
 }
