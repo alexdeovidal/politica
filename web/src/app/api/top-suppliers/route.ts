@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
-import { cached, cacheCollectedAt, cacheResult } from "@/lib/platform/store";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { cached, cacheResult } from "@/lib/platform/store";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import type { TopSupplier } from "@/lib/queries";
 
@@ -9,7 +9,6 @@ export const runtime = "nodejs";
 type StoredRanking = { fingerprint: string; suppliers: TopSupplier[] };
 const inFlight = new Map<string, Promise<TopSupplier[]>>();
 const MAX_CACHE_AGE_MS = 365 * 24 * 60 * 60 * 1000;
-const REVALIDATE_AFTER_MS = 5 * 60 * 1000;
 
 function refreshSuppliers(year: number | null, fingerprint: string, key: string, flightKey: string, preemptible = false): Promise<TopSupplier[]> {
   const existing = inFlight.get(flightKey);
@@ -32,15 +31,8 @@ async function suppliersFor(year: number | null, fingerprint: string): Promise<T
   const stored = cached<StoredRanking>(key, MAX_CACHE_AGE_MS);
   const flightKey = `${year ?? "all"}`;
   if (stored && Array.isArray(stored.suppliers)) {
-    const updatedAt = cacheCollectedAt(key);
-    const cacheAge = updatedAt ? Date.now() - Date.parse(updatedAt) : Number.POSITIVE_INFINITY;
-    const dataChanged = !databaseFingerprintsMatch(stored.fingerprint, fingerprint);
-    if (!dataChanged || cacheAge < REVALIDATE_AFTER_MS) return stored.suppliers;
-
-    // Keep the ranking available while SQLite finishes the heavier recomputation.
-    void refreshSuppliers(year, fingerprint, key, flightKey, true).catch((error) => {
-      console.error("Unable to refresh supplier ranking:", error);
-    });
+    // Grouping and sorting every campaign expense is expensive. Serve the last
+    // saved ranking without launching that work on a public request.
     return stored.suppliers;
   }
 

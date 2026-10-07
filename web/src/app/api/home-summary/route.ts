@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
-import { cached, cacheCollectedAt, cacheResult } from "@/lib/platform/store";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { cached, cacheResult } from "@/lib/platform/store";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import { getTseUpdateStatus } from "@/lib/tse-update-status";
 
@@ -26,7 +26,6 @@ type HomeSummary = {
 type StoredSummary = { fingerprint: string; value: HomeSummary };
 const inFlight = new Map<string, Promise<HomeSummary>>();
 const MAX_CACHE_AGE_MS = 365 * 24 * 60 * 60 * 1000;
-const REVALIDATE_AFTER_MS = 5 * 60 * 1000;
 
 function refreshSummary(year: number | null, fingerprint: string, cacheKey: string, flightKey: string, preemptible = false): Promise<HomeSummary> {
   const existing = inFlight.get(flightKey);
@@ -50,16 +49,9 @@ async function summaryFor(year: number | null, fingerprint: string): Promise<Hom
   const stored = cached<StoredSummary>(cacheKey, MAX_CACHE_AGE_MS);
   const flightKey = `${yearKey}`;
   if (stored?.value) {
-    const updatedAt = cacheCollectedAt(cacheKey);
-    const cacheAge = updatedAt ? Date.now() - Date.parse(updatedAt) : Number.POSITIVE_INFINITY;
-    const dataChanged = !databaseFingerprintsMatch(stored.fingerprint, fingerprint);
-    if (!dataChanged || cacheAge < REVALIDATE_AFTER_MS) return stored.value;
-
-    // WAL writes can change the database fingerprint many times per minute.
-    // Serve the last complete snapshot immediately and refresh it in the background.
-    void refreshSummary(year, fingerprint, cacheKey, flightKey, true).catch((error) => {
-      console.error("Unable to refresh home summary:", error);
-    });
+    // The full-table counts and sums can occupy the database worker for a long
+    // time. Public page visits must use the saved snapshot and never start this
+    // aggregate as a side effect of rendering.
     return stored.value;
   }
 
