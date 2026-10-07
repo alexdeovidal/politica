@@ -49,6 +49,42 @@ function clausesFor({ includeParty = true, includeQuery = true, includePlace = t
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", args };
 }
 
+function matchedPlaceFilter() {
+  if (!filters.place) return null;
+  const catalogExists = Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_section_fts'",
+  ).get());
+  if (!catalogExists || !database.prepare("SELECT 1 FROM election_vote_section_catalog LIMIT 1").get()) return null;
+  const tokens = normalizeName(filters.place).split(" ").filter(Boolean).slice(0, 8);
+  if (!tokens.length) return null;
+
+  const match = tokens.map(token => `"${token.replaceAll('"', '""')}"`).join(" AND ");
+  const clauses = ["election_vote_section_fts MATCH ?"];
+  const args = [match];
+  for (const [field, value] of [
+    ["year", filters.year], ["round", filters.round], ["state", filters.state],
+    ["municipality_code", filters.municipalityCode], ["zone_number", filters.zone], ["section_number", filters.section],
+  ]) {
+    if (value !== undefined && value !== null && value !== "") {
+      clauses.push(`c.${field} = ?`);
+      args.push(value);
+    }
+  }
+
+  return {
+    args,
+    cte: `matched_places AS MATERIALIZED (
+      SELECT c.year, c.round, c.state, c.municipality_code, c.zone_number, c.section_number
+      FROM election_vote_section_fts
+      JOIN election_vote_section_catalog c ON c.id = election_vote_section_fts.rowid
+      WHERE ${clauses.join(" AND ")}
+    )`,
+    join: `JOIN matched_places mp ON v.year = mp.year AND v.round = mp.round
+      AND v.state IS mp.state AND v.municipality_code IS mp.municipality_code
+      AND v.zone_number = mp.zone_number AND v.section_number = mp.section_number`,
+  };
+}
+
 function queryOptions() {
   const table = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_section'").get();
   if (!table) return { years: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] };
@@ -57,16 +93,22 @@ function queryOptions() {
   const office = String(filters.officeCode || "");
   const state = String(filters.state || "");
   const municipalityCode = String(filters.municipalityCode || "");
-  const candidateYears = database.prepare(
+  const catalogReady = Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_section_catalog'",
+  ).get()) && Boolean(database.prepare("SELECT 1 FROM election_vote_section_catalog LIMIT 1").get());
+  const catalogTable = "election_vote_section_catalog";
+  const candidateYears = catalogReady ? [] : database.prepare(
     "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
   ).all().map(row => row.year);
-  const hasVotesInYear = database.prepare("SELECT 1 FROM election_vote_section WHERE year = ? LIMIT 1");
-  const years = candidateYears.filter(value => hasVotesInYear.get(value));
+  const hasVotesInYear = catalogReady ? null : database.prepare("SELECT 1 FROM election_vote_section WHERE year = ? LIMIT 1");
+  const years = catalogReady
+    ? database.prepare(`SELECT DISTINCT year FROM ${catalogTable} ORDER BY year DESC`).all().map(row => row.year)
+    : candidateYears.filter(value => hasVotesInYear.get(value));
 
   const roundWhere = round ? "year = ? AND round = ?" : "year = ?";
   const roundArgs = round ? [year, round] : [year];
   const rounds = year
-    ? database.prepare("SELECT DISTINCT round FROM election_vote_section WHERE year = ? ORDER BY round").all(year).map(row => row.round)
+    ? database.prepare(`SELECT DISTINCT round FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE year = ? ORDER BY round`).all(year).map(row => row.round)
     : [];
   const officeCodes = year
     ? database.prepare(`SELECT DISTINCT office_code AS code FROM election_vote_section WHERE ${roundWhere} AND office_code IS NOT NULL ORDER BY office_code`).all(...roundArgs)
@@ -83,9 +125,9 @@ function queryOptions() {
 
   const scopeClauses = [round ? "year = ? AND round = ?" : "year = ?"];
   const scopeArgs = [...roundArgs];
-  if (office) { scopeClauses.push("office_code = ?"); scopeArgs.push(office); }
+  if (office && !catalogReady) { scopeClauses.push("office_code = ?"); scopeArgs.push(office); }
   const states = year
-    ? database.prepare(`SELECT DISTINCT state FROM election_vote_section WHERE ${scopeClauses.join(" AND ")} AND state IS NOT NULL ORDER BY state`).all(...scopeArgs).map(row => row.state)
+    ? database.prepare(`SELECT DISTINCT state FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE ${scopeClauses.join(" AND ")} AND state IS NOT NULL ORDER BY state`).all(...scopeArgs).map(row => row.state)
     : [];
 
   const municipalityClauses = [...scopeClauses];
@@ -94,7 +136,7 @@ function queryOptions() {
   const municipalities = state && year
     ? database.prepare(`
         SELECT DISTINCT municipality_code AS code, municipality AS label
-        FROM election_vote_section
+        FROM ${catalogReady ? catalogTable : "election_vote_section"}
         WHERE ${municipalityClauses.join(" AND ")} AND municipality_code IS NOT NULL
         ORDER BY label
       `).all(...municipalityArgs)
@@ -104,7 +146,7 @@ function queryOptions() {
   const zoneArgs = [...municipalityArgs];
   if (municipalityCode) { zoneClauses.push("municipality_code = ?"); zoneArgs.push(municipalityCode); }
   const zones = municipalityCode && year
-    ? database.prepare(`SELECT DISTINCT zone_number AS zone FROM election_vote_section WHERE ${zoneClauses.join(" AND ")} ORDER BY CAST(zone_number AS INTEGER)`).all(...zoneArgs).map(row => row.zone)
+    ? database.prepare(`SELECT DISTINCT zone_number AS zone FROM ${catalogReady ? catalogTable : "election_vote_section"} WHERE ${zoneClauses.join(" AND ")} ORDER BY CAST(zone_number AS INTEGER)`).all(...zoneArgs).map(row => row.zone)
     : [];
 
   const partyClauses = ["year = ?"];
@@ -125,9 +167,13 @@ function querySearch() {
     return { rows: [], total: 0, page, pageSize, totalNominalVotes: 0, totalSections: 0 };
   }
 
-  const filtered = clausesFor();
+  const placeFilter = matchedPlaceFilter();
+  const filtered = clausesFor({ includePlace: !placeFilter });
+  const withPlaces = placeFilter ? `WITH ${placeFilter.cte}, ` : "WITH ";
+  const joinPlaces = placeFilter ? placeFilter.join : "";
+  const placeArgs = placeFilter ? placeFilter.args : [];
   const candidates = database.prepare(`
-    WITH tallies AS (
+    ${withPlaces}tallies AS (
       SELECT h.id AS historyId, h.person_id AS personId, v.year AS year, v.round AS round,
              coalesce(h.ballot_name, h.full_name, 'Nome não informado') AS name,
              h.full_name AS legalName, h.office AS office, h.state AS state,
@@ -137,6 +183,7 @@ function querySearch() {
              count(*) AS sections,
              count(DISTINCT v.municipality_code) AS municipalities
       FROM election_vote_section v
+      ${joinPlaces}
       JOIN politician_history h ON h.id = v.history_id
       ${filtered.sql}
       GROUP BY h.id
@@ -146,22 +193,25 @@ function querySearch() {
     FROM tallies
     ORDER BY votes DESC, name COLLATE NOCASE, historyId
     LIMIT ? OFFSET ?
-  `).all(...filtered.args, pageSize, (page - 1) * pageSize);
+  `).all(...placeArgs, ...filtered.args, pageSize, (page - 1) * pageSize);
 
   const totalRow = database.prepare(`
+    ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
     SELECT count(*) AS total FROM (
       SELECT v.history_id FROM election_vote_section v
+      ${joinPlaces}
       JOIN politician_history h ON h.id = v.history_id
       ${filtered.sql}
       GROUP BY v.history_id
     )
-  `).get(...filtered.args);
-  const scope = clausesFor({ includeParty: false, includeQuery: false });
+  `).get(...placeArgs, ...filtered.args);
+  const scope = clausesFor({ includeParty: false, includeQuery: false, includePlace: !placeFilter });
   const scopeRow = database.prepare(`
+    ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
     SELECT coalesce(sum(v.votes), 0) AS totalVotes,
            count(DISTINCT v.municipality_code || ':' || v.zone_number || ':' || v.section_number) AS sections
-    FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id ${scope.sql}
-  `).get(...scope.args);
+    FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id ${scope.sql}
+  `).get(...placeArgs, ...scope.args);
 
   return {
     rows: candidates.map(row => ({
@@ -180,12 +230,16 @@ function queryDetails() {
   const ids = [...new Set((workerData.historyIds || []).map(Number).filter(id => Number.isSafeInteger(id) && id > 0))].slice(0, 3);
   if (!ids.length || !filters.year || !filters.round || !filters.officeCode) return { records: [] };
 
-  const base = clausesFor({ includeParty: false, includeQuery: false, includeIdentity: false });
+  const placeFilter = matchedPlaceFilter();
+  const base = clausesFor({ includeParty: false, includeQuery: false, includeIdentity: false, includePlace: !placeFilter });
+  const withPlaces = placeFilter ? `WITH ${placeFilter.cte}, ` : "WITH ";
+  const joinPlaces = placeFilter ? placeFilter.join : "";
+  const placeArgs = placeFilter ? placeFilter.args : [];
   const idPlaceholders = ids.map(() => "?").join(",");
   const ranking = database.prepare(`
-    WITH tallies AS (
+    ${withPlaces}tallies AS (
       SELECT h.id AS historyId, h.party_abbr AS party, sum(v.votes) AS votes
-      FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id
+      FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id
       ${base.sql}
       GROUP BY h.id
     ), ranked AS (
@@ -195,7 +249,7 @@ function queryDetails() {
       FROM tallies
     )
     SELECT * FROM ranked WHERE historyId IN (${idPlaceholders})
-  `).all(...base.args, ...ids);
+  `).all(...placeArgs, ...base.args, ...ids);
   const rankById = new Map(ranking.map(row => [row.historyId, row]));
 
   const records = [];
@@ -214,37 +268,41 @@ function queryDetails() {
     if (!candidate) continue;
 
     const summary = database.prepare(`
+      ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
       SELECT coalesce(sum(v.votes), 0) AS votes,
              count(*) AS sections,
              count(DISTINCT v.municipality_code) AS municipalities
-      FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id
+      FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id
       ${base.sql} AND v.history_id = ?
-    `).get(...base.args, historyId);
+    `).get(...placeArgs, ...base.args, historyId);
     if (!summary || !summary.votes) continue;
 
     const denominator = database.prepare(`
+      ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
       SELECT coalesce(sum(v.votes),0) AS votes FROM election_vote_section v
-      JOIN politician_history h ON h.id = v.history_id ${base.sql}
-    `).get(...base.args).votes;
+      ${joinPlaces} JOIN politician_history h ON h.id = v.history_id ${base.sql}
+    `).get(...placeArgs, ...base.args).votes;
     const municipalities = database.prepare(`
+      ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
       SELECT v.municipality AS name, v.state AS state, sum(v.votes) AS votes,
              count(DISTINCT v.zone_number || ':' || v.section_number) AS sections
-      FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id
+      FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id
       ${base.sql} AND v.history_id = ?
       GROUP BY v.municipality_code, v.municipality, v.state
       ORDER BY votes DESC LIMIT 12
-    `).all(...base.args, historyId);
+    `).all(...placeArgs, ...base.args, historyId);
     const places = database.prepare(`
+      ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
       SELECT coalesce(v.polling_place_name, 'Local sem nome publicado') AS name,
              v.polling_place_number AS placeNumber, v.municipality AS municipality,
              v.state AS state, v.zone_number AS zone, v.section_number AS section,
              v.polling_place_address AS address, sum(v.votes) AS votes
-      FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id
+      FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id
       ${base.sql} AND v.history_id = ?
       GROUP BY v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name,
                v.polling_place_address, v.section_number, v.municipality, v.state
       ORDER BY votes DESC LIMIT 12
-    `).all(...base.args, historyId);
+    `).all(...placeArgs, ...base.args, historyId);
     const timeline = database.prepare(`
       SELECT v.year, v.round, h.party_abbr AS party, h.state, sum(v.votes) AS votes
       FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id

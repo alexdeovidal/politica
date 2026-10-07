@@ -321,6 +321,49 @@ CREATE INDEX IF NOT EXISTS ix_election_vote_explorer
     ON election_vote_section (year, round, office_code, state, municipality_code, zone_number,
                               section_number, history_id, municipality);
 
+-- DERIVED DATA: one compact row per electoral section for chained filters and place lookup.
+CREATE TABLE IF NOT EXISTS election_vote_section_catalog (
+    id                    INTEGER PRIMARY KEY,
+    year                  INTEGER NOT NULL,
+    round                 INTEGER NOT NULL,
+    state                 TEXT,
+    municipality_code     TEXT,
+    municipality          TEXT,
+    zone_number           TEXT NOT NULL,
+    section_number        TEXT NOT NULL,
+    polling_place_number  TEXT,
+    polling_place_name    TEXT,
+    polling_place_address TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_election_vote_section_catalog_key
+    ON election_vote_section_catalog (year, round, state, municipality_code, zone_number, section_number);
+CREATE INDEX IF NOT EXISTS ix_election_vote_section_catalog_options
+    ON election_vote_section_catalog (year, round, state, municipality_code, municipality, zone_number, section_number);
+CREATE VIRTUAL TABLE IF NOT EXISTS election_vote_section_fts USING fts5(
+    polling_place_name,
+    polling_place_address,
+    polling_place_number,
+    content='election_vote_section_catalog',
+    content_rowid='id'
+);
+CREATE TRIGGER IF NOT EXISTS election_vote_section_catalog_ai
+AFTER INSERT ON election_vote_section_catalog BEGIN
+    INSERT INTO election_vote_section_fts (rowid, polling_place_name, polling_place_address, polling_place_number)
+    VALUES (new.id, new.polling_place_name, new.polling_place_address, new.polling_place_number);
+END;
+CREATE TRIGGER IF NOT EXISTS election_vote_section_catalog_ad
+AFTER DELETE ON election_vote_section_catalog BEGIN
+    INSERT INTO election_vote_section_fts (election_vote_section_fts, rowid, polling_place_name, polling_place_address, polling_place_number)
+    VALUES ('delete', old.id, old.polling_place_name, old.polling_place_address, old.polling_place_number);
+END;
+CREATE TRIGGER IF NOT EXISTS election_vote_section_catalog_au
+AFTER UPDATE ON election_vote_section_catalog BEGIN
+    INSERT INTO election_vote_section_fts (election_vote_section_fts, rowid, polling_place_name, polling_place_address, polling_place_number)
+    VALUES ('delete', old.id, old.polling_place_name, old.polling_place_address, old.polling_place_number);
+    INSERT INTO election_vote_section_fts (rowid, polling_place_name, polling_place_address, polling_place_number)
+    VALUES (new.id, new.polling_place_name, new.polling_place_address, new.polling_place_number);
+END;
+
 -- DERIVED DATA: detection rules (see ADs/dados_derivados.md)
 
 CREATE TABLE IF NOT EXISTS rule_run (

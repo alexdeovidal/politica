@@ -148,6 +148,27 @@ INSERT OR IGNORE INTO election_vote_section (
 )
 """
 
+_SECTION_CATALOG_INSERT = """
+INSERT OR IGNORE INTO election_vote_section_catalog (
+    year, round, state, municipality_code, municipality, zone_number, section_number,
+    polling_place_number, polling_place_name, polling_place_address
+) VALUES (
+    :year, :round, :state, :municipality_code, :municipality, :zone_number, :section_number,
+    :polling_place_number, :polling_place_name, :polling_place_address
+)
+"""
+
+
+def _unique_sections(rows: list[dict]) -> list[dict]:
+    unique: dict[tuple, dict] = {}
+    for row in rows:
+        key = (
+            row["year"], row["round"], row["state"], row["municipality_code"],
+            row["zone_number"], row["section_number"],
+        )
+        unique.setdefault(key, row)
+    return list(unique.values())
+
 
 def _g(row: dict[str, str], name: str) -> str | None:
     return clean_tse(row.get(name))
@@ -298,10 +319,12 @@ def _ingest_csv(
             })
             if len(staged) >= 5000:
                 con.executemany(_INSERT, staged)
+                con.executemany(_SECTION_CATALOG_INSERT, _unique_sections(staged))
                 imported += len(staged)
                 staged.clear()
         if staged:
             con.executemany(_INSERT, staged)
+            con.executemany(_SECTION_CATALOG_INSERT, _unique_sections(staged))
             imported += len(staged)
     return imported, rejected, ignored_without_candidate_id, ignored_non_candidate_votes
 
