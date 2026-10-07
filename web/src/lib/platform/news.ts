@@ -201,20 +201,13 @@ function topicStories(facts:StoryFacts,publishedAt:string):DailyNewsArticle[]{
   return stories;
 }
 
-function refreshStoredArticle(article:DailyNewsArticle):DailyNewsArticle{
-  if(article.slug===openingArticleSlug)return openingEditionArticle(article.publishedAt);
-  const facts=getCandidateFacts(article.personId,0);
-  const refreshed=facts?topicStories(facts,article.publishedAt).find(item=>item.slug===article.slug):undefined;
-  if(refreshed)return refreshed;
-  return {...article,summary:article.summary.replace(/\s*Pauta escolhida entre os perfis mais consultados no Politica007 nos últimos 30 dias\.?\s*/i,"").trim()};
-}
-
 function readStored(row:{day:string;payload:string;generated_at:string;tracked_profiles:number}|undefined):DailyNewsFeed|null{
   if(!row)return null;
   try{
-    const articles=(JSON.parse(row.payload) as DailyNewsArticle[]).map(refreshStoredArticle);
-    const payload=JSON.stringify(articles);
-    if(payload!==row.payload)platformStore().prepare("UPDATE daily_news SET payload=? WHERE day=? AND payload=?").run(payload,row.day,row.payload);
+    // A saved edition is an immutable snapshot. Re-querying every candidate's
+    // financial, electoral, and process records on each page view makes this
+    // synchronous SQLite route block the whole Next.js server process.
+    const articles=JSON.parse(row.payload) as DailyNewsArticle[];
     return {day:row.day,generatedAt:row.generated_at,trackedProfiles:row.tracked_profiles,articles};
   }catch{return null;}
 }
@@ -271,13 +264,7 @@ export const getStoredNewsArticle=cache((day:string,slug:string):DailyNewsArticl
   try{
     const articles=JSON.parse(row.payload) as DailyNewsArticle[];
     const index=articles.findIndex(article=>article.slug===slug);
-    if(index<0)return null;
-    const article=refreshStoredArticle(articles[index]);
-    if(JSON.stringify(article)!==JSON.stringify(articles[index])){
-      articles[index]=article;
-      platformStore().prepare("UPDATE daily_news SET payload=? WHERE day=? AND payload=?").run(JSON.stringify(articles),day,row.payload);
-    }
-    return article;
+    return index<0?null:articles[index];
   }catch{return null;}
 });
 
