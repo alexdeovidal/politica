@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { databasePath } from "@/lib/db";
-import { runDatabaseWorker } from "@/lib/database-worker";
+import { runPersistentSearchWorker } from "@/lib/database-worker";
 import type { SearchResult } from "@/lib/queries";
 
 const SEARCH_CACHE_TTL_MS = 5 * 60_000;
@@ -11,12 +10,15 @@ type SearchWorkerResponse = { results: SearchResult[] };
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const q = params.get("q") ?? "";
+  const q = (params.get("q") ?? "").trim();
   const year = Number(params.get("ano")) || undefined;
   const office = params.get("cargo") || "";
   const state = params.get("uf") || "";
   const city = params.get("cidade") || "";
   const boundedQuery = q.slice(0, 120);
+  if (boundedQuery.length < 2) {
+    return NextResponse.json({ results: [] }, { headers: { "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600" } });
+  }
   const cacheKey = createHash("sha256")
     .update(JSON.stringify([boundedQuery.toLocaleLowerCase("pt-BR"), year, office, state, city]))
     .digest("hex");
@@ -32,12 +34,11 @@ export async function GET(request: Request) {
   } else {
     if (previous) searchCache.delete(cacheKey);
     try {
-      const response = await runDatabaseWorker<SearchWorkerResponse>("search-worker.cjs", {
-        databasePath: databasePath(),
+      const response = await runPersistentSearchWorker<SearchWorkerResponse>({
         query: boundedQuery,
         limit: 25,
         filters: { year, office, state, city },
-      }, { signal: request.signal, priority: 10, lane: "interactive" });
+      }, { signal: request.signal });
       results = response.results;
     } catch (error) {
       if (request.signal.aborted || (error instanceof Error && error.name === "AbortError")) {

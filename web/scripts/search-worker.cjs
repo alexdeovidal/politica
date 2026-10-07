@@ -7,6 +7,8 @@ const database = new Database(databaseFile, { readonly: true, fileMustExist: tru
 database.pragma("query_only = ON");
 database.function("normalize_public_name", { deterministic: true }, normalizeName);
 const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
+const resultCache = new Map();
+const SEARCH_CACHE_TTL_MS = 5 * 60_000;
 
 function normalizeName(value) {
   return String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim().replace(/\s+/g, " ");
@@ -184,14 +186,23 @@ function searchPeople(rawQuery, limit = 25, filters = {}) {
   return combined.slice(0, limit);
 }
 
-try {
-  const filters = workerData.filters || {};
-  const results = searchPeople(String(workerData.query || ""), Math.max(1, Math.min(25, Number(workerData.limit) || 25)), filters);
+function search(workerInput) {
+  const filters = workerInput.filters || {};
+  const query = String(workerInput.query || "").trim().slice(0, 120);
+  if (query.length < 2) return [];
+  const limit = Math.max(1, Math.min(25, Number(workerInput.limit) || 25));
+  const digits = query.replace(/\D/g, "");
+  const privateQuery = digits.length >= 6 && /^[\d./\-\s]+$/.test(query);
+  const cacheKey = JSON.stringify([query.toLocaleLowerCase("pt-BR"), limit, filters]);
+  const cached = privateQuery ? undefined : resultCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.results;
+  if (cached) resultCache.delete(cacheKey);
+
+  const results = searchPeople(query, limit, filters);
   const hasFilters = Boolean(filters.year || filters.office || filters.state || filters.city);
-  if (!hasFilters) {
-    parentPort.postMessage({ results });
-  } else {
-    const filteredResults = [];
+  let filteredResults = results;
+  if (hasFilters) {
+    filteredResults = [];
     for (const result of results) {
       if (result.kind !== "candidato") continue;
       const clauses = [];
@@ -205,10 +216,31 @@ try {
       if (match) filteredResults.push({ ...result, latestYear: match.year, latestOffice: match.office ?? null,
         latestState: match.state ?? null, latestPartyAbbr: match.partyAbbr ?? null, latestResult: match.result ?? null });
     }
-    parentPort.postMessage({ results: filteredResults });
   }
-} catch (error) {
-  parentPort.postMessage({ error: error instanceof Error ? error.message : "Search worker failed" });
-} finally {
-  database.close();
+
+  if (!privateQuery) {
+    resultCache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_TTL_MS, results: filteredResults });
+    while (resultCache.size > 500) resultCache.delete(resultCache.keys().next().value);
+  }
+  return filteredResults;
+}
+
+if (workerData.persistent) {
+  parentPort.on("message", message => {
+    const requestId = Number(message?.requestId);
+    try {
+      const results = search(message?.data || {});
+      parentPort.postMessage({ requestId, result: { results } });
+    } catch (error) {
+      parentPort.postMessage({ requestId, error: error instanceof Error ? error.message : "Search worker failed" });
+    }
+  });
+} else {
+  try {
+    parentPort.postMessage({ results: search(workerData) });
+  } catch (error) {
+    parentPort.postMessage({ error: error instanceof Error ? error.message : "Search worker failed" });
+  } finally {
+    database.close();
+  }
 }

@@ -32,9 +32,11 @@ function storage() {
       CREATE TABLE IF NOT EXISTS live_result_snapshot(id INTEGER PRIMARY KEY,election_year INTEGER NOT NULL,turn INTEGER NOT NULL,office TEXT NOT NULL,state TEXT NOT NULL,municipality TEXT NOT NULL,zone TEXT NOT NULL,source_url TEXT NOT NULL,fingerprint TEXT NOT NULL,first_seen_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,generated_at TEXT,totalized_at TEXT,source_checked_at TEXT NOT NULL,completed_at TEXT,office_name TEXT NOT NULL,area_name TEXT NOT NULL,progress TEXT NOT NULL,sections_counted INTEGER NOT NULL,sections_total INTEGER NOT NULL,sections_percentage REAL NOT NULL,candidate_count INTEGER NOT NULL,stale INTEGER NOT NULL,payload TEXT NOT NULL,UNIQUE(source_url,fingerprint));
       CREATE INDEX IF NOT EXISTS ix_live_result_snapshot_selection ON live_result_snapshot(election_year,turn,office,state,municipality,zone,id DESC);`);
     const snapshotColumns = store.pragma("table_info(live_result_snapshot)") as Array<{name: string}>;
-    if (!snapshotColumns.some(column => column.name === "completed_at")) store.exec("ALTER TABLE live_result_snapshot ADD COLUMN completed_at TEXT");
-    store.exec(`UPDATE live_result_snapshot SET completed_at=source_checked_at
-      WHERE completed_at IS NULL AND stale=0 AND (progress='final' OR (sections_total>0 AND sections_counted>=sections_total AND sections_percentage>=100));`);
+    if (!snapshotColumns.some(column => column.name === "completed_at")) {
+      store.exec("ALTER TABLE live_result_snapshot ADD COLUMN completed_at TEXT");
+      store.exec(`UPDATE live_result_snapshot SET completed_at=source_checked_at
+        WHERE completed_at IS NULL AND stale=0 AND (progress='final' OR (sections_total>0 AND sections_counted>=sections_total AND sections_percentage>=100));`);
+    }
     initialized = true;
   }
   return store;
@@ -91,7 +93,12 @@ async function officialFile(url: string, ttl: number, validate: (value: unknown)
   const prior = readRecord(url);
   if (prior && Date.now() < prior.retry_at) return availableFile(prior);
   const running = pending.get(url);
-  if (running) return running;
+  if (running) {
+    if (prior?.payload && prior.checked_at) {
+      try { return {...availableFile(prior), stale: true}; } catch {}
+    }
+    return running;
+  }
   const operation = (async () => {
     let acquired = false;
     try {
@@ -131,7 +138,17 @@ async function officialFile(url: string, ttl: number, validate: (value: unknown)
     } finally { if (acquired) releaseRequest(); }
   })();
   pending.set(url, operation);
-  try { return await operation; } finally { pending.delete(url); }
+  void operation.finally(() => {
+    if (pending.get(url) === operation) pending.delete(url);
+  }).catch(() => {});
+  if (prior?.payload && prior.checked_at) {
+    try {
+      const stale = {...availableFile(prior), stale: true};
+      void operation.catch(error => console.error("Unable to refresh cached TSE configuration:", error));
+      return stale;
+    } catch {}
+  }
+  return operation;
 }
 
 function readBinaryRecord(url: string): BinaryRecord | undefined {

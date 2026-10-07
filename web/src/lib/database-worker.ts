@@ -30,6 +30,113 @@ type QueuedWorker = {
 
 const workerQueue: QueuedWorker[] = [];
 const activeJobs = new Set<QueuedWorker>();
+type PersistentSearchReply = { requestId: number; result?: unknown; error?: string };
+type PendingSearchRequest = {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  signal?: AbortSignal;
+  onAbort?: () => void;
+};
+let persistentSearchWorker: Worker | null = null;
+let persistentSearchSequence = 0;
+const pendingSearchRequests = new Map<number, PendingSearchRequest>();
+
+function settlePersistentSearchWorker(worker: Worker, error: Error) {
+  if (persistentSearchWorker === worker) persistentSearchWorker = null;
+  for (const [requestId, request] of pendingSearchRequests) {
+    pendingSearchRequests.delete(requestId);
+    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+    request.reject(error);
+  }
+}
+
+function createPersistentSearchWorker() {
+  const candidates = [
+    path.resolve(process.cwd(), "scripts", "search-worker.cjs"),
+    path.resolve(process.cwd(), "web", "scripts", "search-worker.cjs"),
+  ];
+  const scriptPath = candidates.find(existsSync);
+  if (!scriptPath) throw new Error("Database worker not found: search-worker.cjs");
+
+  const worker = new Worker(scriptPath, { workerData: { databasePath: databasePath(), persistent: true } });
+  persistentSearchWorker = worker;
+  worker.unref();
+  worker.on("message", (message: PersistentSearchReply) => {
+    const request = pendingSearchRequests.get(message.requestId);
+    if (!request) return;
+    pendingSearchRequests.delete(message.requestId);
+    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+    if (typeof message.error === "string") request.reject(new Error(message.error));
+    else request.resolve(message.result);
+    if (!pendingSearchRequests.size) worker.unref();
+  });
+  worker.on("error", (error) => settlePersistentSearchWorker(worker, error));
+  worker.on("exit", (code) => {
+    if (persistentSearchWorker === worker) {
+      settlePersistentSearchWorker(worker, new Error(`Persistent search worker exited with code ${code}`));
+    }
+  });
+  return worker;
+}
+
+function getPersistentSearchWorker() {
+  return persistentSearchWorker ?? createPersistentSearchWorker();
+}
+
+export function warmSearchWorker() {
+  try {
+    getPersistentSearchWorker();
+  } catch (error) {
+    console.error("Unable to warm the persistent search worker:", error);
+  }
+}
+
+export function runPersistentSearchWorker<T>(
+  workerData: unknown,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  const signal = options.signal;
+  if (signal?.aborted) return Promise.reject(abortedError());
+
+  let worker: Worker;
+  try {
+    worker = getPersistentSearchWorker();
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error("Could not start persistent search worker"));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const requestId = persistentSearchSequence++;
+    const request: PendingSearchRequest = {
+      resolve: (value) => resolve(value as T),
+      reject,
+      signal,
+    };
+    const onAbort = () => {
+      if (!pendingSearchRequests.delete(requestId)) return;
+      signal?.removeEventListener("abort", onAbort);
+      reject(abortedError());
+      if (!pendingSearchRequests.size) worker.unref();
+    };
+    request.onAbort = onAbort;
+    pendingSearchRequests.set(requestId, request);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    worker.ref();
+    try {
+      worker.postMessage({ requestId, data: workerData });
+    } catch (error) {
+      pendingSearchRequests.delete(requestId);
+      signal?.removeEventListener("abort", onAbort);
+      reject(error instanceof Error ? error : new Error("Could not send search request to worker"));
+      if (!pendingSearchRequests.size) worker.unref();
+    }
+  });
+}
 
 function drainWorkerQueue() {
   workerQueue.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
