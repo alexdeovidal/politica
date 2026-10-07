@@ -1,42 +1,95 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { TopSupplier } from "@/lib/queries";
 import { formatBRL, formatCnpj } from "@/lib/format";
 import { Skeleton } from "./skeleton";
 
-export function TopSuppliers({ years, initialYear }: { years: number[]; initialYear?: number }) {
+export function TopSuppliers({ initialYear }: { initialYear?: number }) {
   // Default to the latest year: the all-time ranking takes several seconds.
   const [year, setYear] = useState<string>(
-    initialYear ? String(initialYear) : years[0] ? String(years[0]) : "all"
+    initialYear ? String(initialYear) : "all"
   );
+  const [years, setYears] = useState<number[]>([]);
+  const [yearsReady, setYearsReady] = useState(false);
   const [suppliers, setSuppliers] = useState<TopSupplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const yearQuery = initialYear ? `?ano=${initialYear}` : "";
+    fetch(`/api/home-summary${yearQuery}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Years unavailable");
+        return response.json() as Promise<{ expenseYears: number[] }>;
+      })
+      .then((data) => {
+        const availableYears = data.expenseYears ?? [];
+        setYears(availableYears);
+        if (initialYear && availableYears.includes(initialYear)) setYear(String(initialYear));
+        else setYear(availableYears[0] ? String(availableYears[0]) : "all");
+        setYearsReady(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setYearsReady(true);
+          setError(true);
+        }
+      });
+    return () => controller.abort();
+  }, [initialYear, attempt]);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setEntered(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setEntered(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "500px 0px" });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!entered || !yearsReady || error) return;
     let cancelled = false;
-    const t = setTimeout(() => {
-      setLoading(true);
-      fetch(`/api/top-suppliers?year=${year}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (!cancelled) setSuppliers(data.suppliers ?? []);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 0);
+    const controller = new AbortController();
+    setLoading(true);
+    fetch(`/api/top-suppliers?year=${year}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Ranking unavailable");
+        return response.json() as Promise<{ suppliers: TopSupplier[] }>;
+      })
+      .then((data) => {
+        if (!cancelled) setSuppliers(data.suppliers ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      controller.abort();
     };
-  }, [year]);
+  }, [year, entered, yearsReady, error, attempt]);
 
   const max = suppliers.length > 0 ? suppliers[0].totalCents : 1;
 
   return (
-    <section className="card">
+    <section ref={sectionRef} className="card">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="label">prestação de contas eleitorais · despesas contratadas com fornecedores</div>
@@ -64,7 +117,12 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="py-8 text-center text-sm text-[var(--muted)]">
+          Não foi possível carregar os dados do ranking.
+          <button type="button" className="ml-2 underline" onClick={() => { setError(false); setYearsReady(false); setAttempt((value) => value + 1); }}>Tentar novamente</button>
+        </div>
+      ) : loading ? (
         <div className="flex flex-col">
           {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="border-b border-[var(--border-1)] py-3.5 last:border-0">
@@ -81,6 +139,8 @@ export function TopSuppliers({ years, initialYear }: { years: number[]; initialY
             </div>
           ))}
         </div>
+      ) : !entered || !yearsReady ? (
+        <div className="py-10 text-center font-mono text-[11px] text-[var(--muted-2)]">O ranking será carregado ao chegar nesta seção.</div>
       ) : suppliers.length === 0 ? (
         <div className="py-10 text-center font-mono text-[11px] text-[var(--muted-2)]">
           sem despesas contratadas para esse filtro.

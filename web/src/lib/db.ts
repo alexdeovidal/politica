@@ -5,6 +5,8 @@ import {normalizeName,normalizePublicTimestamp} from "./normalize";
 
 const DB_PATH = process.env.ELOSYS_DB_PATH ?? path.join(process.cwd(), "..", "elosys.db");
 
+export function databasePath(): string { return DB_PATH; }
+
 let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
