@@ -6,39 +6,8 @@ import { cached, cacheResult } from "@/lib/platform/store";
 
 type WorkerSnapshot<T> = { fingerprint: string; value: T };
 const cachedWorkerFlights = new Map<string, Promise<unknown>>();
-const maxConcurrentWorkers = Math.max(1, Number(process.env.POLITICA_DB_WORKERS) || 2);
-let activeWorkers = 0;
-let workerSequence = 0;
 
-type QueuedWorker = {
-  priority: number;
-  sequence: number;
-  state: "queued" | "running" | "finished";
-  start: () => void;
-};
-
-const workerQueue: QueuedWorker[] = [];
-
-function drainWorkerQueue() {
-  workerQueue.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
-  while (activeWorkers < maxConcurrentWorkers && workerQueue.length) {
-    const job = workerQueue.shift()!;
-    if (job.state !== "queued") continue;
-    job.state = "running";
-    activeWorkers += 1;
-    job.start();
-  }
-}
-
-function abortedError() {
-  return Object.assign(new Error("Database worker was cancelled"), { name: "AbortError" });
-}
-
-export function runDatabaseWorker<T>(
-  scriptName: string,
-  workerData: unknown,
-  options: { signal?: AbortSignal; priority?: number } = {},
-): Promise<T> {
+export function runDatabaseWorker<T>(scriptName: string, workerData: unknown): Promise<T> {
   const candidates = [
     path.resolve(process.cwd(), "scripts", scriptName),
     path.resolve(process.cwd(), "web", "scripts", scriptName),
@@ -47,90 +16,28 @@ export function runDatabaseWorker<T>(
   if (!scriptPath) return Promise.reject(new Error(`Database worker not found: ${scriptName}`));
 
   return new Promise<T>((resolve, reject) => {
+    const worker = new Worker(scriptPath, { workerData });
     let settled = false;
-    let worker: Worker | null = null;
-    let job: QueuedWorker;
-    const signal = options.signal;
-    const cleanup = () => signal?.removeEventListener("abort", onAbort);
     const fail = (error: Error) => {
       if (settled) return;
       settled = true;
-      cleanup();
       reject(error);
     };
-    const releaseSlot = () => {
-      if (job.state !== "running") return;
-      job.state = "finished";
-      activeWorkers -= 1;
-      cleanup();
-      drainWorkerQueue();
-    };
 
-    const onAbort = () => {
-      if (settled) return;
-      if (job.state === "queued") {
-        job.state = "finished";
-        const queuedIndex = workerQueue.indexOf(job);
-        if (queuedIndex >= 0) workerQueue.splice(queuedIndex, 1);
-        fail(abortedError());
-        drainWorkerQueue();
+    worker.once("message", (result: T | { error: string }) => {
+      if (result && typeof result === "object" && "error" in result) {
+        const message = (result as { error?: unknown }).error;
+        fail(new Error(typeof message === "string" ? message : "Database worker failed"));
         return;
       }
-      if (job.state === "running" && worker) {
-        fail(abortedError());
-        void worker.terminate();
-      }
-    };
-
-    job = {
-      priority: options.priority ?? 0,
-      sequence: workerSequence++,
-      state: "queued",
-      start: () => {
-        if (signal?.aborted) {
-          job.state = "finished";
-          activeWorkers -= 1;
-          fail(abortedError());
-          drainWorkerQueue();
-          return;
-        }
-        try {
-          worker = new Worker(scriptPath, { workerData });
-        } catch (error) {
-          fail(error instanceof Error ? error : new Error("Could not start database worker"));
-          releaseSlot();
-          return;
-        }
-
-        worker.once("message", (result: T | { error: string }) => {
-          if (result && typeof result === "object" && "error" in result) {
-            const message = (result as { error?: unknown }).error;
-            fail(new Error(typeof message === "string" ? message : "Database worker failed"));
-            return;
-          }
-          settled = true;
-          cleanup();
-          resolve(result as T);
-        });
-        worker.once("error", (error) => {
-          fail(error);
-          releaseSlot();
-        });
-        worker.once("exit", (code) => {
-          if (code !== 0) fail(new Error(`Database worker exited with code ${code}`));
-          else if (!settled) fail(new Error("Database worker exited without a result"));
-          releaseSlot();
-        });
-      },
-    };
-
-    if (signal?.aborted) {
-      fail(abortedError());
-      return;
-    }
-    signal?.addEventListener("abort", onAbort, { once: true });
-    workerQueue.push(job);
-    drainWorkerQueue();
+      settled = true;
+      resolve(result as T);
+    });
+    worker.once("error", fail);
+    worker.once("exit", (code) => {
+      if (code !== 0) fail(new Error(`Database worker exited with code ${code}`));
+      else if (!settled) fail(new Error("Database worker exited without a result"));
+    });
   });
 }
 

@@ -39,10 +39,6 @@ const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
 const getCachedPersonFinance = cache((personId: number, year?: number) => getPersonFinance(personId, year));
 
-async function yieldToStreamingRenderer() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
 function liveOfficeCode(value: string | null) {
   const office = normalizeLiveSearch(value || "");
   if (office.includes("presidente")) return "1";
@@ -231,7 +227,6 @@ async function ProfileFinanceSummary({ personId, year }: { personId: number; yea
 
 
 async function NetworkSection({ personId, displayName }: { personId: number; displayName: string }) {
-  await yieldToStreamingRenderer();
   const network = getPoliticianDonationNetwork(personId);
   if (network.donatedTo.length === 0 && network.receivedFrom.length === 0) return null;
   return (
@@ -242,7 +237,6 @@ async function NetworkSection({ personId, displayName }: { personId: number; dis
 }
 
 async function SignalsSection({ personId, personCpf }: { personId: number; personCpf: string | null }) {
-  await yieldToStreamingRenderer();
   if(getTseUpdateStatus().derivedRefreshPending)return <section className="card"><h2>Análises em atualização</h2><p>As análises financeiras estão sendo recalculadas após alterações nas bases oficiais. Os registros originais continuam disponíveis nas seções de finanças.</p></section>;
   const { signals, signalsCount } = getPersonSignals(personId);
   if (signals.length === 0) return null;
@@ -337,7 +331,6 @@ async function SignalsSection({ personId, personCpf }: { personId: number; perso
 }
 
 async function CandidaciesSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const candidacies = getPersonCandidacies(personId);
   if (candidacies.length === 0) return null;
   const campaignOrgs = getPersonCampaignOrgs(personId);
@@ -393,20 +386,17 @@ async function CandidaciesSection({ personId }: { personId: number }) {
 }
 
 async function VotingSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const results = getPersonVoteResults(personId);
   if (results.length === 0) return null;
   return <PersonVoteResults results={results} />;
 }
 
 async function ElectoralCasesSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const data = getPersonElectoralCases(personId);
   return <PersonElectoralCases key={personId} personId={personId} data={data} />;
 }
 
 async function AssetsSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const { declaredAssets, declaredAssetsByYear } = getPersonAssets(personId);
   if (declaredAssets.length === 0) return null;
   return (
@@ -424,7 +414,6 @@ async function AssetsSection({ personId }: { personId: number }) {
 }
 
 async function EarmarksSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const { earmarks, totalCommittedCents, totalPaidCents } = getPersonEarmarks(personId);
   if (earmarks.length === 0) return null;
   return (
@@ -486,7 +475,6 @@ async function EarmarksSection({ personId }: { personId: number }) {
 async function FinanceSection({
   personId, year,
 }: { personId: number; year: number | undefined }) {
-  await yieldToStreamingRenderer();
   const finance = getCachedPersonFinance(personId, year);
   return (
     <div id="financas" data-toc-title="finanças">
@@ -524,7 +512,6 @@ async function FinanceSection({
 }
 
 async function SocialMediaSection({ personId }: { personId: number }) {
-  await yieldToStreamingRenderer();
   const socialMedia = getPersonSocialMedia(personId);
   if (socialMedia.length === 0) return null;
   return (
@@ -541,7 +528,6 @@ async function SocialMediaSection({ personId }: { personId: number }) {
 }
 
 async function DiscourseSection({ personId, displayName }: { personId: number; displayName: string }) {
-  await yieldToStreamingRenderer();
   const discourseCount = getDiscourseCount({ personId });
   if (discourseCount === 0) return null;
   const discourse = getDiscourseSignals({ personId, limit: DISCOURSE_SHOWN });
