@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { cached, cacheResult } from "@/lib/platform/store";
+
+type WorkerSnapshot<T> = { fingerprint: string; value: T };
+const cachedWorkerFlights = new Map<string, Promise<unknown>>();
 
 export function runDatabaseWorker<T>(scriptName: string, workerData: unknown): Promise<T> {
   const candidates = [
@@ -34,4 +39,30 @@ export function runDatabaseWorker<T>(scriptName: string, workerData: unknown): P
       else if (!settled) fail(new Error("Database worker exited without a result"));
     });
   });
+}
+
+export async function runCachedDatabaseWorker<T>(
+  cacheKey: string,
+  scriptName: string,
+  workerData: Record<string, unknown> = {},
+  source = "local database worker snapshot",
+): Promise<T> {
+  const fingerprint = databaseFingerprint();
+  const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
+  if (stored?.fingerprint === fingerprint && stored.value) return stored.value;
+
+  const flightKey = `${cacheKey}:${fingerprint}`;
+  const existing = cachedWorkerFlights.get(flightKey) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const flight = runDatabaseWorker<T>(scriptName, {
+    databasePath: databasePath(),
+    ...workerData,
+  }).then((value) => {
+    cacheResult(cacheKey, { fingerprint, value } satisfies WorkerSnapshot<T>, source);
+    return value;
+  }).finally(() => cachedWorkerFlights.delete(flightKey));
+
+  cachedWorkerFlights.set(flightKey, flight);
+  return flight;
 }
