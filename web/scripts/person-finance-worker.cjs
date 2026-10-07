@@ -38,6 +38,31 @@ try {
      WHERE co.person_id = ?${year !== null ? " AND ce.year = ?" : ""}`,
   ).get(personId, ...yearArgs);
 
+  const suppliers = database.prepare(
+    `SELECT t.supplier_cpf_cnpj AS doc, max(t.supplier_name) AS name,
+            coalesce(sum(t.amount_cents), 0) AS cents
+     FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
+     WHERE co.person_id = ?${yearClause}
+     GROUP BY t.supplier_cpf_cnpj
+     ORDER BY cents DESC
+     LIMIT 5`,
+  ).all(personId, ...yearArgs);
+  const donationOrigins = database.prepare(
+    `SELECT coalesce(t.source, 'Origem não informada') AS name,
+            coalesce(sum(t.amount_cents), 0) AS cents
+     FROM campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
+     WHERE co.person_id = ?${yearClause}
+     GROUP BY t.source
+     ORDER BY cents DESC`,
+  ).all(personId, ...yearArgs);
+  const expenseYears = database.prepare(
+    `SELECT t.year, coalesce(sum(t.amount_cents), 0) AS cents, count(*) AS n
+     FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
+     WHERE co.person_id = ?
+     GROUP BY t.year
+     ORDER BY t.year`,
+  ).all(personId);
+
   parentPort.postMessage({
     donationsCount: donations.n,
     donationsTotalCents: donations.total,
@@ -47,6 +72,9 @@ try {
     paymentsCount: payments.n,
     electoralFundTotalCents: electoralFund.total,
     electoralFundCount: electoralFund.n,
+    suppliers,
+    donationOrigins,
+    expenseYears,
   });
 } catch (error) {
   parentPort.postMessage({ error: error instanceof Error ? error.message : "Failed to calculate candidate finances" });

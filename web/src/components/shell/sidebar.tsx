@@ -214,11 +214,7 @@ function NavGroup({
                     if (l.action === "search") {
                       event.preventDefault();
                       onSearch();
-                      return;
                     }
-                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                    event.preventDefault();
-                    window.location.assign(l.href);
                   }}
                 >
                   <l.icon size={16} strokeWidth={1.8} aria-hidden="true" />

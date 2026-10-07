@@ -34,20 +34,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
 import { getCompletedLiveResult } from "@/lib/live-election/service";
-import { runCachedDatabaseWorker } from "@/lib/database-worker";
-import type { FinanceSummary } from "@/lib/queries";
+import { getCachedPersonFinance } from "@/lib/platform/person-finance";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
-const getCachedPersonFinance = cache((personId: number, year?: number) =>
-  runCachedDatabaseWorker<FinanceSummary>(
-    `derived:person-finance:v1:${personId}:${year ?? 0}`,
-    "person-finance-worker.cjs",
-    { personId, year },
-    "local candidate finance summary",
-    { priority: 100 },
-  ),
-);
 
 async function yieldToStreamingRenderer() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
