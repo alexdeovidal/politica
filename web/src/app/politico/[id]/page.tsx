@@ -1,5 +1,7 @@
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
-import { ProfileNavigation,ProfileTimeline,FinanceInsights } from "@/components/platform/profile-overview";
+import { ProfileNavigation,ProfileTimeline } from "@/components/platform/profile-overview";
+import { FinanceInsights, ProfileFinanceSummary } from "@/components/platform/profile-finance";
+import { ProfileFinanceTables } from "@/components/platform/profile-finance-tables";
 import { shareMetadata } from "@/lib/platform/share";
 import { cache, Suspense } from "react";
 import { SignalMethodology } from "@/components/platform/signal-methodology";
@@ -24,17 +26,14 @@ import { AssetsCurveChart } from "@/components/assets-curve-chart-lazy";
 import { AssetsYearCards } from "@/components/assets-year-cards";
 import { SocialCard } from "@/components/social-card";
 import { TweetCard } from "@/components/tweet-card";
-import { FinanceTable } from "@/components/finance-table";
 import { PersonVoteResults } from "@/components/person-vote-results";
 import { PersonElectoralCases } from "@/components/person-electoral-cases";
 import { Skeleton } from "@/components/skeleton";
 import { PageHeader } from "@/components/shell/shell-context";
 import { YearSelect } from "@/components/ui/year-select";
-import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
 import { getCompletedLiveResult } from "@/lib/live-election/service";
-import { getCachedPersonFinance } from "@/lib/platform/person-finance";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
@@ -139,16 +138,12 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
             </SourceZone>
           </div>
         </header>
-        <Suspense fallback={<SectionSkeleton title="resumo financeiro" rows={1} />}>
-          <ProfileFinanceSummary personId={person.id} year={year} />
-        </Suspense>
+        <ProfileFinanceSummary personId={person.id} year={year} />
         <ProfileNavigation/>
         <Suspense fallback={<SectionSkeleton id="linha-do-tempo" title="linha do tempo eleitoral e patrimonial" rows={2} />}>
           <ProfileTimeline personId={person.id}/>
         </Suspense>
-        <Suspense fallback={<SectionSkeleton id="resumo-financeiro" title="concentração e evolução" rows={2} />}>
-          <FinanceInsights personId={person.id} year={year}/>
-        </Suspense>
+        <FinanceInsights personId={person.id} year={year}/>
   
         <Suspense fallback={<SectionSkeleton id="candidaturas" title="candidaturas por eleição" rows={3} />}>
           <CandidaciesSection personId={person.id} />
@@ -188,9 +183,7 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
         </Suspense>
   
         {financeYears.length > 0 ? (
-          <Suspense fallback={<FinanceSkeleton />}>
-            <FinanceSection personId={person.id} year={year} />
-          </Suspense>
+          <ProfileFinanceTables personId={person.id} year={year} />
         ) : null}
   
         <Suspense fallback={<SectionSkeleton id="redes-sociais" title="redes sociais declaradas" rows={2} />}>
@@ -203,32 +196,6 @@ export default async function PoliticoPage({ params, searchParams }: PageProps<"
       </main>
   );
 }
-
-async function ProfileFinanceSummary({ personId, year }: { personId: number; year?: number }) {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  const finance = await getCachedPersonFinance(personId, year);
-  if (finance.donationsCount === 0 && finance.expensesCount === 0) return null;
-  return (
-    <div className="kpis kpis--profile mt-2">
-      <div className="kpi">
-        <div className="kpi__label">recebido em doações {year ? `em ${year}` : "(todas as eleições)"}</div>
-        <div className="kpi__value kpi__value--green">{formatBRL(finance.donationsTotalCents)}</div>
-        <div className="kpi__sub">{finance.donationsCount.toLocaleString("pt-BR")} doações</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi__label">despesas contratadas</div>
-        <div className="kpi__value">{formatBRL(finance.expensesTotalCents)}</div>
-        <div className="kpi__sub">{finance.expensesCount.toLocaleString("pt-BR")} despesas</div>
-      </div>
-      <div className="kpi">
-        <div className="kpi__label">pago até agora</div>
-        <div className="kpi__value">{formatBRL(finance.paymentsTotalCents)}</div>
-        <div className="kpi__sub">regime de caixa</div>
-      </div>
-    </div>
-  );
-}
-
 
 async function NetworkSection({ personId, displayName }: { personId: number; displayName: string }) {
   await yieldToStreamingRenderer();
@@ -483,46 +450,6 @@ async function EarmarksSection({ personId }: { personId: number }) {
   );
 }
 
-async function FinanceSection({
-  personId, year,
-}: { personId: number; year: number | undefined }) {
-  await yieldToStreamingRenderer();
-  const finance = await getCachedPersonFinance(personId, year);
-  return (
-    <div id="financas" data-toc-title="finanças">
-      {finance.donationsCount > 0 ? (
-        <FinanceTable
-          title="doações recebidas"
-          scope="candidate"
-          id={String(personId)}
-          dir="received"
-          counterpartyLabel="doador"
-          tone="green"
-          year={year}
-        />
-      ) : null}
-
-      {finance.expensesCount > 0 ? (
-        <FinanceTable
-          title="despesas — pra onde foi o dinheiro"
-          scope="candidate"
-          id={String(personId)}
-          dir="spent"
-          counterpartyLabel="fornecedor"
-          tone="amber"
-          year={year}
-        />
-      ) : null}
-
-      {finance.donationsCount === 0 && finance.expensesCount === 0 ? (
-        <div className="py-7">
-          <EmptyState icon="◌" title={`Nenhuma doação ou despesa registrada ${year != null ? `em ${year}` : ""}.`} compact />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 async function SocialMediaSection({ personId }: { personId: number }) {
   await yieldToStreamingRenderer();
   const socialMedia = getPersonSocialMedia(personId);
@@ -618,24 +545,5 @@ function SignalsSkeleton() {
         ))}
       </div>
     </section>
-  );
-}
-
-function FinanceSkeleton() {
-  return (
-    <div id="financas" data-toc-title="finanças" className="flex flex-col gap-6 py-6">
-      {Array.from({ length: 2 }).map((_, i) => (
-        <div key={i}>
-          <Skeleton className="mb-4 h-3 w-40" />
-          <div className="table-wrap">
-            <div className="p-4">
-              {Array.from({ length: 5 }).map((_, j) => (
-                <Skeleton key={j} className="mb-3 h-3.5 w-full last:mb-0" />
-              ))}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }

@@ -9,12 +9,14 @@ database.pragma("query_only = ON");
 try {
   const personId = Number(workerData.personId);
   const year = Number.isInteger(workerData.year) && workerData.year > 0 ? workerData.year : null;
+  const part = workerData.part === "insights" ? "insights" : "summary";
   if (!Number.isSafeInteger(personId) || personId < 1) throw new Error("Invalid person id");
 
   const yearClause = year !== null ? " AND t.year = ?" : "";
   const yearArgs = year !== null ? [year] : [];
   const aggregate = sql => database.prepare(sql).get(personId, ...yearArgs);
 
+  if (part === "summary") {
   const donations = aggregate(
     `SELECT count(*) AS n, coalesce(sum(t.amount_cents), 0) AS total
      FROM campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
@@ -38,9 +40,21 @@ try {
      WHERE co.person_id = ?${year !== null ? " AND ce.year = ?" : ""}`,
   ).get(personId, ...yearArgs);
 
+  parentPort.postMessage({
+    donationsCount: donations.n,
+    donationsTotalCents: donations.total,
+    expensesCount: expenses.n,
+    expensesTotalCents: expenses.total,
+    paymentsTotalCents: payments.total,
+    paymentsCount: payments.n,
+    electoralFundTotalCents: electoralFund.total,
+    electoralFundCount: electoralFund.n,
+  });
+  } else {
   const suppliers = database.prepare(
     `SELECT t.supplier_cpf_cnpj AS doc, max(t.supplier_name) AS name,
-            coalesce(sum(t.amount_cents), 0) AS cents
+            coalesce(sum(t.amount_cents), 0) AS cents,
+            sum(sum(t.amount_cents)) OVER () AS expensesTotalCents
      FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
      WHERE co.person_id = ?${yearClause}
      GROUP BY t.supplier_cpf_cnpj
@@ -64,18 +78,12 @@ try {
   ).all(personId);
 
   parentPort.postMessage({
-    donationsCount: donations.n,
-    donationsTotalCents: donations.total,
-    expensesCount: expenses.n,
-    expensesTotalCents: expenses.total,
-    paymentsTotalCents: payments.total,
-    paymentsCount: payments.n,
-    electoralFundTotalCents: electoralFund.total,
-    electoralFundCount: electoralFund.n,
     suppliers,
+    expensesTotalCents: suppliers[0]?.expensesTotalCents ?? 0,
     donationOrigins,
     expenseYears,
   });
+  }
 } catch (error) {
   parentPort.postMessage({ error: error instanceof Error ? error.message : "Failed to calculate candidate finances" });
 } finally {
