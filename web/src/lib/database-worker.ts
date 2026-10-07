@@ -39,13 +39,43 @@ type PendingSearchRequest = {
   reject: (error: Error) => void;
   signal?: AbortSignal;
   onAbort?: () => void;
+  workerData: unknown;
 };
 let persistentSearchWorker: Worker | null = null;
 let persistentSearchSequence = 0;
 const pendingSearchRequests = new Map<number, PendingSearchRequest>();
+const persistentSearchQueue: number[] = [];
+let activeSearchRequestId: number | null = null;
+
+function dispatchPersistentSearchQueue(worker = persistentSearchWorker) {
+  if (!worker || worker !== persistentSearchWorker || activeSearchRequestId !== null) return;
+
+  while (persistentSearchQueue.length) {
+    const requestId = persistentSearchQueue.shift()!;
+    const request = pendingSearchRequests.get(requestId);
+    if (!request) continue;
+
+    activeSearchRequestId = requestId;
+    worker.ref();
+    try {
+      worker.postMessage({ requestId, data: request.workerData });
+    } catch (error) {
+      activeSearchRequestId = null;
+      pendingSearchRequests.delete(requestId);
+      if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+      request.reject(error instanceof Error ? error : new Error("Could not send search request to worker"));
+      continue;
+    }
+    return;
+  }
+
+  if (!pendingSearchRequests.size) worker.unref();
+}
 
 function settlePersistentSearchWorker(worker: Worker, error: Error) {
   if (persistentSearchWorker === worker) persistentSearchWorker = null;
+  if (activeSearchRequestId !== null) activeSearchRequestId = null;
+  persistentSearchQueue.length = 0;
   for (const [requestId, request] of pendingSearchRequests) {
     pendingSearchRequests.delete(requestId);
     if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
@@ -65,13 +95,16 @@ function createPersistentSearchWorker() {
   persistentSearchWorker = worker;
   worker.unref();
   worker.on("message", (message: PersistentSearchReply) => {
+    if (persistentSearchWorker !== worker) return;
+    if (activeSearchRequestId === message.requestId) activeSearchRequestId = null;
     const request = pendingSearchRequests.get(message.requestId);
-    if (!request) return;
-    pendingSearchRequests.delete(message.requestId);
-    if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
-    if (typeof message.error === "string") request.reject(new Error(message.error));
-    else request.resolve(message.result);
-    if (!pendingSearchRequests.size) worker.unref();
+    if (request) {
+      pendingSearchRequests.delete(message.requestId);
+      if (request.onAbort) request.signal?.removeEventListener("abort", request.onAbort);
+      if (typeof message.error === "string") request.reject(new Error(message.error));
+      else request.resolve(message.result);
+    }
+    dispatchPersistentSearchQueue(worker);
   });
   worker.on("error", (error) => settlePersistentSearchWorker(worker, error));
   worker.on("exit", (code) => {
@@ -114,12 +147,16 @@ export function runPersistentSearchWorker<T>(
       resolve: (value) => resolve(value as T),
       reject,
       signal,
+      workerData,
     };
     const onAbort = () => {
       if (!pendingSearchRequests.delete(requestId)) return;
       signal?.removeEventListener("abort", onAbort);
+      const queuedIndex = persistentSearchQueue.indexOf(requestId);
+      if (queuedIndex >= 0) persistentSearchQueue.splice(queuedIndex, 1);
       reject(abortedError());
-      if (!pendingSearchRequests.size) worker.unref();
+      if (!pendingSearchRequests.size && activeSearchRequestId === null) worker.unref();
+      dispatchPersistentSearchQueue(worker);
     };
     request.onAbort = onAbort;
     pendingSearchRequests.set(requestId, request);
@@ -129,15 +166,8 @@ export function runPersistentSearchWorker<T>(
       return;
     }
 
-    worker.ref();
-    try {
-      worker.postMessage({ requestId, data: workerData });
-    } catch (error) {
-      pendingSearchRequests.delete(requestId);
-      signal?.removeEventListener("abort", onAbort);
-      reject(error instanceof Error ? error : new Error("Could not send search request to worker"));
-      if (!pendingSearchRequests.size) worker.unref();
-    }
+    persistentSearchQueue.push(requestId);
+    dispatchPersistentSearchQueue(worker);
   });
 }
 

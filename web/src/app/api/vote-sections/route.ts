@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import {createHash} from "node:crypto";
-import { getPersonVoteSectionsPage } from "@/lib/queries";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { cached, cacheResult } from "@/lib/platform/store";
+import { runDatabaseWorker } from "@/lib/database-worker";
 
-type VoteSectionsPage=ReturnType<typeof getPersonVoteSectionsPage>;
+export const runtime = "nodejs";
+
+type VoteSectionsPage={ sections: import("@/lib/queries").CandidateVoteSection[]; total: number; pageSize: number };
 const PAGE_CACHE_TTL_MS=30*60_000;
 const pageCache=new Map<string,{expiresAt:number;value:VoteSectionsPage}>();
 
@@ -31,11 +35,23 @@ export async function GET(request: Request) {
   }
 
   const trimmedQuery=query.trim().slice(0,100);
-  const cacheKey=createHash("sha256").update(`${historyId}:${page}:${trimmedQuery}`).digest("hex");
-  let result=readPageCache(cacheKey);
+  const fingerprint=databaseFingerprint();
+  const cacheKey=`derived:vote-sections:v1:${createHash("sha256").update(`${fingerprint}:${historyId}:${page}:${trimmedQuery}`).digest("hex")}`;
+  let result=readPageCache(cacheKey)??cached<VoteSectionsPage>(cacheKey,PAGE_CACHE_TTL_MS);
   if(!result){
-    result=getPersonVoteSectionsPage(historyId,page,trimmedQuery);
-    writePageCache(cacheKey,result);
+    try {
+      result=await runDatabaseWorker<VoteSectionsPage>("vote-sections-worker.cjs",{
+        databasePath: databasePath(), historyId, page, query: trimmedQuery,
+      },{signal:request.signal,priority:5,lane:"interactive"});
+    } catch(error) {
+      if(request.signal.aborted||(error instanceof Error&&error.name==="AbortError")) return new Response(null,{status:499});
+      console.error("Unable to load historical vote sections:",error);
+      return NextResponse.json({error:"Não foi possível carregar os locais agora."},{status:503});
+    }
+    if(!request.signal.aborted){
+      writePageCache(cacheKey,result);
+      cacheResult(cacheKey,result,"local database historical vote sections");
+    }
   }
 
   return NextResponse.json(result, {

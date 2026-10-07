@@ -79,7 +79,7 @@ export function CommandPalette() {
         .catch(() => {if(!controller.signal.aborted){setResults([]);setSearchError("Não foi possível consultar agora. Tente novamente.");}})
         .finally(() => {if(!controller.signal.aborted){setLoading(false);setSearchedQuery(trimmed);}});
     // Avoid piling synchronous SQLite searches onto the server while someone is still typing.
-    }, 280);
+    }, 500);
     return () => {
       clearTimeout(t);
       controller.abort();
