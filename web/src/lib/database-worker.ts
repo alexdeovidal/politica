@@ -7,15 +7,21 @@ import { cached, cacheResult } from "@/lib/platform/store";
 type WorkerSnapshot<T> = { fingerprint: string; value: T };
 export type CachedDatabaseWorkerResult<T> = { value: T; stale: boolean };
 const cachedWorkerFlights = new Map<string, Promise<unknown>>();
-// Database workers share the same large SQLite files and are CPU and disk intensive.
-// Keep only one active by default so background aggregates cannot starve navigation.
-const maxConcurrentWorkers = 1;
+// Database workers share large SQLite files and can be CPU intensive. Keep a
+// separate slot for explicitly interactive lookups so a cold aggregate cannot
+// hold search requests in the queue for minutes.
+const maxConcurrentWorkers = 2;
+const maxWorkersByLane = { interactive: 1, shared: 1 } as const;
 let activeWorkers = 0;
+const activeWorkersByLane = { interactive: 0, shared: 0 };
 let workerSequence = 0;
+
+type WorkerLane = keyof typeof maxWorkersByLane;
 
 type QueuedWorker = {
   priority: number;
   sequence: number;
+  lane: WorkerLane;
   state: "queued" | "running" | "finished";
   preemptible: boolean;
   cancel?: () => void;
@@ -23,16 +29,20 @@ type QueuedWorker = {
 };
 
 const workerQueue: QueuedWorker[] = [];
-let activeJob: QueuedWorker | null = null;
+const activeJobs = new Set<QueuedWorker>();
 
 function drainWorkerQueue() {
   workerQueue.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
   while (activeWorkers < maxConcurrentWorkers && workerQueue.length) {
-    const job = workerQueue.shift()!;
-    if (job.state !== "queued") continue;
+    const nextIndex = workerQueue.findIndex((job) =>
+      job.state === "queued" && activeWorkersByLane[job.lane] < maxWorkersByLane[job.lane],
+    );
+    if (nextIndex < 0) break;
+    const [job] = workerQueue.splice(nextIndex, 1);
     job.state = "running";
-    activeJob = job;
+    activeJobs.add(job);
     activeWorkers += 1;
+    activeWorkersByLane[job.lane] += 1;
     job.start();
   }
 }
@@ -44,7 +54,7 @@ function abortedError() {
 export function runDatabaseWorker<T>(
   scriptName: string,
   workerData: unknown,
-  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean } = {},
+  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean; lane?: WorkerLane } = {},
 ): Promise<T> {
   const candidates = [
     path.resolve(process.cwd(), "scripts", scriptName),
@@ -69,7 +79,8 @@ export function runDatabaseWorker<T>(
       if (job.state !== "running") return;
       job.state = "finished";
       activeWorkers -= 1;
-      if (activeJob === job) activeJob = null;
+      activeWorkersByLane[job.lane] -= 1;
+      activeJobs.delete(job);
       cleanup();
       drainWorkerQueue();
     };
@@ -90,6 +101,7 @@ export function runDatabaseWorker<T>(
     job = {
       priority: options.priority ?? 0,
       sequence: workerSequence++,
+      lane: options.lane ?? "shared",
       state: "queued",
       preemptible: options.preemptible ?? false,
       cancel: () => {
@@ -101,7 +113,8 @@ export function runDatabaseWorker<T>(
         if (signal?.aborted) {
           job.state = "finished";
           activeWorkers -= 1;
-          if (activeJob === job) activeJob = null;
+          activeWorkersByLane[job.lane] -= 1;
+          activeJobs.delete(job);
           fail(abortedError());
           drainWorkerQueue();
           return;
@@ -142,7 +155,9 @@ export function runDatabaseWorker<T>(
     }
     signal?.addEventListener("abort", onAbort, { once: true });
     workerQueue.push(job);
-    if (activeJob?.preemptible && job.priority > activeJob.priority) activeJob.cancel?.();
+    for (const activeJob of activeJobs) {
+      if (activeJob.preemptible && job.priority > activeJob.priority) activeJob.cancel?.();
+    }
     drainWorkerQueue();
   });
 }
@@ -156,6 +171,7 @@ export async function runCachedDatabaseWorkerSnapshot<T>(
     signal?: AbortSignal;
     priority?: number;
     preemptible?: boolean;
+    lane?: WorkerLane;
     staleWhileRevalidate?: boolean;
     serveStaleWithoutRefresh?: boolean;
   } = {},
@@ -208,6 +224,7 @@ export async function runCachedDatabaseWorker<T>(
     signal?: AbortSignal;
     priority?: number;
     preemptible?: boolean;
+    lane?: WorkerLane;
     staleWhileRevalidate?: boolean;
     serveStaleWithoutRefresh?: boolean;
   } = {},

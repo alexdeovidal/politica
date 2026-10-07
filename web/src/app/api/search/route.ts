@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         query: boundedQuery,
         limit: 25,
         filters: { year, office, state, city },
-      }, { signal: request.signal, priority: 10 });
+      }, { signal: request.signal, priority: 10, lane: "interactive" });
       results = response.results;
     } catch (error) {
       if (request.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
