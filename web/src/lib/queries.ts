@@ -748,8 +748,8 @@ export function getPersonElectoralCases(
     return { available: true, cases: [], total: 0, offset: safeOffset, pageSize };
   }
 
-  const candidateFilter = "EXISTS (SELECT 1 FROM electoral_case_candidate cc " +
-    "WHERE cc.case_id = t.id AND cc.person_id = ?)";
+  const candidateFilter = "t.id IN (SELECT DISTINCT cc.case_id FROM electoral_case_candidate cc " +
+    "WHERE cc.person_id = ?)";
   const searchParams: Array<string | number> = [];
   let searchFilter = "";
   if (queryTokens.length > 0) {
