@@ -6,7 +6,9 @@ import { HomeMetrics, HomeYearSelect } from "@/components/home-overview";
 import { PageHeader } from "@/components/shell/shell-context";
 import { ContributionCard } from "@/components/contribution-card";
 
-export const revalidate = 300;
+// The homepage contains no server-fetched data; live metrics load on the client.
+// Keep the HTML fully static so a revalidation render never stalls the portal.
+export const revalidate = false;
 
 export default function Home() {
   return (
