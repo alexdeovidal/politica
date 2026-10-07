@@ -15,7 +15,7 @@ export const getCachedPersonFinanceSummary = cache((personId: number, year?: num
     "person-finance-worker.cjs",
     { personId, year, part: "summary" },
     "local candidate finance summary",
-    { priority: 100, staleWhileRevalidate: true },
+    { priority: 100, serveStaleWithoutRefresh: true },
   ),
 );
 
@@ -25,6 +25,6 @@ export const getCachedPersonFinanceInsights = cache((personId: number, year?: nu
     "person-finance-worker.cjs",
     { personId, year, part: "insights" },
     "local candidate finance insights",
-    { priority: 10, staleWhileRevalidate: true },
+    { priority: 10, serveStaleWithoutRefresh: true },
   ),
 );

@@ -152,12 +152,26 @@ export async function runCachedDatabaseWorkerSnapshot<T>(
   scriptName: string,
   workerData: Record<string, unknown> = {},
   source = "local database worker snapshot",
-  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean; staleWhileRevalidate?: boolean } = {},
+  options: {
+    signal?: AbortSignal;
+    priority?: number;
+    preemptible?: boolean;
+    staleWhileRevalidate?: boolean;
+    serveStaleWithoutRefresh?: boolean;
+  } = {},
 ): Promise<CachedDatabaseWorkerResult<T>> {
   const fingerprint = databaseFingerprint();
   const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
   if (stored?.value && databaseFingerprintsMatch(stored.fingerprint, fingerprint)) {
     return { value: stored.value, stale: false };
+  }
+
+  // Some derived aggregates touch very large SQLite files. When a valid prior
+  // snapshot exists, a public page request must never start that work on the
+  // request's behalf; callers can serve the saved result while a separate,
+  // deliberately paced refresh mechanism updates it.
+  if (stored?.value && options.serveStaleWithoutRefresh) {
+    return { value: stored.value, stale: true };
   }
 
   const flightKey = `${cacheKey}:${fingerprint}`;
@@ -190,7 +204,13 @@ export async function runCachedDatabaseWorker<T>(
   scriptName: string,
   workerData: Record<string, unknown> = {},
   source = "local database worker snapshot",
-  options: { signal?: AbortSignal; priority?: number; preemptible?: boolean; staleWhileRevalidate?: boolean } = {},
+  options: {
+    signal?: AbortSignal;
+    priority?: number;
+    preemptible?: boolean;
+    staleWhileRevalidate?: boolean;
+    serveStaleWithoutRefresh?: boolean;
+  } = {},
 ): Promise<T> {
   const result = await runCachedDatabaseWorkerSnapshot<T>(cacheKey, scriptName, workerData, source, options);
   return result.value;

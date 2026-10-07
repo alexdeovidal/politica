@@ -15,41 +15,28 @@ function endpoint(personId: number, year: number | undefined, part: "summary" | 
 async function requestFinance<T>(url: string, signal: AbortSignal) {
   const response = await fetch(url, { signal, cache: "no-store" });
   if (!response.ok) throw new Error("Finance data unavailable");
-  return {
-    value: await response.json() as T,
-    stale: response.headers.get("x-snapshot-stale") === "1",
-  };
+  return await response.json() as T;
 }
 
 export function ProfileFinanceSummary({ personId, year }: { personId: number; year?: number }) {
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [failed, setFailed] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let refreshAttempts = 0;
     let hasFinance = false;
     setFinance(null);
     setFailed(false);
-    setRefreshing(false);
 
     const load = async () => {
       try {
-        const result = await requestFinance<FinanceSummary>(endpoint(personId, year, "summary"), controller.signal);
+        const value = await requestFinance<FinanceSummary>(endpoint(personId, year, "summary"), controller.signal);
         hasFinance = true;
-        setFinance(result.value);
-        setRefreshing(result.stale && refreshAttempts < 5);
-        if (result.stale && refreshAttempts < 5) {
-          refreshAttempts += 1;
-          refreshTimer = setTimeout(() => void load(), 2500);
-        }
+        setFinance(value);
       } catch {
         if (!controller.signal.aborted) {
           if (!hasFinance) setFailed(true);
-          setRefreshing(false);
         }
       }
     };
@@ -57,7 +44,6 @@ export function ProfileFinanceSummary({ personId, year }: { personId: number; ye
     void load();
     return () => {
       controller.abort();
-      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, [personId, year, retry]);
 
@@ -105,7 +91,6 @@ export function ProfileFinanceSummary({ personId, year }: { personId: number; ye
           <div className="kpi__sub">regime de caixa</div>
         </div>
       </div>
-      {refreshing ? <p className="mt-2 text-xs">Atualizando os dados financeiros…</p> : null}
     </>
   );
 }
@@ -114,7 +99,6 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
   const section = useRef<HTMLElement>(null);
   const [finance, setFinance] = useState<PersonFinanceInsightsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
 
@@ -122,8 +106,6 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
     const element = section.current;
     if (!element) return;
     const controller = new AbortController();
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let refreshAttempts = 0;
     let hasFinance = false;
     let started = false;
 
@@ -134,18 +116,12 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
       setFailed(false);
       const loadSnapshot = async () => {
         try {
-          const result = await requestFinance<PersonFinanceInsightsData>(endpoint(personId, year, "insights"), controller.signal);
+          const value = await requestFinance<PersonFinanceInsightsData>(endpoint(personId, year, "insights"), controller.signal);
           hasFinance = true;
-          setFinance(result.value);
-          setRefreshing(result.stale && refreshAttempts < 5);
-          if (result.stale && refreshAttempts < 5) {
-            refreshAttempts += 1;
-            refreshTimer = setTimeout(() => void loadSnapshot(), 2500);
-          }
+          setFinance(value);
         } catch {
           if (!controller.signal.aborted) {
             if (!hasFinance) setFailed(true);
-            setRefreshing(false);
           }
         } finally {
           if (!controller.signal.aborted) setLoading(false);
@@ -167,13 +143,11 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
       return () => {
         observer.disconnect();
         controller.abort();
-        if (refreshTimer) clearTimeout(refreshTimer);
       };
     }
 
     return () => {
       controller.abort();
-      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, [personId, year, retry]);
 
@@ -192,7 +166,6 @@ export function FinanceInsights({ personId, year }: { personId: number; year?: n
           : "Análise detalhada das despesas e doações."} Concentração não demonstra irregularidade.
       </p>
       {loading && !finance ? <p role="status">Carregando análise financeira…</p> : null}
-      {refreshing && finance ? <p role="status">Atualizando os dados financeiros…</p> : null}
       {failed ? (
         <div role="alert" className="card">
           <p>Não foi possível carregar a análise financeira.</p>
