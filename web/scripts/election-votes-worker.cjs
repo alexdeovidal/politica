@@ -105,7 +105,7 @@ function matchedPlaceFilter() {
 
 function queryOptions() {
   const table = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='election_vote_section'").get();
-  if (!table) return { years: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] };
+  if (!table) return { years: [2026], yearsWithResults: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] };
   const year = Number(filters.year) || 0;
   const round = Number(filters.round) || 0;
   const office = String(filters.officeCode || "");
@@ -123,9 +123,10 @@ function queryOptions() {
     "SELECT DISTINCT year FROM politician_history WHERE year >= 2012 ORDER BY year DESC",
   ).all().map(row => row.year);
   const hasVotesInYear = catalogReady ? null : database.prepare("SELECT 1 FROM election_vote_section WHERE year = ? LIMIT 1");
-  const years = catalogReady
+  const yearsWithResults = catalogReady
     ? database.prepare(`SELECT DISTINCT year FROM ${optionsTable} ORDER BY year DESC`).all().map(row => row.year)
     : candidateYears.filter(value => hasVotesInYear.get(value));
+  const years = [...new Set([...yearsWithResults, 2026])].sort((a, b) => b - a);
 
   const roundWhere = round ? "year = ? AND round = ?" : "year = ?";
   const roundArgs = round ? [year, round] : [year];
@@ -180,7 +181,7 @@ function queryOptions() {
   const parties = year && officeLabel
     ? database.prepare(`SELECT DISTINCT party_abbr AS party FROM politician_history WHERE ${partyClauses.join(" AND ")} AND party_abbr IS NOT NULL ORDER BY party_abbr`).all(...partyArgs).map(row => row.party)
     : [];
-  return { years, rounds, offices, states, municipalities, zones, parties, filterScope: { year, round, office, state, municipalityCode }, hasPlaceOptions: Boolean(state && municipalityCode) };
+  return { years, yearsWithResults, rounds, offices, states, municipalities, zones, parties, filterScope: { year, round, office, state, municipalityCode }, hasPlaceOptions: Boolean(state && municipalityCode) };
 }
 
 function querySearch() {

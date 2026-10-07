@@ -4,14 +4,14 @@ import { pageList } from "./pagination-shared";
 
 /** No "use client": function props like makeHref can't cross into a Client Component. */
 export function PaginationLinks({
-  page, totalPages, makeHref,
-}: { page: number; totalPages: number; makeHref: (page: number) => string }) {
+  page, totalPages, makeHref, ariaLabel = "paginação", prefetch,
+}: { page: number; totalPages: number; makeHref: (page: number) => string; ariaLabel?: string; prefetch?: boolean }) {
   if (totalPages <= 1) return null;
 
   return (
-    <nav className="pagination" aria-label="paginação">
+    <nav className="pagination" aria-label={ariaLabel}>
       {page > 1 ? (
-        <Link href={makeHref(page - 1)} className="pagination__btn" aria-label="página anterior">
+        <Link href={makeHref(page - 1)} className="pagination__btn" aria-label="página anterior" prefetch={prefetch}>
           <ChevronLeft size={14} />
         </Link>
       ) : (
@@ -29,13 +29,13 @@ export function PaginationLinks({
             {p}
           </span>
         ) : (
-          <Link key={p} href={makeHref(p)} className="pagination__btn">
+          <Link key={p} href={makeHref(p)} className="pagination__btn" prefetch={prefetch}>
             {p}
           </Link>
         )
       )}
       {page < totalPages ? (
-        <Link href={makeHref(page + 1)} className="pagination__btn" aria-label="próxima página">
+        <Link href={makeHref(page + 1)} className="pagination__btn" aria-label="próxima página" prefetch={prefetch}>
           <ChevronRight size={14} />
         </Link>
       ) : (

@@ -12,7 +12,7 @@ type Filters = {
 };
 type InitialFilters = Filters & { ids: number[] };
 type OptionList = {
-  years: number[]; rounds: number[]; offices: Array<{ code: string; label: string }>;
+  years: number[]; yearsWithResults: number[]; rounds: number[]; offices: Array<{ code: string; label: string }>;
   states: string[]; municipalities: Array<{ code: string; label: string }>; zones: string[]; parties: string[];
 };
 type VoteResult = {
@@ -59,7 +59,7 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
     place: initial.place, party: initial.party, q: initial.q, page: initial.page,
   });
   const [selectedIds, setSelectedIds] = useState<number[]>(initial.ids);
-  const [options, setOptions] = useState<OptionList>({ years: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] });
+  const [options, setOptions] = useState<OptionList>({ years: [], yearsWithResults: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] });
   const [results, setResults] = useState<SearchResult | null>(null);
   const [details, setDetails] = useState<Detail[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -76,6 +76,7 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
   const scopeParams = useMemo(() => apiParams(filters), [filters]);
   const selectedKey = selectedIds.join(",");
   const hasSearch = Boolean(filters.state || filters.municipalityCode || filters.q.trim() || filters.place.trim());
+  const currentYearHasNoArchive = options.years.includes(filters.year) && !options.yearsWithResults.includes(filters.year);
 
   useEffect(() => {
     try {
@@ -304,6 +305,11 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
         {copyState ? <p className="text-sm text-[var(--muted)]" role="status">{copyState}</p> : null}
       </section>
 
+      {filters.year === 2026 && options.years.includes(2026) && !options.yearsWithResults.includes(2026) ? <div className="card text-sm text-[var(--muted)]" role="status">
+        <strong className="text-[var(--fg-1)]">2026 está disponível no seletor.</strong>{" "}
+        Os votos por seção de 2026 ainda não fazem parte do acervo histórico do Raio-X. Para acompanhar os resultados oficiais e as versões já totalizadas, acesse a <Link className="link-primary" href="/apuracao">Apuração ao vivo de 2026</Link>.
+      </div> : null}
+
       {favorites.length ? <section className="card space-y-3" aria-label="Candidaturas favoritas">
         <div className="flex items-center gap-2"><Heart size={16} className="text-rose-600" /><h2 className="font-medium">Favoritos salvos neste navegador</h2></div>
         <div className="flex flex-wrap gap-2">{favorites.map(item => <span key={item.historyId} className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1.5 text-sm">
@@ -320,7 +326,7 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
           </div>
           {results?.rows.length ? <button className="btn" type="button" onClick={exportCsv}><Download size={15} /> CSV desta página</button> : null}
         </div>
-        {!hasSearch ? <div className="card text-sm text-[var(--muted)]">Escolha um estado, município, nome de candidatura ou local de votação para carregar os resultados.</div> : null}
+        {!hasSearch && !currentYearHasNoArchive ? <div className="card text-sm text-[var(--muted)]">Escolha um estado, município, nome de candidatura ou local de votação para carregar os resultados.</div> : null}
         {loading ? <div className="card flex items-center gap-2 text-sm text-[var(--muted)]"><LoaderCircle size={16} className="animate-spin" /> Consultando o acervo eleitoral…</div> : null}
         {pageError ? <div className="card text-sm text-rose-700" role="alert">{pageError}</div> : null}
         {results ? <>

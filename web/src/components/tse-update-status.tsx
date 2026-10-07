@@ -37,7 +37,7 @@ export function TseUpdateStatus({ status }: { status: Status }) {
       <div className="tse-update-status__item">
         {status.derivedRefreshPending&&<strong role="status">Análises financeiras em recálculo após atualização das bases.</strong>}
         {status.lastCheckedAt&&<p>Última verificação: {formatBrasiliaDate(status.lastCheckedAt)}</p>}
-        {status.sources?.some(s=>s.status==="failed")&&<strong role="status">Há fontes com falha na última consulta. Os últimos dados válidos continuam disponíveis.</strong>}
+        {status.hasFailedSources&&<strong role="status">Há fontes com falha na última consulta. Os últimos dados válidos continuam disponíveis.</strong>}
         <div className="tse-update-status__label">
           <RefreshCw size={14} aria-hidden="true" />
           Frequência de verificação
