@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { databaseFingerprint, databasePath } from "@/lib/db";
+import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
 import { cached, cacheCollectedAt, cacheResult } from "@/lib/platform/store";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import type { TopSupplier } from "@/lib/queries";
@@ -34,7 +34,7 @@ async function suppliersFor(year: number | null, fingerprint: string): Promise<T
   if (stored && Array.isArray(stored.suppliers)) {
     const updatedAt = cacheCollectedAt(key);
     const cacheAge = updatedAt ? Date.now() - Date.parse(updatedAt) : Number.POSITIVE_INFINITY;
-    const dataChanged = stored.fingerprint !== fingerprint;
+    const dataChanged = !databaseFingerprintsMatch(stored.fingerprint, fingerprint);
     if (!dataChanged || cacheAge < REVALIDATE_AFTER_MS) return stored.suppliers;
 
     // Keep the ranking available while SQLite finishes the heavier recomputation.

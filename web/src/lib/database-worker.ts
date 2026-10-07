@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
-import { databaseFingerprint, databasePath } from "@/lib/db";
+import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
 import { cached, cacheResult } from "@/lib/platform/store";
 
 type WorkerSnapshot<T> = { fingerprint: string; value: T };
@@ -155,7 +155,7 @@ export async function runCachedDatabaseWorker<T>(
 ): Promise<T> {
   const fingerprint = databaseFingerprint();
   const stored = cached<WorkerSnapshot<T>>(cacheKey, 365 * 24 * 60 * 60 * 1000);
-  if (stored?.fingerprint === fingerprint && stored.value) return stored.value;
+  if (stored?.value && databaseFingerprintsMatch(stored.fingerprint, fingerprint)) return stored.value;
 
   const flightKey = `${cacheKey}:${fingerprint}`;
   const existing = cachedWorkerFlights.get(flightKey) as Promise<T> | undefined;

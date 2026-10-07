@@ -1,4 +1,4 @@
-import { db,dataVersion,databaseFingerprint } from "./db";
+import { db,dataVersion,databaseFingerprint,databaseFingerprintsMatch } from "./db";
 import { cached,cacheResult } from "./platform/store";
 import {
   getCircularDonationSummary,
@@ -26,7 +26,7 @@ type StoredAggregate<T>={fingerprint:string;value:T};
 
 function readAggregate<T>(key:string,fingerprint:string):T|null{
   const row=cached<StoredAggregate<T>>(key,PERSISTENT_STATS_TTL_MS);
-  return row?.fingerprint===fingerprint?row.value:null;
+  return row&&databaseFingerprintsMatch(row.fingerprint,fingerprint)?row.value:null;
 }
 function writeAggregate<T>(key:string,value:T,fingerprint:string){
   cacheResult(key,{fingerprint,value} satisfies StoredAggregate<T>,"local database aggregate snapshot");

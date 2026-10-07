@@ -41,7 +41,19 @@ export function databaseFingerprint():string{
   return [DB_PATH,`${DB_PATH}-wal`].map(filename=>{
     try{
       const file=statSync(filename);
-      return [file.dev,file.ino,file.size,file.mtimeMs,file.ctimeMs].join(":");
+      // ctime also changes for metadata operations that do not alter the SQLite
+      // contents. On the production WAL this made every derived snapshot look
+      // stale even while its size and modification time stayed unchanged.
+      return [file.dev,file.ino,file.size,file.mtimeMs].join(":");
     }catch{return "missing";}
   }).join("|");
+}
+
+export function databaseFingerprintsMatch(a:string,b:string):boolean{
+  const stable=(fingerprint:string)=>fingerprint.split("|").map(file=>{
+    if(file==="missing")return file;
+    // Read existing cache entries written before ctime was removed.
+    return file.split(":").slice(0,4).join(":");
+  }).join("|");
+  return stable(a)===stable(b);
 }

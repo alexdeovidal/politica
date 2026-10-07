@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { databaseFingerprint, databasePath } from "@/lib/db";
+import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
 import { cached, cacheCollectedAt, cacheResult } from "@/lib/platform/store";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import { getTseUpdateStatus } from "@/lib/tse-update-status";
@@ -52,7 +52,7 @@ async function summaryFor(year: number | null, fingerprint: string): Promise<Hom
   if (stored?.value) {
     const updatedAt = cacheCollectedAt(cacheKey);
     const cacheAge = updatedAt ? Date.now() - Date.parse(updatedAt) : Number.POSITIVE_INFINITY;
-    const dataChanged = stored.fingerprint !== fingerprint;
+    const dataChanged = !databaseFingerprintsMatch(stored.fingerprint, fingerprint);
     if (!dataChanged || cacheAge < REVALIDATE_AFTER_MS) return stored.value;
 
     // WAL writes can change the database fingerprint many times per minute.

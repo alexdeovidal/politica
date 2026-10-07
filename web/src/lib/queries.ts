@@ -1,5 +1,5 @@
 import { companyPartners, personCompanies, partnerById, partnerOtherCompanies } from "./platform/relations";
-import { db, hasTable,dataVersion,databaseFingerprint } from "./db";
+import { db, hasTable,dataVersion,databaseFingerprint,databaseFingerprintsMatch } from "./db";
 import { digitsOnly, normalizeName } from "./normalize";
 import { ELECTION_YEAR } from "./live-election/model";
 import { cached as cachedPersistent,cacheResult } from "./platform/store";
@@ -1531,7 +1531,7 @@ type YearSnapshot={fingerprint:string;years:number[]};
 
 function readYearSnapshot(key:string):number[]|null{
   const snapshot=cachedPersistent<YearSnapshot>(key,YEAR_SNAPSHOT_TTL_MS);
-  return snapshot?.fingerprint===databaseFingerprint()&&Array.isArray(snapshot.years)?snapshot.years:null;
+  return snapshot&&databaseFingerprintsMatch(snapshot.fingerprint,databaseFingerprint())&&Array.isArray(snapshot.years)?snapshot.years:null;
 }
 
 function writeYearSnapshot(key:string,years:number[]){
