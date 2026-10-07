@@ -207,6 +207,7 @@ function NavGroup({
               <div className="navitem-entry__row">
                 <Link
                   href={l.href}
+                  prefetch={false}
                   className={`navitem${pathname === l.href || (l.href !== "/" && pathname.startsWith(`${l.href}/`)) ? " is-active" : ""}`}
                   onClick={(event) => {
                     onNavigate();
