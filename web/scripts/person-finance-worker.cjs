@@ -19,25 +19,25 @@ try {
   if (part === "summary") {
   const donations = aggregate(
     `SELECT count(*) AS n, coalesce(sum(t.amount_cents), 0) AS total
-     FROM campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ?${yearClause}`,
+     FROM campaign_org co CROSS JOIN campaign_donation t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ?${yearClause}`,
   );
   const expenses = aggregate(
     `SELECT count(*) AS n, coalesce(sum(t.amount_cents), 0) AS total
-     FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ?${yearClause}`,
+     FROM campaign_org co CROSS JOIN campaign_expense t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ?${yearClause}`,
   );
   const electoralFund = aggregate(
     `SELECT count(*) AS n, coalesce(sum(t.amount_cents), 0) AS total
-     FROM campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ? AND t.source IN ('FUNDO ESPECIAL', 'FUNDO PARTIDARIO')${yearClause}`,
+     FROM campaign_org co CROSS JOIN campaign_donation t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ? AND t.source IN ('FUNDO ESPECIAL', 'FUNDO PARTIDARIO')${yearClause}`,
   );
   const payments = database.prepare(
     `SELECT count(*) AS n, coalesce(sum(p.amount_cents), 0) AS total
-     FROM campaign_expense_payment p
-     JOIN campaign_expense ce ON ce.id = p.campaign_expense_id
-     JOIN campaign_org co ON co.id = ce.campaign_org_id
-     WHERE co.person_id = ?${year !== null ? " AND ce.year = ?" : ""}`,
+     FROM campaign_org co
+     CROSS JOIN campaign_expense ce
+     CROSS JOIN campaign_expense_payment p
+     WHERE ce.campaign_org_id = co.id AND p.campaign_expense_id = ce.id AND co.person_id = ?${year !== null ? " AND ce.year = ?" : ""}`,
   ).get(personId, ...yearArgs);
 
   parentPort.postMessage({
@@ -55,8 +55,8 @@ try {
     `SELECT t.supplier_cpf_cnpj AS doc, max(t.supplier_name) AS name,
             coalesce(sum(t.amount_cents), 0) AS cents,
             sum(sum(t.amount_cents)) OVER () AS expensesTotalCents
-     FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ?${yearClause}
+     FROM campaign_org co CROSS JOIN campaign_expense t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ?${yearClause}
      GROUP BY t.supplier_cpf_cnpj
      ORDER BY cents DESC
      LIMIT 5`,
@@ -64,15 +64,15 @@ try {
   const donationOrigins = database.prepare(
     `SELECT coalesce(t.source, 'Origem não informada') AS name,
             coalesce(sum(t.amount_cents), 0) AS cents
-     FROM campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ?${yearClause}
+     FROM campaign_org co CROSS JOIN campaign_donation t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ?${yearClause}
      GROUP BY t.source
      ORDER BY cents DESC`,
   ).all(personId, ...yearArgs);
   const expenseYears = database.prepare(
     `SELECT t.year, coalesce(sum(t.amount_cents), 0) AS cents, count(*) AS n
-     FROM campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
-     WHERE co.person_id = ?
+     FROM campaign_org co CROSS JOIN campaign_expense t
+     WHERE t.campaign_org_id = co.id AND co.person_id = ?
      GROUP BY t.year
      ORDER BY t.year`,
   ).all(personId);
