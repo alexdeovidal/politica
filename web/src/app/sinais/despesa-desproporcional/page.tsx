@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { databaseFingerprint, databasePath } from "@/lib/db";
+import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
+import { cached, cacheResult } from "@/lib/platform/store";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import {
@@ -20,13 +21,43 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 40;
 const ALL = "TODAS";
 type RankingSnapshot = { total: number; rows: ExpenseCategoryRow[] };
+type StoredRankingSnapshot = RankingSnapshot & { fingerprint: string };
 const rankingCache = new Map<string, RankingSnapshot>();
 const rankingFlights = new Map<string, Promise<RankingSnapshot>>();
+const RANKING_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+
+function persistentRankingKey(category: string | undefined, year: number | undefined) {
+  return `derived:expense-ranking:v2:${category ?? "*"}:${year ?? "*"}`;
+}
+
+function readPersistentRanking(key: string, fingerprint: string): RankingSnapshot | null {
+  try {
+    const snapshot = cached<StoredRankingSnapshot>(key, RANKING_CACHE_TTL_MS);
+    if (!snapshot || !databaseFingerprintsMatch(snapshot.fingerprint, fingerprint) || !Array.isArray(snapshot.rows)) return null;
+    return { total: snapshot.total, rows: snapshot.rows };
+  } catch (error) {
+    console.error("Unable to read cached expense ranking:", error);
+    return null;
+  }
+}
+
+function writePersistentRanking(key: string, fingerprint: string, snapshot: RankingSnapshot) {
+  try {
+    cacheResult(key, { ...snapshot, fingerprint }, "local database expense ranking");
+  } catch (error) {
+    console.error("Unable to save cached expense ranking:", error);
+  }
+}
 
 async function loadExpenseRanking(category: string | undefined, year: number | undefined, page: number) {
   const fingerprint = databaseFingerprint();
   const key = `${fingerprint}:${category ?? "*"}:${year ?? "*"}`;
   let snapshot = rankingCache.get(key);
+  if (!snapshot) {
+    const persistentKey = persistentRankingKey(category, year);
+    snapshot = readPersistentRanking(persistentKey, fingerprint) ?? undefined;
+    if (snapshot) rankingCache.set(key, snapshot);
+  }
   if (!snapshot) {
     let flight = rankingFlights.get(key);
     if (!flight) {
@@ -36,6 +67,7 @@ async function loadExpenseRanking(category: string | undefined, year: number | u
         .then((result) => {
           rankingCache.set(key, result);
           while (rankingCache.size > 24) rankingCache.delete(rankingCache.keys().next().value!);
+          writePersistentRanking(persistentRankingKey(category, year), fingerprint, result);
           return result;
         }).finally(() => rankingFlights.delete(key));
       rankingFlights.set(key, flight);

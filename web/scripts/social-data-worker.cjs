@@ -55,7 +55,7 @@ function expenseRanking() {
   const likeArgs = spellings.map(value => `%${value}%`);
   const year = Number.isInteger(Number(workerData.year)) ? Number(workerData.year) : null;
   const expenseYearClause = year != null ? " AND year = ?" : "";
-  const donationYearClause = year != null ? " AND year = ?" : "";
+  const donationYearClause = year != null ? " AND d.year = ?" : "";
   const yearArgs = year != null ? [year] : [];
   const photo = hasTable("candidate_photo")
     ? "(SELECT cp.photo_url FROM candidate_photo cp WHERE cp.person_id=p.id ORDER BY cp.year DESC LIMIT 1)"
@@ -67,12 +67,7 @@ function expenseRanking() {
        FROM campaign_expense
        WHERE (${likeClause})${expenseYearClause}
      ),
-     matched_donation AS MATERIALIZED (
-       SELECT campaign_org_id, amount_cents
-       FROM campaign_donation
-       WHERE 1=1${donationYearClause}
-     ),
-     cat_spend AS (
+     cat_spend AS MATERIALIZED (
        SELECT co.person_id AS personId, sum(m.amount_cents) AS categoryCents, count(*) AS categoryCount,
               co.office AS office, co.state AS state
        FROM matched_expense m JOIN campaign_org co ON co.id = m.campaign_org_id
@@ -80,10 +75,12 @@ function expenseRanking() {
        GROUP BY co.person_id
      ),
      revenue AS (
-       SELECT co.person_id AS personId, coalesce(sum(d.amount_cents), 0) AS revenueCents
-       FROM matched_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
-       WHERE co.person_id IS NOT NULL
-       GROUP BY co.person_id
+       SELECT cs.personId, coalesce(sum(d.amount_cents), 0) AS revenueCents
+       FROM cat_spend cs
+       CROSS JOIN campaign_org co ON co.person_id = cs.personId
+       CROSS JOIN campaign_donation d ON d.campaign_org_id = co.id
+       WHERE co.person_id IS NOT NULL${donationYearClause}
+       GROUP BY cs.personId
      ),
      share AS (
        SELECT cs.personId, cs.categoryCents, cs.categoryCount, cs.office, cs.state,
