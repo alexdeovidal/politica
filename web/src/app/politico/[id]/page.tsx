@@ -14,7 +14,7 @@ import { notFound } from "next/navigation";
 import {
   getPersonHeader, getPersonCandidacies, getPersonCampaignOrgs,
   getPersonSocialMedia, getPersonAssets, getPersonSignals, getCycleEdgeAmounts,
-  getPoliticianDonationNetwork, getDiscourseSignals, getDiscourseCount, getExpenseYears,
+  getPoliticianDonationNetwork, getDiscourseSignals, getExpenseYears,
   getPersonPhotoUrl, getPersonPhotoProvenance, getPersonEarmarks,
   getPersonVoteResults, getPersonElectoralCases,
 } from "@/lib/queries";
@@ -34,6 +34,8 @@ import { YearSelect } from "@/components/ui/year-select";
 import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
 import { getCompletedLiveResult } from "@/lib/live-election/service";
+import { databasePath } from "@/lib/db";
+import { runDatabaseWorker } from "@/lib/database-worker";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
@@ -469,9 +471,13 @@ async function SocialMediaSection({ personId }: { personId: number }) {
 
 async function DiscourseSection({ personId, displayName }: { personId: number; displayName: string }) {
   await yieldToStreamingRenderer();
-  const discourseCount = getDiscourseCount({ personId });
+  const { count: discourseCount, signals: discourse } = await runDatabaseWorker<{
+    count: number;
+    signals: Awaited<ReturnType<typeof getDiscourseSignals>>;
+  }>("social-data-worker.cjs", {
+    databasePath: databasePath(), mode: "discourse-profile", personId, limit: DISCOURSE_SHOWN,
+  }, { priority: -5, lane: "bulk" });
   if (discourseCount === 0) return null;
-  const discourse = getDiscourseSignals({ personId, limit: DISCOURSE_SHOWN });
   return (
     <Section id="discurso" tocLabel="discurso" title="posts no X sinalizados pela IA">
       <Link className="btn mb-3" href={`/redes?pessoa=${personId}`}>Explorar publicações, temas e períodos</Link>

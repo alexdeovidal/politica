@@ -1,8 +1,11 @@
+import { Suspense } from "react";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { runDatabaseWorker } from "@/lib/database-worker";
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import {
-  getExpenseCategoryRanking,
   getExpenseYears,
   EXPENSE_CATEGORIES,
+  type ExpenseCategoryRow,
 } from "@/lib/queries";
 import { expenseCategoryLabel } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -16,6 +19,31 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 40;
 const ALL = "TODAS";
+type RankingSnapshot = { total: number; rows: ExpenseCategoryRow[] };
+const rankingCache = new Map<string, RankingSnapshot>();
+const rankingFlights = new Map<string, Promise<RankingSnapshot>>();
+
+async function loadExpenseRanking(category: string | undefined, year: number | undefined, page: number) {
+  const fingerprint = databaseFingerprint();
+  const key = `${fingerprint}:${category ?? "*"}:${year ?? "*"}`;
+  let snapshot = rankingCache.get(key);
+  if (!snapshot) {
+    let flight = rankingFlights.get(key);
+    if (!flight) {
+      flight = runDatabaseWorker<{ rows: ExpenseCategoryRow[] }>("social-data-worker.cjs", {
+        databasePath: databasePath(), mode: "expense-ranking", category, year,
+      }, { priority: -5, lane: "bulk" }).then(({ rows }) => ({ total: rows.length, rows }))
+        .then((result) => {
+          rankingCache.set(key, result);
+          while (rankingCache.size > 24) rankingCache.delete(rankingCache.keys().next().value!);
+          return result;
+        }).finally(() => rankingFlights.delete(key));
+      rankingFlights.set(key, flight);
+    }
+    snapshot = await flight;
+  }
+  return { total: snapshot.total, rows: snapshot.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) };
+}
 
 export default async function DespesaDesproporcionalPage({
   searchParams,
@@ -34,14 +62,9 @@ export default async function DespesaDesproporcionalPage({
     yearParam === ALL ? undefined
     : years.includes(Number(yearParam)) ? Number(yearParam)
     : years[0];
-  const yearLabel = year ?? "todos os anos";
+  const yearLabel = year != null ? String(year) : "todos os anos";
 
   const page = Math.max(1, Number(sp.page) || 1);
-
-  const { rows, total } = years.length > 0
-    ? getExpenseCategoryRanking({ category, year, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
-    : { rows: [], total: 0 };
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const hrefFor = (p: Record<string, string | undefined>) => {
     const usp = new URLSearchParams();
@@ -82,45 +105,51 @@ export default async function DespesaDesproporcionalPage({
 
       <section>
         {years.length === 0 ? (
-          <EmptyState
-            icon="◌"
-            title="nenhuma despesa de campanha coletada ainda"
-            hint={<code>elosys tse-accounts --db elosys.db</code>}
-          />
-        ) : rows.length === 0 ? (
-          <EmptyState icon="◌" title={`ninguém gastou em ${categoryLabel} em ${yearLabel}.`} />
+          <EmptyState icon="◌" title="nenhuma despesa de campanha coletada ainda" hint={<code>elosys tse-accounts --db elosys.db</code>} />
         ) : (
-          <div className="table-wrap">
-            <div className="overflow-x-auto">
-              <table className="table min-w-[820px]">
-                <thead>
-                  <tr>
-                    <th>candidato</th>
-                    <th>cargo/estado</th>
-                    <th className="text-right">gasto</th>
-                    <th className="text-right">% receita</th>
-                    <th className="text-right">média dos pares</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <CategoryExpenseRow key={r.personId} r={r} category={category} year={year} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {totalPages > 1 ? (
-              <div className="table-footer">
-                <PaginationLinks
-                  page={page}
-                  totalPages={totalPages}
-                  makeHref={(p) => hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, page: String(p) })}
-                />
-              </div>
-            ) : null}
-          </div>
+          <Suspense fallback={<RankingFallback />}>
+            <RankingResults category={category} categoryLabel={categoryLabel} year={year} yearLabel={yearLabel} page={page} hrefFor={hrefFor} />
+          </Suspense>
         )}
       </section>
     </div>
   );
+}
+
+async function RankingResults({
+  category, categoryLabel, year, yearLabel, page, hrefFor,
+}: {
+  category?: string;
+  categoryLabel: string;
+  year?: number;
+  yearLabel: string;
+  page: number;
+  hrefFor: (params: Record<string, string | undefined>) => string;
+}) {
+  let result: RankingSnapshot & { rows: ExpenseCategoryRow[] };
+  try {
+    result = await loadExpenseRanking(category, year, page);
+  } catch (error) {
+    console.error("Unable to load disproportionate expense ranking:", error);
+    return <EmptyState icon="◌" title="não foi possível carregar o ranking agora" hint={<a className="source-link" href={hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, page: String(page) })}>Tentar novamente</a>} />;
+  }
+  const { rows, total } = result;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (rows.length === 0) return <EmptyState icon="◌" title={`ninguém gastou em ${categoryLabel} em ${yearLabel}.`} />;
+
+  return (
+    <div className="table-wrap">
+      <div className="overflow-x-auto">
+        <table className="table min-w-[820px]">
+          <thead><tr><th>candidato</th><th>cargo/estado</th><th className="text-right">gasto</th><th className="text-right">% receita</th><th className="text-right">média dos pares</th></tr></thead>
+          <tbody>{rows.map((r) => <CategoryExpenseRow key={r.personId} r={r} category={category} year={year} />)}</tbody>
+        </table>
+      </div>
+      {totalPages > 1 ? <div className="table-footer"><PaginationLinks page={page} totalPages={totalPages} makeHref={(p) => hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, page: String(p) })} /></div> : null}
+    </div>
+  );
+}
+
+function RankingFallback() {
+  return <div className="table-wrap" aria-busy="true"><p className="p-5 text-sm text-[var(--muted)]">Preparando o ranking em segundo plano…</p></div>;
 }

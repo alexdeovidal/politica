@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { databaseFingerprint, databasePath } from "@/lib/db";
+import { runDatabaseWorker } from "@/lib/database-worker";
 import {
   DISCOURSE_GROUP_CATEGORIES,
   DISCOURSE_OTHER_CATEGORIES,
-  getDiscourseCount,
-  getDiscourseSignals,
-  getDiscourseSummary,
+  type DiscourseSignal,
   type DiscourseSeverity,
 } from "@/lib/queries";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -44,6 +45,33 @@ const SEVERITY_BADGE: Record<DiscourseSeverity, string> = {
 const SEVERITY_LABEL: Record<DiscourseSeverity, string> = { high: "alta", medium: "média", low: "baixa" };
 
 const ALL_CATEGORIES = [...DISCOURSE_GROUP_CATEGORIES, ...DISCOURSE_OTHER_CATEGORIES];
+type DiscoursePayload = {
+  summary: { reviewed: number; total: number; accounts: number; bySeverity: Record<string, number>; byCategory: Record<string, number> };
+  count: number;
+  signals: DiscourseSignal[];
+};
+const discourseCache = new Map<string, { expiresAt: number; value: DiscoursePayload }>();
+const discourseFlights = new Map<string, Promise<DiscoursePayload>>();
+
+async function loadDiscourse(category: string | undefined, group: boolean, severity: string | undefined, q: string | undefined, page: number) {
+  const filters = { category, group, severity, q };
+  const key = JSON.stringify([databaseFingerprint(), filters, page]);
+  const cached = discourseCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  let flight = discourseFlights.get(key);
+  if (!flight) {
+    flight = runDatabaseWorker<DiscoursePayload>("social-data-worker.cjs", {
+      databasePath: databasePath(), mode: "discourse", category, group, severity,
+      query: q, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE,
+    }, { priority: -5, lane: "bulk" }).then((value) => {
+      discourseCache.set(key, { expiresAt: Date.now() + 30_000, value });
+      while (discourseCache.size > 128) discourseCache.delete(discourseCache.keys().next().value!);
+      return value;
+    }).finally(() => discourseFlights.delete(key));
+    discourseFlights.set(key, flight);
+  }
+  return flight;
+}
 
 function fmtDate(raw: string | null): string {
   if (!raw) return "";
@@ -54,6 +82,10 @@ function fmtDate(raw: string | null): string {
 
 export default async function DiscursoPage({ searchParams }: PageProps<"/sinais/discurso">) {
   const sp = await searchParams;
+  return <Suspense fallback={<div className="flex flex-col gap-8"><PageHeader group="Sinais" current="Discurso em rede social" /><section className="card" aria-busy="true"><h1 className="text-[26px]">Discurso pejorativo em posts públicos</h1><p className="mt-4 text-sm text-[var(--muted)]">Preparando a análise…</p></section></div>}><DiscourseResults sp={sp} /></Suspense>;
+}
+
+async function DiscourseResults({ sp }: { sp: Awaited<PageProps<"/sinais/discurso">["searchParams"]> }) {
   const catParam = typeof sp.categoria === "string" ? sp.categoria : undefined;
   const category = ALL_CATEGORIES.includes(catParam as never) ? catParam : undefined;
   const group = sp.grupo === "1" && !category;
@@ -62,10 +94,14 @@ export default async function DiscursoPage({ searchParams }: PageProps<"/sinais/
   const q = typeof sp.q === "string" ? sp.q.trim() || undefined : undefined;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const summary = getDiscourseSummary();
-  const opts = { category, group, severity, q };
-  const count = getDiscourseCount(opts);
-  const signals = getDiscourseSignals({ ...opts, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+  let payload: DiscoursePayload;
+  try {
+    payload = await loadDiscourse(category, group, severity, q, page);
+  } catch (error) {
+    console.error("Unable to load discourse analysis:", error);
+    return <div className="flex flex-col gap-8"><PageHeader group="Sinais" current="Discurso em rede social" /><EmptyState icon="◌" title="não foi possível carregar esta análise agora" hint={<Link className="source-link" href="/sinais/discurso">Tentar novamente</Link>} /></div>;
+  }
+  const { summary, count, signals } = payload;
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
   const groupTotal = DISCOURSE_GROUP_CATEGORIES.reduce((s, c) => s + (summary.byCategory[c] ?? 0), 0);
