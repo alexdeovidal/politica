@@ -3,6 +3,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from "react";
 import Link from "next/link";
+import {useRouter} from "next/navigation";
 import QRCode from "qrcode";
 import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, History, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
 import {BrandMark} from "@/components/brand/brand-lockup";
@@ -90,7 +91,9 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   initialSelection: ElectionSelection; initialConfig: PublicConfig | null; initialResult: LiveResult | null;
   initialOverview: LiveOverview | null; initialError: string | null; initialTv: boolean; initialQuery: string; initialParty: string; initialCountry: string; initialNow: number;
 }) {
+  const router = useRouter();
   const [selection, setSelection] = useState(initialSelection), [config, setConfig] = useState(initialConfig);
+  const [availableYears, setAvailableYears] = useState<number[]>([ELECTION_YEAR]);
   const [data, setData] = useState(initialResult), [overview, setOverview] = useState(initialOverview);
   const [error, setError] = useState(initialError), [overviewError, setOverviewError] = useState<string | null>(null);
   const dataRef = useRef(data), overviewRef = useRef(overview);
@@ -144,6 +147,20 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     const full = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", full);
     return () => {mounted.current = false; window.clearInterval(clock); window.clearInterval(configurationTimer); document.removeEventListener("fullscreenchange", full);};
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/election-votes?mode=options", {signal: controller.signal})
+      .then(response => {
+        if (!response.ok) throw new Error("Não foi possível carregar os anos eleitorais.");
+        return response.json() as Promise<{years?: unknown}>;
+      })
+      .then(data => {
+        const years = Array.isArray(data.years) ? data.years.map(Number).filter(year => Number.isInteger(year) && year >= 2012 && year <= ELECTION_YEAR && year % 2 === 0) : [];
+        setAvailableYears([...new Set([ELECTION_YEAR, ...years])].sort((a, b) => b - a));
+      })
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
   useEffect(() => { window.history.replaceState(null, "", `/apuracao?${shareUrl.split("?")[1]}`); }, [shareUrl]); // Keep a bookmarkable, shareable view without reloading.
   useEffect(() => {
@@ -248,6 +265,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   }
 
   const filters = <div className="live-filters">
+    <label className="live-field"><span className="live-field-label">Eleição</span><select aria-label="Ano da eleição" value={ELECTION_YEAR} onChange={event => {const year = Number(event.target.value); if (year !== ELECTION_YEAR && availableYears.includes(year)) router.push(`/votos?ano=${year}`);}}>{availableYears.map(year => <option key={year} value={year}>{year}{year === ELECTION_YEAR ? " · apuração" : " · histórico"}</option>)}</select></label>
     <label className="live-field"><span className="live-field-label">Turno</span><select aria-label="Turno" value={selection.turn} onChange={event => changeSelection({turn: Number(event.target.value), office: "1", zone: ""})}>{Array.from(new Set(config?.elections.map(election => election.turn) || [1])).sort().map(turn => <option key={turn} value={turn}>{turn}º turno · 2026</option>)}</select></label>
     <LocationPicker label="Estado ou abrangência" value={selection.state === "br" ? "" : selection.state} options={config?.states || []} allLabel="Brasil e exterior" onChange={state => changeSelection({state: state || "br"})}/>
     <LocationPicker label={selection.state === "zz" ? "Cidade no exterior" : "Cidade"} value={selection.municipality} options={configIdentity === `${selection.turn}:${selection.state}` ? config?.municipalities || [] : []} allLabel={selection.state === "zz" ? "Todo o exterior" : selection.state === "br" ? "Selecione um estado" : "Todas as cidades"} onChange={municipality => changeSelection({municipality})} disabled={selection.state === "br" || configIdentity !== `${selection.turn}:${selection.state}`}/>

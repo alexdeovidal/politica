@@ -43,7 +43,7 @@
 .live-intro__date i { font-style: normal; color: var(--muted-2); padding: 0 5px; }
 .live-intro__date small { color: var(--muted); font-size: 10px; }
 .live-filter-panel { border: 1px solid var(--live-line); border-radius: 14px; background: var(--live-panel); padding: 21px 22px 0; }
-.live-filters { display: grid; grid-template-columns: 145px minmax(180px, 1.1fr) minmax(180px, 1.15fr) minmax(140px, .75fr) auto; align-items: end; gap: 15px; padding-bottom: 20px; }
+.live-filters { display: grid; grid-template-columns: 120px 105px minmax(170px, 1fr) minmax(170px, 1fr) minmax(130px, .75fr) auto; align-items: end; gap: 15px; padding-bottom: 20px; }
 .live-field, .live-picker { min-width: 0; }
 .live-field { display: flex; flex-direction: column; gap: 8px; }
 .live-field-label { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
@@ -254,8 +254,8 @@
   .live-election { padding-inline: 22px; }
   .live-main-grid { grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; }
   .live-header { gap: 16px; }
-  .live-filters { grid-template-columns: 130px minmax(160px, 1fr) minmax(160px, 1fr); gap: 15px; }
-  .live-field--zone { grid-column: 1 / 2; }
+  .live-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+  .live-field--zone { grid-column: auto; }
   .live-button--reset { justify-self: start; }
   .live-candidate-filters { grid-template-columns: 1fr 1fr; }
   .live-candidate-filters .live-search { grid-column: 1 / -1; }

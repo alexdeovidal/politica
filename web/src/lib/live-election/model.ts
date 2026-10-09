@@ -3,6 +3,7 @@ export const TSE_RESULTS_BASE = "https://resultados.tse.jus.br/oficial";
 export const LIVE_POLL_SECONDS = 30;
 export const ELECTION_YEAR = 2026;
 export const TSE_TECHNICAL_SOURCE = "https://www.tse.jus.br/eleicoes/informacoes-tecnicas-sobre-a-divulgacao-de-resultados";
+const CANDIDATE_OFFICE_CODES = new Set(["1", "3", "5", "6", "7", "8", "11", "13", "25"]);
 
 export type ElectionSelection = { turn: number; office: string; state: string; municipality: string; zone: string };
 export type ElectionOffice = { code: string; name: string; proportional: boolean };
@@ -84,7 +85,7 @@ export function parseElections(value: unknown): OfficialElection[] {
     for (const election of list(pleito.e)) {
       const code = str(election.cd), turn = Number(election.t);
       if (!/^\d{1,6}$/.test(code) || ![1, 2].includes(turn)) continue;
-      const offices = list(election.abr).flatMap(area => list(area.cp)).map(office => ({code: str(office.cd), name: str(office.ds), proportional: office.tp === "2"}));
+      const offices = list(election.abr).flatMap(area => list(area.cp)).map(office => ({code: str(office.cd), name: str(office.ds), proportional: office.tp === "2"})).filter(office => CANDIDATE_OFFICE_CODES.has(office.code));
       if (!offices.length) continue;
       elections.push({code, cycle, pleito: pleitoCode, date: str(pleito.dt), turn, offices: Array.from(new Map(offices.map(office => [office.code, office])).values())});
     }
