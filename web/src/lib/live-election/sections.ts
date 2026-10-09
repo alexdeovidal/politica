@@ -217,7 +217,7 @@ async function sectionVote(
     .sort((a, b) => timestampOrder(b.dr, b.hr) - timestampOrder(a.dr, a.hr))[0];
   const bu = availableBu(selectedHash);
   if (!bu) return pendingRow("waiting");
-  const buUrl = `https://resultados.tse.jus.br/oficial/${election.cycle}/arquivo-urna/${election.pleito}/dados/${selection.state}/${selection.municipality}/${selection.zone}/${section.number}/${encodeURIComponent(bu.hash)}/${encodeURIComponent(bu.filename)}`;
+  const buUrl = `https://resultados.tse.jus.br/oficial/${election.cycle}/arquivo-urna/${election.pleito}/dados/${selection.state}/${selection.municipality}/${section.zone}/${section.number}/${encodeURIComponent(bu.hash)}/${encodeURIComponent(bu.filename)}`;
   try {
     const file = await officialBinaryFile(buUrl);
     const header = parseBer(file.data).children;
