@@ -307,7 +307,7 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
 
       {filters.year === 2026 && options.years.includes(2026) && !options.yearsWithResults.includes(2026) ? <div className="card text-sm text-[var(--muted)]" role="status">
         <strong className="text-[var(--fg-1)]">2026 está disponível no seletor.</strong>{" "}
-        Os votos por seção de 2026 ainda não fazem parte do acervo histórico do Raio-X. Para acompanhar os resultados oficiais e as versões já totalizadas, acesse a <Link className="link-primary" href="/apuracao">Apuração ao vivo de 2026</Link>.
+        Os votos por seção de 2026 ainda não fazem parte do acervo histórico. Para acompanhar os resultados oficiais e as versões já totalizadas, acesse a <Link className="link-primary" href="/apuracao">Apuração ao vivo de 2026</Link>.
       </div> : null}
 
       {favorites.length ? <section className="card space-y-3" aria-label="Candidaturas favoritas">

@@ -21,11 +21,11 @@ export default async function ElectionVotesPage({ searchParams }: PageProps<"/vo
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
-      <PageHeader group="Consulta eleitoral" current="Raio-X Votos" />
+      <PageHeader group="Consulta eleitoral" current="Histórico Eleitoral" />
       <header className="mb-7 max-w-4xl">
         <div className="label mb-2">Consulta pública e gratuita · resultados oficiais</div>
         <h1 className="text-[30px] leading-tight font-medium tracking-tight text-[var(--fg-1)] sm:text-[38px]">
-          Raio-X Votos
+          Histórico Eleitoral
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-[var(--muted)]">
           Explore votos por eleição, cargo, estado, município, zona, local e seção. Compare até três candidaturas,

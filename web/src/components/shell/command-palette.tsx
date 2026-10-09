@@ -11,7 +11,7 @@ const SHORTCUTS = [
   { href: "/", label: "Visão geral" },
   { href: "/news", label: "Notícias" },
   { href: "/explorar", label: "Minha cidade e candidaturas" },
-  { href: "/votos", label: "Raio-X Votos · resultados por local e seção" },
+  { href: "/votos", label: "Histórico Eleitoral · resultados por local e seção" },
   { href: "/grafo", label: "Relações entre pessoas e empresas" },
   { href: "/conexoes", label: "Como se conectam?" },
   { href: "/comparar", label: "Comparar candidaturas" },
