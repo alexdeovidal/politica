@@ -1,15 +1,17 @@
 "use client";
 
-import {ChevronDown, ExternalLink, MapPin, RefreshCw, Search} from "lucide-react";
-import {useEffect, useMemo, useState} from "react";
+import {ExternalLink, MapPin, RefreshCw, Search} from "lucide-react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import type {ElectionSelection, LiveCandidate} from "@/lib/live-election/model";
 import type {LiveSectionVote, LiveSectionVotePage} from "@/lib/live-election/sections";
 
 type SectionResponse = LiveSectionVotePage & {error?: string};
 const number = new Intl.NumberFormat("pt-BR");
+
 function dateTime(value: string | null | undefined) {
   return value ? new Intl.DateTimeFormat("pt-BR", {dateStyle: "short", timeStyle: "medium", timeZone: "America/Sao_Paulo"}).format(new Date(value)) : "aguardando boletim";
 }
+
 function query(turn: number, office: string, state: string, municipality: string, zone: string, candidateId: string, page: number, sectionQuery: string) {
   const params = new URLSearchParams({turno: String(turn), cargo: office, uf: state, municipio: municipality, zona: zone, candidato: candidateId, pagina: String(page)});
   if (sectionQuery) params.set("q", sectionQuery);
@@ -17,7 +19,9 @@ function query(turn: number, office: string, state: string, municipality: string
 }
 
 export function LiveSectionVoteBreakdown({selection, candidate, finalized = false}: {selection: ElectionSelection; candidate: LiveCandidate; finalized?: boolean}) {
-  const [open, setOpen] = useState(false);
+  const previewRef = useRef<HTMLElement | null>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [saved, setSaved] = useState<{key: string; query: string; page: number; rows: LiveSectionVote[]; meta: SectionResponse} | null>(null);
@@ -31,6 +35,19 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
   const page = view?.page || 1;
   const rows = view?.rows || [];
   const meta = view?.meta || null;
+  const totalPages = meta?.totalPages || 0;
+
+  useEffect(() => {
+    const target = previewRef.current;
+    if (!target) return;
+    if (!("IntersectionObserver" in window)) {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry.isIntersecting), {rootMargin: "180px 0px"});
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -38,7 +55,13 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
   }, [search]);
 
   useEffect(() => {
-    if (!open || !municipalitySelected) return;
+    setExpanded(false);
+    setSearch("");
+    setDebouncedSearch("");
+  }, [selectionKey]);
+
+  useEffect(() => {
+    if (!nearViewport || !municipalitySelected) return;
     let stopped = false;
     let timer: number | undefined;
     const controller = new AbortController();
@@ -75,53 +98,66 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
       controller.abort();
       if (timer) window.clearTimeout(timer);
     };
-  }, [open, municipalitySelected, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, debouncedSearch]);
+  }, [nearViewport, municipalitySelected, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, debouncedSearch]);
 
-  const totalPages = meta?.totalPages || 0;
+  if (!municipalitySelected) return null;
+
+  function loadMore() {
+    setExpanded(true);
+    setSaved(current => {
+      const sameView = current?.key === selectionKey && current.query === debouncedSearch;
+      const currentPage = sameView ? current.page : 1;
+      const currentMeta = sameView ? current.meta : meta;
+      if (!currentMeta || currentPage >= currentMeta.totalPages) return current || saved;
+      return {
+        key: selectionKey,
+        query: debouncedSearch,
+        page: currentPage + 1,
+        rows: sameView ? current.rows : [],
+        meta: currentMeta,
+      };
+    });
+  }
 
   return (
-    <section className="mt-4 overflow-hidden rounded-[var(--r-md)] border border-[var(--border-1)] bg-[var(--surface)]">
-      <button type="button" className="flex w-full items-center gap-2 px-3 py-3 text-left text-[12px] font-medium text-[var(--fg-1)] sm:px-4" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <MapPin className="h-4 w-4 shrink-0 text-[var(--accent-2)]" aria-hidden="true" />
-        <span className="min-w-0 flex-1">Votos por local e seção <small className="ml-1 font-normal text-[var(--muted-2)]">· boletins oficiais do TSE</small></span>
-        {open && loading ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--muted-2)]" aria-label="Atualizando"/> : null}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--muted-2)] transition-transform${open ? " rotate-180" : ""}`} aria-hidden="true" />
-      </button>
-      {open ? <div className="border-t border-[var(--border-1)] px-3 py-3 sm:px-4">
-        {!municipalitySelected ? <div className="rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Para consultar cada urna, escolha um estado e um município nos filtros acima. A consulta é feita sob demanda para não carregar boletins de todo o estado sem necessidade.</div> : <>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted-2)]">
-            <span>{meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"}${debouncedSearch ? ` encontrada(s) ${zone ? `na zona ${Number(zone)}` : "no município"}` : ` ${zone ? `na zona ${Number(zone)}` : "no município"} · página ${page}${totalPages ? ` de ${totalPages}` : ""}`}` : `Consultando seções ${zone ? `da zona ${Number(zone)}` : "do município"}…`}</span>
-            <span>{finalized ? "Resultado encerrado · última consulta" : "Verificação automática a cada 60 segundos · última consulta"} {dateTime(meta?.checkedAt)}</span>
-          </div>
-          <label className="mb-3 flex min-h-10 items-center gap-2 rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 text-[var(--muted-2)] focus-within:border-[var(--accent-2)]">
-            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <input className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--fg-1)] outline-none placeholder:text-[var(--muted-2)]" type="search" inputMode="numeric" maxLength={4} autoComplete="off" aria-label="Buscar número da seção" placeholder={`Buscar seção ${zone ? "nesta zona" : "neste município"} (ex.: 593)`} value={search} onChange={event => setSearch(event.target.value.replace(/\D/g, "").slice(0, 4))} />
-            {loading ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" aria-label="Buscando seção" /> : null}
-          </label>
-          {error ? <p role="alert" className="mb-3 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-3 py-2 text-[11px] text-[var(--danger)]">{error}</p> : null}
-          {rows.length ? <div className="divide-y divide-[var(--border-1)]">
-            {rows.map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
-          </div> : !loading && !error ? <p className="py-3 text-[11px] text-[var(--muted)]">{debouncedSearch ? `A seção ${Number(debouncedSearch)} não foi localizada ${zone ? "nesta zona" : "neste município"}.` : `Nenhum boletim de seção foi publicado ${zone ? "nesta zona" : "neste município"}.`}</p> : null}
-          {!debouncedSearch && page < totalPages ? <button type="button" className="mt-3 min-h-10 w-full rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[11px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)]" disabled={loading} onClick={() => setSaved(current => ({key: selectionKey, query: debouncedSearch, page: (current?.key === selectionKey && current.query === debouncedSearch ? current.page : 1) + 1, rows: current?.key === selectionKey && current.query === debouncedSearch ? current.rows : [], meta: current?.key === selectionKey && current.query === debouncedSearch ? current.meta : meta!}))}>{loading ? "Carregando boletins…" : `Carregar próximas ${Math.min(10, Math.max(0, (meta?.total || 0) - rows.length))} seções`}</button> : null}
-          {meta?.locationSource ? <a className="mt-3 inline-flex items-center gap-1 text-[10px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">Cadastro de locais de votação do TSE <ExternalLink className="h-3 w-3"/></a> : null}
-        </>}
-      </div> : null}
+    <section ref={previewRef} className="col-span-full mt-1 min-w-0 border-t border-[var(--border-1)] pt-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--fg-2)]">
+          <MapPin className="h-3.5 w-3.5 text-[var(--accent-2)]" aria-hidden="true" />
+          Votos por local e seção
+        </h4>
+        <span className="text-[9px] text-[var(--muted-2)]">{meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"} ${zone ? `na zona ${Number(zone)}` : "no município"} · atualizado ${dateTime(meta.checkedAt)}` : "Boletins oficiais do TSE"}</span>
+      </div>
+
+      {expanded ? <label className="mb-2 flex min-h-9 items-center gap-2 rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-2.5 text-[var(--muted-2)] focus-within:border-[var(--accent-2)]">
+        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <input className="min-w-0 flex-1 bg-transparent text-[11px] text-[var(--fg-1)] outline-none placeholder:text-[var(--muted-2)]" type="search" inputMode="numeric" maxLength={4} autoComplete="off" aria-label="Buscar número da seção" placeholder={`Buscar seção ${zone ? "nesta zona" : "neste município"} (ex.: 593)`} value={search} onChange={event => setSearch(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+        {loading ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" aria-label="Buscando seção" /> : null}
+      </label> : null}
+
+      {error ? <p role="alert" className="mb-2 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-2.5 py-2 text-[10px] text-[var(--danger)]">{error}</p> : null}
+      {rows.length ? <div className="grid gap-2 sm:grid-cols-3" aria-live="polite">
+        {(expanded ? rows : rows.slice(0, 3)).map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
+      </div> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{debouncedSearch ? `A seção ${Number(debouncedSearch)} não foi localizada ${zone ? "nesta zona" : "neste município"}.` : "Nenhum boletim de seção foi publicado neste município."}</p>}
+
+      {meta && page < totalPages ? <button type="button" className="mt-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[10px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] disabled:opacity-60" disabled={loading} onClick={loadMore}>{loading ? <><RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true"/>Carregando…</> : "Ver mais"}</button> : null}
+      {expanded && meta?.locationSource ? <a className="ml-3 inline-flex items-center gap-1 text-[9px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">Cadastro de locais do TSE <ExternalLink className="h-3 w-3"/></a> : null}
     </section>
   );
 }
 
 function SectionRow({row}: {row: LiveSectionVote}) {
   const status = row.status === "totalized" ? "boletim publicado" : row.status === "waiting" ? "aguardando boletim do TSE" : "boletim não validado";
-  return <article className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+  return <article className="flex min-w-0 flex-col justify-between gap-2 rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface)] p-2.5">
     <div className="min-w-0">
-      <strong className="block break-words text-[12px] text-[var(--fg-1)]">{row.localName || `Local de votação ${row.localCode || "não identificado"}`}</strong>
-      {row.address ? <span className="mt-0.5 block break-words text-[10px] text-[var(--muted-2)]">{row.address}</span> : null}
-      <span className="mt-1 block font-mono text-[10px] text-[var(--muted)]">Zona {Number(row.zone)} · Seção {Number(row.number)}{row.mergedSections.length ? ` · agregada(s): ${row.mergedSections.map(Number).join(", ")}` : ""} · {status}</span>
-      {row.buGeneratedAt ? <span className="mt-0.5 block text-[9px] text-[var(--muted-2)]">Boletim emitido em {dateTime(row.buGeneratedAt)}</span> : null}
+      <strong className="block line-clamp-2 break-words text-[10px] font-medium leading-snug text-[var(--fg-1)]">{row.localName || `Local de votação ${row.localCode || "não identificado"}`}</strong>
+      {row.address ? <span className="mt-1 block line-clamp-1 break-words text-[9px] text-[var(--muted-2)]">{row.address}</span> : null}
+      <span className="mt-1 block font-mono text-[9px] text-[var(--muted)]">Zona {Number(row.zone)} · Seção {Number(row.number)} · {status}</span>
+      {row.buGeneratedAt ? <span className="mt-1 block text-[8px] text-[var(--muted-2)]">Boletim de {dateTime(row.buGeneratedAt)}</span> : null}
     </div>
-    <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
-      <strong className={`font-mono text-[16px] ${row.votes === null ? "text-[var(--muted-2)]" : "text-[var(--accent-2)]"}`}>{row.votes === null ? "—" : number.format(row.votes)} <small className="font-sans text-[10px] font-normal">votos</small></strong>
-      {row.sourceUrl ? <a className="inline-flex min-h-8 items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border-1)] px-2 text-[9px] text-[var(--muted)] hover:text-[var(--accent-2)]" href={row.sourceUrl} target="_blank" rel="noopener noreferrer">Boletim TSE <ExternalLink className="h-3 w-3"/></a> : null}
+    <div className="flex items-center justify-between gap-2">
+      <strong className={`font-mono text-[14px] ${row.votes === null ? "text-[var(--muted-2)]" : "text-[var(--accent-2)]"}`}>{row.votes === null ? "—" : number.format(row.votes)} <small className="font-sans text-[9px] font-normal">votos</small></strong>
+      {row.sourceUrl ? <a className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-[var(--r-sm)] border border-[var(--border-1)] px-2 text-[8px] text-[var(--muted)] hover:text-[var(--accent-2)]" href={row.sourceUrl} target="_blank" rel="noopener noreferrer">Boletim TSE <ExternalLink className="h-2.5 w-2.5"/></a> : null}
     </div>
   </article>;
 }

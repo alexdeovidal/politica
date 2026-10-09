@@ -233,7 +233,7 @@ export function LivePersonVoteResults({ result: profile, initiallyOpen }: { resu
                   <span>{live.sections.counted.toLocaleString("pt-BR")} de {live.sections.total.toLocaleString("pt-BR")} seções totalizadas · {live.sections.percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
                   <span>Dados gerados pelo TSE: {formatDate(live.generatedAt)} · portal consultou: {formatDate(live.checkedAt)}{live.stale ? " · último dado disponível" : ""}</span>
                 </div>
-                <LiveSectionVoteBreakdown selection={live.selection} candidate={candidate} finalized={isLiveResultComplete(live)}/>
+                {municipality ? <LiveSectionVoteBreakdown selection={live.selection} candidate={candidate} finalized={isLiveResultComplete(live)}/> : null}
               </div>
             ) : null}
 

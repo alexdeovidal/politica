@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {findElection, list, object, str, validateSelection, type ElectionSelection, type LiveCandidate} from "./model";
 import {cleanupLiveSectionCache, getLiveConfig, getLiveResult, officialBinaryFile, officialJsonFile, SourceUnavailable} from "./service";
 
-const SECTION_PAGE_SIZE = 10;
+const SECTION_PAGE_SIZE = 3;
 const SECTION_REFRESH_MS = 60000;
 const LOCATION_SOURCE = "https://dadosabertos.tse.jus.br/dataset/eleitorado-2026/resource/300626b4-2b24-4d2e-b4fc-46b569cfffe5";
 type Json = Record<string, unknown>;

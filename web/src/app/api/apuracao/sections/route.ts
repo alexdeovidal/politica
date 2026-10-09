@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!rateLimit(request, "live-section-votes", 20)) return Response.json({error: "Muitas consultas por seção. Aguarde um minuto e tente novamente."}, {status: 429, headers: {"Cache-Control": "no-store", "Retry-After": "60"}});
+  if (!rateLimit(request, "live-section-votes", 40)) return Response.json({error: "Muitas consultas por seção. Aguarde um minuto e tente novamente."}, {status: 429, headers: {"Cache-Control": "no-store", "Retry-After": "60"}});
   const params = new URL(request.url).searchParams;
   const candidateId = params.get("candidato") || "";
   const page = Number(params.get("pagina") || 1);
