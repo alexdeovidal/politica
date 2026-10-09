@@ -21,7 +21,7 @@ type VoteResult = {
   votes: number; sections: number; municipalities: number; voteShare: number;
 };
 type SearchResult = { rows: VoteResult[]; total: number; page: number; pageSize: number; totalNominalVotes: number; totalSections: number };
-type PollingPlace = { name: string; placeNumber: string | null; municipality: string; state: string; zone: string; section: string; address: string | null; votes: number };
+type PollingPlace = { name: string; placeNumber: string | null; municipality: string; state: string; zone: string; section: string; sectionCount?: number | null; address: string | null; votes: number };
 type Detail = Omit<VoteResult, "municipalities"> & {
   round: number; officeCode: string; electoralUnit: string | null; municipalitiesCount: number;
   rank: number | null; partyRank: number | null;
@@ -82,7 +82,7 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
     year: filters.year, round: filters.round, officeCode: filters.officeCode, state: filters.state,
     municipalityCode: filters.municipalityCode, zone: filters.zone, section: filters.section,
     place: filters.place, party: "", q: "", page: 1,
-  }, { mode: "details", ids: selectedKey }).toString();
+  }, { mode: "details", ids: selectedKey, v: "3" }).toString();
   const hasSearch = Boolean(filters.state || filters.municipalityCode || filters.q.trim() || filters.place.trim());
   const currentYearHasNoArchive = options.years.includes(filters.year) && !options.yearsWithResults.includes(filters.year);
 
@@ -511,14 +511,14 @@ function DetailPanel({ record, filters }: { record: Detail; filters: Filters }) 
     </div>
     <section>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div><h4 className="font-medium">Locais e seções com mais votos</h4><p className="text-xs text-[var(--muted)]">Os três principais aparecem primeiro. Pesquise um local ou seção e carregue mais resultados quando precisar.</p></div>
+        <div><h4 className="font-medium">Locais e seções com mais votos</h4><p className="text-xs text-[var(--muted)]">Os três locais com mais votos aparecem primeiro. Pesquise pelo nome, endereço, número do local, zona ou seção para encontrar uma urna.</p></div>
         <div className="platform-form min-w-64 flex-1 sm:max-w-md">
           <label htmlFor={`polling-place-search-${record.historyId}`}>Buscar local ou urna</label>
           <span className="relative block w-full"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" /><input id={`polling-place-search-${record.historyId}`} style={{ paddingLeft: "2.5rem" }} value={placeQuery} onChange={event => updatePlaceQuery(event.target.value)} placeholder="Escola, endereço, nº do local ou seção" autoComplete="off" /></span>
         </div>
       </div>
       {placesError ? <p className="text-sm text-rose-700" role="alert">{placesError}</p> : null}
-      {placeRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-2 py-2">Município</th><th className="px-2 py-2">Local</th><th className="px-2 py-2">Nº do local</th><th className="px-2 py-2">Zona</th><th className="px-2 py-2">Seção/urna</th><th className="px-2 py-2 text-right">Votos</th></tr></thead><tbody>{placeRows.map((row, index) => <tr className="border-b border-[var(--line)]" key={`${row.municipality}-${row.zone}-${row.placeNumber}-${row.section}-${index}`}><td className="px-2 py-2">{row.municipality}/{row.state}</td><td className="px-2 py-2">{row.name}{row.address ? <small className="block text-xs text-[var(--muted)]">{row.address}</small> : null}</td><td className="px-2 py-2">{row.placeNumber || "—"}</td><td className="px-2 py-2">{row.zone}</td><td className="px-2 py-2">{row.section}</td><td className="px-2 py-2 text-right tabular-nums">{number(row.votes)}</td></tr>)}</tbody></table></div> : placesLoading ? <p className="flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={15} className="animate-spin" /> Buscando locais e urnas…</p> : !placesError ? <p className="text-sm text-[var(--muted)]">{placeQuery.trim() ? "Nenhum local ou urna encontrado. Tente pelo nome, endereço, número do local, zona ou seção." : "A fonte não detalha locais e seções para esta eleição."}</p> : null}
+      {placeRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-2 py-2">Município</th><th className="px-2 py-2">Local</th><th className="px-2 py-2">Nº do local</th><th className="px-2 py-2">Zona</th><th className="px-2 py-2">Seções/urna</th><th className="px-2 py-2 text-right">Votos</th></tr></thead><tbody>{placeRows.map((row, index) => <tr className="border-b border-[var(--line)]" key={`${row.municipality}-${row.zone}-${row.placeNumber}-${row.section}-${index}`}><td className="px-2 py-2">{row.municipality}/{row.state}</td><td className="px-2 py-2">{row.name}{row.address ? <small className="block text-xs text-[var(--muted)]">{row.address}</small> : null}</td><td className="px-2 py-2">{row.placeNumber || "—"}</td><td className="px-2 py-2">{row.zone}</td><td className="px-2 py-2">{row.sectionCount ? `${number(row.sectionCount)} ${row.sectionCount === 1 ? "seção" : "seções"}` : row.section}</td><td className="px-2 py-2 text-right tabular-nums">{number(row.votes)}</td></tr>)}</tbody></table></div> : placesLoading ? <p className="flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={15} className="animate-spin" /> Buscando locais e urnas…</p> : !placesError ? <p className="text-sm text-[var(--muted)]">{placeQuery.trim() ? "Nenhum local ou urna encontrado. Tente pelo nome, endereço, número do local, zona ou seção." : "A fonte não detalha locais e seções para esta eleição."}</p> : null}
       {placesHasMore && !placeQuery.trim() ? <button className="btn mt-3" type="button" onClick={loadMorePlaces} disabled={placesLoading}>{placesLoading ? <><LoaderCircle size={15} className="animate-spin" /> Carregando locais…</> : "Ver mais locais e seções"}</button> : null}
       {placesHasMore && placeQuery.trim() && !placesLoading ? <button className="btn mt-3" type="button" onClick={loadMorePlaces}>Ver mais resultados</button> : null}
       {placesHasMore && placeQuery.trim() && placesLoading ? <p className="mt-3 flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={15} className="animate-spin" /> Carregando mais resultados…</p> : null}

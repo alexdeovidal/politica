@@ -254,20 +254,24 @@ function queryPollingPlaces(historyId, { pageSize = 12, offset = 0, placeQuery =
   const placeFilter = matchedPlaceFilter();
   const base = clausesFor({ includeParty: false, includeQuery: false, includeIdentity: false, includePlace: !placeFilter });
   const where = base.sql ? `${base.sql} AND v.history_id = ?` : "WHERE v.history_id = ?";
+  const searchingForSection = Boolean(String(placeQuery).trim());
   const queryTokens = normalizeName(placeQuery).split(" ").filter(Boolean).slice(0, 8);
   const fields = "coalesce(v.polling_place_name,'') || ' ' || coalesce(v.polling_place_address,'') || ' ' || coalesce(v.polling_place_number,'') || ' ' || coalesce(v.municipality,'') || ' ' || coalesce(v.zone_number,'') || ' ' || coalesce(v.section_number,'')";
   const querySql = queryTokens.map(() => `instr(normalize_public_name(${fields}), ?) > 0`).join(" AND ");
   const queryArgs = queryTokens;
+  const sectionProjection = searchingForSection ? "v.section_number AS section, NULL AS sectionCount" : "'' AS section, count(DISTINCT v.section_number) AS sectionCount";
+  const groupBy = searchingForSection
+    ? "v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name, v.polling_place_address, v.section_number, v.municipality, v.state"
+    : "v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name, v.polling_place_address, v.municipality, v.state";
   const rows = database.prepare(`
     ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
     SELECT coalesce(v.polling_place_name, 'Local sem nome publicado') AS name,
            v.polling_place_number AS placeNumber, v.municipality AS municipality,
-           v.state AS state, v.zone_number AS zone, v.section_number AS section,
+           v.state AS state, v.zone_number AS zone, ${sectionProjection},
            v.polling_place_address AS address, sum(v.votes) AS votes
     FROM election_vote_section v ${placeFilter ? placeFilter.join : ""} JOIN politician_history h ON h.id = v.history_id
     ${where}${querySql ? ` AND ${querySql}` : ""}
-    GROUP BY v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name,
-             v.polling_place_address, v.section_number, v.municipality, v.state
+    GROUP BY ${groupBy}
     ORDER BY votes DESC, municipality COLLATE NOCASE, CAST(zone AS INTEGER), CAST(section AS INTEGER), placeNumber
     LIMIT ? OFFSET ?
   `).all(
