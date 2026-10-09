@@ -1,12 +1,14 @@
 import {gunzipSync} from "node:zlib";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
+import {runDatabaseWorker} from "@/lib/database-worker";
 import {findElection, list, object, str, validateSelection, type ElectionSelection, type LiveCandidate} from "./model";
 import {cleanupLiveSectionCache, getLiveConfig, getLiveResult, officialBinaryFile, officialJsonFile, SourceUnavailable} from "./service";
 
 const SECTION_PAGE_SIZE = 3;
 const SECTION_REFRESH_MS = 60000;
 const LOCATION_SOURCE = "https://dadosabertos.tse.jus.br/dataset/eleitorado-2026/resource/300626b4-2b24-4d2e-b4fc-46b569cfffe5";
+const VOTE_SECTION_SOURCE = "https://dadosabertos.tse.jus.br/dataset/resultados-2026/resource/01ea4ccd-f443-469c-9f29-c69ff97f7d4c";
 type Json = Record<string, unknown>;
 type PollingSection = {zone: string; number: string; merged: string[]; date: string; time: string};
 export type LiveSectionVote = {
@@ -16,6 +18,8 @@ export type LiveSectionVote = {
   localCode: string | null;
   localName: string | null;
   address: string | null;
+  municipality?: string | null;
+  state?: string | null;
   votes: number | null;
   status: "totalized" | "waiting" | "unavailable";
   buGeneratedAt: string | null;
@@ -33,8 +37,13 @@ export type LiveSectionVotePage = {
   checkedAt: string;
   refreshSeconds: number;
   locationSource: string;
+  sourceLabel?: string;
+  ready?: boolean;
+  ranked?: boolean;
   rows: LiveSectionVote[];
 };
+
+type ArchivedSectionVotePage = {ready: boolean; rows: Array<{state: string | null; municipality: string | null; zone: string; number: string; localCode: string | null; localName: string | null; address: string | null; votes: number}>; total: number; page: number; pageSize: number; checkedAt: string};
 
 type BerNode = {cls: number; tag: number; constructed: boolean; value: Buffer; children: BerNode[]};
 type BerBudget = {nodes: number};
@@ -233,8 +242,7 @@ async function sectionVote(
   }
 }
 
-export async function getLiveSectionVotePage(selection: ElectionSelection, candidateId: string, page: number, sectionQuery = ""): Promise<LiveSectionVotePage> {
-  if (selection.state === "br" || !selection.municipality) throw new Error("Escolha um estado e um município para ver os votos por seção.");
+export async function getLiveSectionVotePage(selection: ElectionSelection, candidateId: string, page: number, sectionQuery = "", sectionFilter = ""): Promise<LiveSectionVotePage> {
   cleanupLiveSectionCache();
   const config = await getLiveConfig(selection.turn), election = findElection(config.elections, selection);
   validateSelection(selection, config.states, election);
@@ -242,6 +250,66 @@ export async function getLiveSectionVotePage(selection: ElectionSelection, candi
   if (!result.votingReleased) throw new SourceUnavailable("not-published", 60);
   const candidate = result.candidates.find(item => item.id === candidateId);
   if (!candidate || !/^\d+$/.test(candidate.partyNumber) || !/^\d+$/.test(candidate.number)) throw new Error("A candidatura não corresponde ao resultado oficial deste recorte.");
+
+  const normalizedQuery = sectionQuery.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim();
+  const numericQuery = /^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(sectionQuery.trim()) || /^SECAO\s*\d{1,4}$/i.test(normalizedQuery);
+  const needsArchivedSections = Number(election.cycle.slice(3)) === 2026 && (selection.state === "br" || Boolean(sectionQuery.trim() && !numericQuery));
+  if (needsArchivedSections) {
+    let archived: ArchivedSectionVotePage;
+    try {
+      archived = await runDatabaseWorker<ArchivedSectionVotePage>("live-section-votes-worker.cjs", {
+        query: {
+          year: Number(election.cycle.slice(3)),
+          round: selection.turn,
+          officeCode: selection.office,
+          candidateId,
+          state: selection.state === "br" ? "BR" : selection.state,
+          municipalityCode: selection.municipality,
+          zone: selection.zone,
+          sectionNumber: sectionFilter,
+          search: sectionQuery.trim(),
+          page,
+        },
+      }, {lane: "interactive", priority: 10});
+    } catch (error) {
+      console.error("Unable to query TSE section vote archive:", error);
+      throw new SourceUnavailable("section-archive-pending", 120);
+    }
+    const totalPages = Math.ceil(archived.total / SECTION_PAGE_SIZE), safePage = totalPages ? Math.min(archived.page, totalPages) : 1;
+    const rows: LiveSectionVote[] = archived.rows.map(row => ({
+      zone: String(row.zone),
+      number: String(row.number),
+      mergedSections: [],
+      localCode: row.localCode === null ? null : String(row.localCode),
+      localName: row.localName || null,
+      address: row.address || null,
+      municipality: row.municipality || null,
+      state: row.state || null,
+      votes: row.votes,
+      status: "totalized",
+      buGeneratedAt: null,
+      sourceUrl: VOTE_SECTION_SOURCE,
+      checkedAt: archived.checkedAt,
+    }));
+    return {
+      electionYear: Number(election.cycle.slice(3)),
+      candidate: {id: candidate.id, name: candidate.name, number: candidate.number, party: candidate.party, partyNumber: candidate.partyNumber},
+      selection,
+      page: safePage,
+      pageSize: SECTION_PAGE_SIZE,
+      total: archived.total,
+      totalPages,
+      checkedAt: archived.checkedAt,
+      refreshSeconds: archived.ready ? 0 : SECTION_REFRESH_MS / 1000,
+      locationSource: VOTE_SECTION_SOURCE,
+      sourceLabel: "Votação por seção · TSE",
+      ready: archived.ready,
+      ranked: true,
+      rows,
+    };
+  }
+
+  if (selection.state === "br" || !selection.municipality) throw new Error("Escolha um estado e um município para ver os votos por seção.");
   const configUrl = sectionConfigUrl(election.cycle, election.pleito, selection.state);
   const configFile = await officialJsonFile(configUrl, SECTION_REFRESH_MS, value => {
     const root = object(value);
@@ -249,9 +317,13 @@ export async function getLiveSectionVotePage(selection: ElectionSelection, candi
     return value;
   });
   let sections = parseSections(configFile.data, selection.state, selection.municipality, selection.zone);
-  const normalizedQuery = sectionQuery.replace(/\D/g, "").slice(-4);
-  if (normalizedQuery) {
-    const target = formatSection(normalizedQuery);
+  const sectionNumberQuery = sectionQuery.trim().match(/^(?:se[cç][aã]o\s*)?(\d{1,4})$/i);
+  if (sectionNumberQuery) {
+    const target = formatSection(sectionNumberQuery[1]);
+    sections = sections.filter(section => section.number === target || section.merged.includes(target));
+  }
+  if (/^\d{1,4}$/.test(sectionFilter)) {
+    const target = formatSection(sectionFilter);
     sections = sections.filter(section => section.number === target || section.merged.includes(target));
   }
   if (!sections.length) return {electionYear: Number(election.cycle.slice(3)), candidate: {id: candidate.id, name: candidate.name, number: candidate.number, party: candidate.party, partyNumber: candidate.partyNumber}, selection, page, pageSize: SECTION_PAGE_SIZE, total: 0, totalPages: 0, checkedAt: configFile.checkedAt, refreshSeconds: SECTION_REFRESH_MS / 1000, locationSource: LOCATION_SOURCE, rows: []};

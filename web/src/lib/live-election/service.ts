@@ -296,6 +296,6 @@ export async function getLiveOverview(selection: ElectionSelection): Promise<Liv
 }
 
 export function unavailableResultMessage(error: unknown) {
-  if (error instanceof SourceUnavailable) return {error: error.kind === "not-published" ? "O TSE ainda não publicou o arquivo deste recorte. A consulta automática continuará." : "A fonte oficial está indisponível neste momento. A consulta automática continuará.", code: error.kind, retryAfterSeconds: error.retryAfterSeconds};
+  if (error instanceof SourceUnavailable) return {error: error.kind === "not-published" ? "O TSE ainda não publicou o arquivo deste recorte. A consulta automática continuará." : error.kind === "section-archive-pending" ? "Os dados detalhados por seção estão sendo integrados à base oficial. Tente novamente em instantes." : "A fonte oficial está indisponível neste momento. A consulta automática continuará.", code: error.kind, retryAfterSeconds: error.retryAfterSeconds};
   return {error: error instanceof Error ? error.message : "Consulta inválida.", code: "invalid-selection", retryAfterSeconds: 30};
 }

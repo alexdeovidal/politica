@@ -43,12 +43,12 @@
 .live-intro__date i { font-style: normal; color: var(--muted-2); padding: 0 5px; }
 .live-intro__date small { color: var(--muted); font-size: 10px; }
 .live-filter-panel { border: 1px solid var(--live-line); border-radius: 14px; background: var(--live-panel); padding: 21px 22px 0; }
-.live-filters { display: grid; grid-template-columns: 120px 105px minmax(170px, 1fr) minmax(170px, 1fr) minmax(130px, .75fr) auto; align-items: end; gap: 15px; padding-bottom: 20px; }
+.live-filters { display: grid; grid-template-columns: 115px 100px minmax(145px, 1fr) minmax(145px, 1fr) minmax(110px, .72fr) minmax(95px, .55fr) auto; align-items: end; gap: 15px; padding-bottom: 20px; }
 .live-field, .live-picker { min-width: 0; }
 .live-field { display: flex; flex-direction: column; gap: 8px; }
 .live-field-label { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
-.live-field select, .live-picker__trigger, .live-candidate-filters select { width: 100%; min-height: 44px; color: var(--fg-1); background: var(--bg); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px 12px; font-size: 12px; }
-.live-field select:disabled { opacity: .48; }
+.live-field select, .live-field input, .live-picker__trigger, .live-candidate-filters select { width: 100%; min-height: 44px; color: var(--fg-1); background: var(--bg); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px 12px; font-size: 12px; }
+.live-field select:disabled, .live-field input:disabled { opacity: .48; }
 .live-picker { position: relative; }
 .live-picker .live-field-label { margin-bottom: 8px; }
 .live-picker__trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
@@ -315,7 +315,7 @@
   .live-filters .live-field--zone { grid-column: auto; }
   .live-filters .live-button--reset { grid-column: 1 / -1; padding: 0; min-height: 25px; font-size: 11px; }
   .live-field-label { font-size: 10px; }
-  .live-field select, .live-picker__trigger { font-size: 11px; padding: 9px; min-height: 42px; }
+  .live-field select, .live-field input, .live-picker__trigger { font-size: 11px; padding: 9px; min-height: 42px; }
   .live-picker__popup { width: max(100%, 240px); }
   .live-filters .live-picker:nth-child(2) .live-picker__popup { left: auto; right: 0; }
   .live-offices { margin: 0 -15px; padding: 10px 15px; gap: 3px; }

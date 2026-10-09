@@ -27,8 +27,8 @@ URL_TEMPLATE = (
     "votacao_secao_{year}_{unit}.zip"
 )
 
-SUPPORTED_YEARS = (2012, 2014, 2016, 2018, 2020, 2022, 2024)
-PRESIDENTIAL_YEARS = {2014, 2018, 2022}
+SUPPORTED_YEARS = (2012, 2014, 2016, 2018, 2020, 2022, 2024, 2026)
+PRESIDENTIAL_YEARS = {2014, 2018, 2022, 2026}
 STATES = (
     "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT",
     "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",

@@ -87,9 +87,9 @@ function writeLocalCache<T>(kind: "config" | "result" | "overview", key: string,
 }
 function stale<T extends {stale: boolean}>(value: T): T {return {...value, stale: true};}
 
-export function LiveElectionDashboard({initialSelection, initialConfig, initialResult, initialOverview, initialError, initialTv, initialQuery, initialParty, initialCountry, initialNow}: {
+export function LiveElectionDashboard({initialSelection, initialConfig, initialResult, initialOverview, initialError, initialTv, initialQuery, initialParty, initialSection, initialCountry, initialNow}: {
   initialSelection: ElectionSelection; initialConfig: PublicConfig | null; initialResult: LiveResult | null;
-  initialOverview: LiveOverview | null; initialError: string | null; initialTv: boolean; initialQuery: string; initialParty: string; initialCountry: string; initialNow: number;
+  initialOverview: LiveOverview | null; initialError: string | null; initialTv: boolean; initialQuery: string; initialParty: string; initialSection: string; initialCountry: string; initialNow: number;
 }) {
   const router = useRouter();
   const [selection, setSelection] = useState(initialSelection), [config, setConfig] = useState(initialConfig);
@@ -102,6 +102,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   const [configError, setConfigError] = useState<string | null>(null), [loading, setLoading] = useState(!initialResult), [refreshKey, setRefreshKey] = useState(0);
   const [tv, setTv] = useState(initialTv), [filtersOpen, setFiltersOpen] = useState(false), [now, setNow] = useState(initialNow), [nextPoll, setNextPoll] = useState(initialNow + LIVE_POLL_SECONDS * 1000);
   const [query, setQuery] = useState(initialQuery), [party, setParty] = useState(initialParty), [sort, setSort] = useState("votes"), [visibleCount, setVisibleCount] = useState(30);
+  const [sectionFilter, setSectionFilter] = useState(initialSection);
   const [territoryQuery, setTerritoryQuery] = useState(""), [territoryCount, setTerritoryCount] = useState(12);
   const [tvPage, setTvPage] = useState(0), [rotating, setRotating] = useState(true), [copied, setCopied] = useState(false), [shareError, setShareError] = useState<string | null>(null), [qr, setQr] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -127,6 +128,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
   const linkParams = selectionParams(selection);
   if (query) linkParams.set("busca", query);
   if (party) linkParams.set("partido", party);
+  if (sectionFilter) linkParams.set("secao", sectionFilter);
   if (tv) linkParams.set("tv", "1");
   if (selection.state === "zz" && mapCountry) linkParams.set("pais", mapCountry);
   const shareUrl = `https://politica007.com.br/apuracao?${linkParams}`;
@@ -244,6 +246,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     setSelection(current => changeElectionSelection(current, change));
     if (change.municipality !== undefined || change.state && change.state !== "zz") setMapCountry("");
     setOverview(null); setParty(""); setQuery(""); setError(null);
+    if (change.state !== undefined || change.municipality !== undefined) setSectionFilter("");
   }, []);
   async function toggleTv() {
     if (tv) {setTv(false); setFiltersOpen(false); if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});}
@@ -270,6 +273,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
     <LocationPicker label="Estado ou abrangência" value={selection.state === "br" ? "" : selection.state} options={config?.states || []} allLabel="Brasil e exterior" onChange={state => changeSelection({state: state || "br"})}/>
     <LocationPicker label={selection.state === "zz" ? "Cidade no exterior" : "Cidade"} value={selection.municipality} options={configIdentity === `${selection.turn}:${selection.state}` ? config?.municipalities || [] : []} allLabel={selection.state === "zz" ? "Todo o exterior" : selection.state === "br" ? "Selecione um estado" : "Todas as cidades"} onChange={municipality => changeSelection({municipality})} disabled={selection.state === "br" || configIdentity !== `${selection.turn}:${selection.state}`}/>
     <label className="live-field live-field--zone"><span className="live-field-label">Zona eleitoral</span><select aria-label="Zona eleitoral" disabled={!selection.municipality} value={selection.zone} onChange={event => changeSelection({zone: event.target.value})}><option value="">Todas as zonas</option>{selectedCity?.zones.map(zone => <option key={zone} value={zone}>Zona {Number(zone)}</option>)}</select></label>
+    <label className="live-field live-field--section"><span className="live-field-label">Seção (opcional)</span><input aria-label="Número da seção, opcional" inputMode="numeric" pattern="[0-9]*" maxLength={4} disabled={!selection.municipality} value={sectionFilter} placeholder="Ex.: 593" onChange={event => setSectionFilter(event.target.value.replace(/\D/g, "").slice(0, 4))}/></label>
     <button className="live-button live-button--reset" type="button" onClick={() => changeSelection({state: "br", municipality: "", zone: "", office: "1"})}>Visão nacional <ArrowRight size={16}/></button>
   </div>;
   const officeTabs = <div className="live-offices" role="tablist" aria-label="Cargo em disputa">{officeList.map(office => <button key={office.code} type="button" role="tab" aria-selected={selection.office === office.code} className={selection.office === office.code ? "is-active" : ""} onClick={() => changeSelection({office: office.code})}>{office.name}</button>)}</div>;
@@ -312,7 +316,7 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
           {selectedResult?.mathematicalDecision && <div className="live-notice"><Info size={18}/><p>O TSE indica {selectedResult.mathematicalDecision === "s" ? "definição matemática de segundo turno" : "definição matemática da eleição"}. A situação de cada candidatura segue a totalização final informada pelo TSE.</p></div>}
           {selectedResult?.noWinnersReason.length ? <div className="live-notice"><Info size={18}/><p>O TSE informa que não houve atribuição de eleitos: {selectedResult.noWinnersReason.join("; ")}.</p></div> : null}
           <div className="live-candidate-list" aria-busy={loading && !selectedResult} style={tv ? {"--live-tv-columns": displayed.length === 4 ? 2 : Math.min(3, displayed.length || 3), "--live-tv-rows": displayed.length > 0 && displayed.length <= 3 ? 1 : 2} as CSSProperties : undefined}>
-            {displayed.map(candidate => <CandidateCard key={`${candidate.id}-${selection.office}`} candidate={candidate} selection={selectedResult?.selection || selection} rank={started ? (selectedResult?.candidates.findIndex(item => item.id === candidate.id) ?? -1) + 1 : null} tv={tv} finalized={resultComplete}/>) }
+            {displayed.map(candidate => <CandidateCard key={`${candidate.id}-${selection.office}`} candidate={candidate} selection={selectedResult?.selection || selection} sectionFilter={sectionFilter} rank={started ? (selectedResult?.candidates.findIndex(item => item.id === candidate.id) ?? -1) + 1 : null} tv={tv} finalized={resultComplete}/>) }
             {!selectedResult && loading && Array.from({length: tv ? 6 : 4}, (_, index) => <div className="live-candidate-skeleton" key={index}><i/><div><span/><span/></div><b/></div>)}
           </div>
           {selectedResult && !candidates.length && <div className="live-empty"><Search size={30}/><h3>Nenhuma candidatura encontrada.</h3><p>Buscamos em todas as {number(selectedResult.candidates.length)} candidaturas deste cargo e local, incluindo as que ainda não estão na tela.</p><button type="button" className="live-button" onClick={() => {updateQuery(""); updateParty("");}}>Limpar pesquisa</button></div>}
@@ -338,14 +342,14 @@ export function LiveElectionDashboard({initialSelection, initialConfig, initialR
 function Metric({label, value, text, emphasis = false}: {label: string; value?: number | null; text?: string; emphasis?: boolean}) {
   return <div className={`live-metric${emphasis ? " live-metric--emphasis" : ""}`}><span>{label}</span><strong>{text ?? number(value)}</strong></div>;
 }
-function CandidateCard({candidate, selection, rank, tv, finalized}: {candidate: LiveCandidate; selection: ElectionSelection; rank: number | null; tv: boolean; finalized: boolean}) {
+function CandidateCard({candidate, selection, sectionFilter, rank, tv, finalized}: {candidate: LiveCandidate; selection: ElectionSelection; sectionFilter: string; rank: number | null; tv: boolean; finalized: boolean}) {
   const [failed, setFailed] = useState(false);
   const initials = candidate.name.split(/\s+/).filter(Boolean).slice(0, 2).map(name => name[0]).join("");
   return <article className="live-candidate">
     <div className="live-candidate__identity">{rank && <span className="live-candidate__rank">{String(rank).padStart(2, "0")}</span>}<div className="live-candidate__photo">{candidate.photoUrl && !failed ? <img src={candidate.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)}/> : <span>{initials || candidate.party.slice(0, 2)}</span>}</div><div className="live-candidate__name"><h3>{displayName(candidate.name)}</h3><p>{candidate.party} <span>·</span> {candidate.number}</p>{candidate.status && <span className="live-candidate__status">{candidate.status}</span>}{candidate.destination && candidate.destination !== "Válido" && <span className="live-candidate__destination">{candidate.destination}</span>}</div></div>
     <div className="live-candidate__numbers"><strong>{percentage(candidate.percentage)}</strong><span>{number(candidate.votes)} <small>votos</small></span></div>
     <div className="live-candidate__bar" role="img" aria-label={candidate.percentage === null ? "Votação ainda não divulgada" : `${percentage(candidate.percentage)} conforme o TSE`}><i style={{width: `${candidate.percentage || 0}%`}}/></div>
-    {!tv && selection.municipality && <LiveSectionVoteBreakdown selection={selection} candidate={candidate} finalized={finalized}/>}
+    {!tv && (selection.municipality || selection.state === "br" && selection.office === "1") && <LiveSectionVoteBreakdown selection={selection} candidate={candidate} sectionFilter={sectionFilter} finalized={finalized}/>}
     {!tv && <details className="live-candidate__details"><summary>Detalhes da candidatura <ChevronDown size={12}/></summary><div><p><strong>Nome completo:</strong> {displayName(candidate.legalName)}</p><p><strong>Partido:</strong> {candidate.partyName}</p><p><strong>Coligação ou agrupamento:</strong> {candidate.coalition}</p>{candidate.runningMates.map((mate, index) => <p key={index}><strong>{mate.role}:</strong> {displayName(mate.name)} · {mate.party}</p>)}{candidate.destination && <p><strong>Destinação dos votos:</strong> {candidate.destination}</p>}<p>Percentual de votos computados informado pelo TSE para este cargo e recorte.</p></div></details>}
   </article>;
 }

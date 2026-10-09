@@ -25,6 +25,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
     initialTv={params.get("tv") === "1"}
     initialQuery={params.get("busca") || ""}
     initialParty={params.get("partido") || ""}
+    initialSection={/^\d{1,4}$/.test(params.get("secao") || "") ? params.get("secao")! : ""}
     initialCountry={/^[A-Z]{2}$/.test(params.get("pais") || "") ? params.get("pais")! : ""}
     initialNow={Date.now()}
   />;

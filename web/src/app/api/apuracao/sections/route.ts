@@ -12,9 +12,10 @@ export async function GET(request: Request) {
   const candidateId = params.get("candidato") || "";
   const page = Number(params.get("pagina") || 1);
   const sectionQuery = (params.get("q") || "").trim();
-  if (!/^[\d-]{1,40}$/.test(candidateId) || !Number.isSafeInteger(page) || page < 1 || page > 10000 || sectionQuery.length > 20 || (sectionQuery && !/^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(sectionQuery))) return Response.json({error: "Informe o número da seção, por exemplo 593."}, {status: 400, headers: {"Cache-Control": "no-store"}});
+  const sectionFilter = (params.get("secao") || "").trim();
+  if (!/^[\d-]{1,40}$/.test(candidateId) || !Number.isSafeInteger(page) || page < 1 || page > 10000 || sectionQuery.length > 100 || sectionFilter && !/^\d{1,4}$/.test(sectionFilter)) return Response.json({error: "Pesquise pelo nome da escola, endereço ou número da seção."}, {status: 400, headers: {"Cache-Control": "no-store"}});
   try {
-    const payload = await getLiveSectionVotePage(selectionFromParams(params), candidateId, page, sectionQuery);
+    const payload = await getLiveSectionVotePage(selectionFromParams(params), candidateId, page, sectionQuery, sectionFilter);
     return Response.json(payload, {headers: {"Cache-Control": "no-store"}});
   } catch (error) {
     const body = unavailableResultMessage(error);

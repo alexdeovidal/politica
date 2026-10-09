@@ -21,7 +21,12 @@ def sources():
             for name,module,filename in (("candidates",candidates,"consulta_cand_{year}.zip"),("finance",accounts,"prestacao_contas_candidatos_{year}.zip"),("assets",assets,"bem_candidato_{year}.zip"),("social",social,"rede_social_candidato_{year}.zip")):
                 if year in module.SUPPORTED_YEARS:result.append((f"{name}_{year}",year,[module.URL_TEMPLATE.format(year=year)],module.refresh_year,filename.format(year=year)))
         if year in voting.SUPPORTED_YEARS:
-            units=[unit for unit in voting.STATES if unit!='DF' or year in voting.PRESIDENTIAL_YEARS]+(["BR"] if year in voting.PRESIDENTIAL_YEARS else [])
+            if year == 2026:
+                # The presidential archive contains every state, while the state
+                # archives are needed for searchable local breakdowns of other offices.
+                units=["BR", "GO"]+[unit for unit in voting.STATES if unit != "GO"]
+            else:
+                units=[unit for unit in voting.STATES if unit!='DF' or year in voting.PRESIDENTIAL_YEARS]+(["BR"] if year in voting.PRESIDENTIAL_YEARS else [])
             for unit in units:
                 result.append((f"votes_{year}_{unit}",year,[voting.URL_TEMPLATE.format(year=year,unit=unit)],unit,None))
     return result
@@ -32,7 +37,9 @@ def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
     for year in (2016,2020,2024):known.pop(f"votes_{year}_DF",None)
     items=sources();cursor=int(state.get("archive_cursor",0))%len(items)
     failed=[index for index,item in enumerate(items) if known.get(item[0],{}).get('status')=='failed']
+    pending_2026=[index for index,item in enumerate(items) if item[0].startswith("votes_2026_") and not known.get(item[0],{}).get("synced_at")]
     if failed:cursor=failed[0]
+    elif pending_2026:cursor=pending_2026[0]
     updated=0;results=[]
     tmp.mkdir(parents=True,exist_ok=True)
     urls_to_check=list(dict.fromkeys(url for item in items for url in item[2]))
