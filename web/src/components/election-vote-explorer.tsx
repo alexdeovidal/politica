@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, Check, Copy, Download, Heart, LoaderCircle, MapPin, Sparkles } from "lucide-react";
+import { BarChart3, Check, Copy, Download, Heart, LoaderCircle, MapPin, Search, Sparkles } from "lucide-react";
 import { useShell } from "@/components/shell/shell-context";
 
 type Filters = {
@@ -21,11 +21,12 @@ type VoteResult = {
   votes: number; sections: number; municipalities: number; voteShare: number;
 };
 type SearchResult = { rows: VoteResult[]; total: number; page: number; pageSize: number; totalNominalVotes: number; totalSections: number };
+type PollingPlace = { name: string; placeNumber: string | null; municipality: string; state: string; zone: string; section: string; address: string | null; votes: number };
 type Detail = Omit<VoteResult, "municipalities"> & {
   round: number; officeCode: string; electoralUnit: string | null; municipalitiesCount: number;
   rank: number | null; partyRank: number | null;
   municipalityResults: Array<{ name: string; state: string; votes: number; sections: number }>;
-  pollingResults: Array<{ name: string; placeNumber: string | null; municipality: string; state: string; zone: string; section: string; address: string | null; votes: number }>;
+  pollingResults: PollingPlace[]; pollingHasMore: boolean;
   timeline: Array<{ year: number; round: number; party: string | null; state: string; votes: number }>;
 };
 type Favorite = Pick<VoteResult, "historyId" | "personId" | "name" | "year" | "office" | "state" | "party">;
@@ -62,6 +63,8 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
   const [options, setOptions] = useState<OptionList>({ years: [], yearsWithResults: [], rounds: [], offices: [], states: [], municipalities: [], zones: [], parties: [] });
   const [results, setResults] = useState<SearchResult | null>(null);
   const [details, setDetails] = useState<Detail[]>([]);
+  const [loadedDetailsKey, setLoadedDetailsKey] = useState("");
+  const [detailsError, setDetailsError] = useState<{ key: string; message: string } | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(true);
@@ -73,8 +76,13 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
   const [analysisError, setAnalysisError] = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
-  const scopeParams = useMemo(() => apiParams(filters), [filters]);
   const selectedKey = selectedIds.join(",");
+  const detailsScopeKey = [filters.year, filters.round, filters.officeCode, filters.state, filters.municipalityCode, filters.zone, filters.section, filters.place, selectedKey].join("|");
+  const detailsParams = apiParams({
+    year: filters.year, round: filters.round, officeCode: filters.officeCode, state: filters.state,
+    municipalityCode: filters.municipalityCode, zone: filters.zone, section: filters.section,
+    place: filters.place, party: "", q: "", page: 1,
+  }, { mode: "details", ids: selectedKey }).toString();
   const hasSearch = Boolean(filters.state || filters.municipalityCode || filters.q.trim() || filters.place.trim());
   const currentYearHasNoArchive = options.years.includes(filters.year) && !options.yearsWithResults.includes(filters.year);
 
@@ -151,26 +159,28 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
   }, [filters, hasSearch]);
 
   useEffect(() => {
-    if (!selectedIds.length) {
+    if (!selectedKey) {
       setDetails([]);
+      setLoadedDetailsKey("");
       setDetailsLoading(false);
+      setDetailsError(null);
       setAnalysis("");
       setAnalysisError("");
       return;
     }
     const controller = new AbortController();
-    const params = apiParams(filters, { mode: "details", ids: selectedKey });
     setDetailsLoading(true);
-    fetch(`/api/election-votes?${params}`, { signal: controller.signal })
+    setDetailsError(null);
+    fetch(`/api/election-votes?${detailsParams}`, { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error("Não foi possível carregar a análise das candidaturas.");
         return response.json() as Promise<{ records: Detail[] }>;
       })
-      .then(data => setDetails(data.records || []))
-      .catch(error => { if (!controller.signal.aborted) setPageError(error instanceof Error ? error.message : "Não foi possível carregar a análise das candidaturas."); })
+      .then(data => { setDetails(data.records || []); setLoadedDetailsKey(detailsScopeKey); })
+      .catch(error => { if (!controller.signal.aborted) setDetailsError({ key: detailsScopeKey, message: error instanceof Error ? error.message : "Não foi possível carregar a análise das candidaturas." }); })
       .finally(() => { if (!controller.signal.aborted) setDetailsLoading(false); });
     return () => controller.abort();
-  }, [filters.year, filters.round, filters.officeCode, filters.state, filters.municipalityCode, filters.zone, filters.section, filters.place, selectedKey]);
+  }, [detailsParams, detailsScopeKey, selectedKey]);
 
   const updateFilter = useCallback((key: keyof Filters, value: string | number) => {
     setFilters(current => {
@@ -340,7 +350,10 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
             {results.rows.map((row, index) => {
               const compared = selectedIds.includes(row.historyId);
               const favorite = favorites.some(item => item.historyId === row.historyId);
-              return <article className="card space-y-3" key={row.historyId}>
+              const detailsReady = loadedDetailsKey === detailsScopeKey;
+              const detail = detailsReady ? details.find(item => item.historyId === row.historyId) : undefined;
+              const currentDetailsError = detailsError?.key === detailsScopeKey ? detailsError.message : "";
+              return <article className={`card space-y-3${compared ? " lg:col-span-2" : ""}`} key={row.historyId}>
                 <div className="flex items-start gap-3">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] font-mono text-sm text-[var(--muted)]">{(filters.page - 1) * results.pageSize + index + 1}</span>
                   <div className="min-w-0 flex-1">
@@ -357,9 +370,15 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-[var(--muted)]">{number(row.municipalities)} municípios · {filters.year} · {filters.round}º turno</span>
                   <button className={`btn${compared ? " btn--primary" : ""}`} type="button" onClick={() => toggleCompare(row)} aria-pressed={compared}>
-                    {compared ? <><Check size={15} /> Na comparação</> : <><BarChart3 size={15} /> Analisar / comparar</>}
+                    {compared ? <><Check size={15} /> Fechar análise</> : <><BarChart3 size={15} /> Analisar / comparar</>}
                   </button>
                 </div>
+                {compared ? <div className="border-t border-[var(--line)] pt-4">
+                  {(detailsLoading || !detailsReady) && !detail && !currentDetailsError ? <div className="flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={16} className="animate-spin" /> Abrindo a análise de {row.name}…</div> : null}
+                  {currentDetailsError ? <p className="text-sm text-rose-700" role="alert">{currentDetailsError}</p> : null}
+                  {detail ? <DetailPanel key={`${detail.historyId}-${filters.year}-${filters.round}-${filters.officeCode}-${filters.state}-${filters.municipalityCode}-${filters.zone}-${filters.section}-${filters.place}`} record={detail} filters={filters} /> : null}
+                  {detailsReady && !detailsLoading && !currentDetailsError && !detail ? <p className="text-sm text-[var(--muted)]">Não encontramos votos desta candidatura no recorte territorial atual.</p> : null}
+                </div> : null}
               </article>;
             })}
           </div> : !loading && <div className="card text-sm text-[var(--muted)]">Nenhum voto encontrado com este recorte. Confira a eleição, o turno, o cargo e os filtros de local.</div>}
@@ -379,11 +398,8 @@ export function ElectionVoteExplorer({ initial }: { initial: InitialFilters }) {
             <button type="button" className="btn" onClick={() => setSelectedIds([])}>Limpar comparação</button>
           </div>
         </div>
-        {detailsLoading ? <div className="card flex items-center gap-2 text-sm text-[var(--muted)]"><LoaderCircle size={16} className="animate-spin" /> Organizando votos por território…</div> : null}
         {analysisError ? <div className="card text-sm text-[var(--muted)]" role="status">{analysisError} Os resultados e filtros continuam disponíveis.</div> : null}
         {analysis ? <article className="card space-y-2"><h3 className="font-medium">Leitura automatizada dos dados</h3><p className="whitespace-pre-line text-sm leading-relaxed text-[var(--muted)]">{analysis}</p><p className="text-xs text-[var(--muted)]">Resumo automatizado de dados públicos; confira os números e a fonte oficial do TSE antes de tirar conclusões.</p></article> : null}
-        {details.map(record => <DetailPanel key={record.historyId} record={record} />)}
-        {!detailsLoading && !details.length ? <div className="card text-sm text-[var(--muted)]">As candidaturas selecionadas não têm votos no recorte territorial atual. Amplie ou ajuste os filtros.</div> : null}
       </section> : null}
 
       <section className="card space-y-2">
@@ -399,10 +415,82 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <div className="card"><span className="block text-xs text-[var(--muted)]">{label}</span><strong className="mt-1 block text-xl font-medium">{value}</strong></div>;
 }
 
-function DetailPanel({ record }: { record: Detail }) {
-  return <article className="card space-y-4">
+function DetailPanel({ record, filters }: { record: Detail; filters: Filters }) {
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeRows, setPlaceRows] = useState(record.pollingResults);
+  const [placeOffset, setPlaceOffset] = useState(record.pollingResults.length);
+  const [placesHasMore, setPlacesHasMore] = useState(record.pollingHasMore);
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [placesError, setPlacesError] = useState("");
+  const placesRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const query = placeQuery.trim();
+    if (!query) return;
+    const controller = new AbortController();
+    placesRequest.current?.abort();
+    placesRequest.current = controller;
+    const timeout = window.setTimeout(() => {
+      const params = apiParams(filters, { mode: "places", ids: String(record.historyId), buscaLocal: query, offset: "0" });
+      fetch(`/api/election-votes?${params}`, { signal: controller.signal })
+        .then(response => {
+          if (!response.ok) throw new Error("Não foi possível buscar locais e urnas agora.");
+          return response.json() as Promise<{ rows: PollingPlace[]; hasMore: boolean; nextOffset: number }>;
+        })
+        .then(data => {
+          setPlaceRows(data.rows);
+          setPlacesHasMore(data.hasMore);
+          setPlaceOffset(data.nextOffset);
+          setPlacesError("");
+        })
+        .catch(error => { if (!controller.signal.aborted) setPlacesError(error instanceof Error ? error.message : "Não foi possível buscar locais e urnas agora."); })
+        .finally(() => { if (!controller.signal.aborted) setPlacesLoading(false); });
+    }, 250);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [filters, placeQuery, record.historyId]);
+
+  const updatePlaceQuery = (value: string) => {
+    placesRequest.current?.abort();
+    setPlaceQuery(value);
+    setPlacesError("");
+    setPlacesLoading(Boolean(value.trim()));
+    if (value.trim()) {
+      setPlaceRows([]);
+      setPlaceOffset(0);
+      setPlacesHasMore(false);
+    } else {
+      setPlaceRows(record.pollingResults);
+      setPlaceOffset(record.pollingResults.length);
+      setPlacesHasMore(record.pollingHasMore);
+    }
+  };
+
+  const loadMorePlaces = async () => {
+    const controller = new AbortController();
+    placesRequest.current?.abort();
+    placesRequest.current = controller;
+    setPlacesLoading(true);
+    setPlacesError("");
+    try {
+      const params = apiParams(filters, { mode: "places", ids: String(record.historyId), offset: String(placeOffset) });
+      if (placeQuery.trim()) params.set("buscaLocal", placeQuery.trim());
+      const response = await fetch(`/api/election-votes?${params}`, { signal: controller.signal });
+      if (!response.ok) throw new Error("Não foi possível carregar mais locais e urnas.");
+      const data = await response.json() as { rows: PollingPlace[]; hasMore: boolean; nextOffset: number };
+      if (controller.signal.aborted) return;
+      setPlaceRows(current => [...current, ...data.rows]);
+      setPlacesHasMore(data.hasMore);
+      setPlaceOffset(data.nextOffset);
+    } catch (error) {
+      if (!controller.signal.aborted) setPlacesError(error instanceof Error ? error.message : "Não foi possível carregar mais locais e urnas.");
+    } finally {
+      if (!controller.signal.aborted) setPlacesLoading(false);
+    }
+  };
+
+  return <section className="space-y-4" aria-label={`Análise de ${record.name}`}>
     <header className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-lg font-medium">{record.name}</h3><p className="text-sm text-[var(--muted)]">{record.office} · {record.party || "Partido não informado"}/{record.state} · {record.year}, {record.round}º turno</p></div>
+      <div><h3 className="text-lg font-medium">Análise de {record.name}</h3><p className="text-sm text-[var(--muted)]">{record.office} · {record.party || "Partido não informado"}/{record.state} · {record.year}, {record.round}º turno</p></div>
       <Link className="btn" href={`/politico/${record.personId}?ano=${record.year}`}>Ver ficha completa</Link>
     </header>
     <div className="grid gap-3 sm:grid-cols-4">
@@ -422,9 +510,19 @@ function DetailPanel({ record }: { record: Detail }) {
       </section>
     </div>
     <section>
-      <h4 className="mb-2 font-medium">Locais e seções com mais votos</h4>
-      {record.pollingResults.length ? <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-2 py-2">Município</th><th className="px-2 py-2">Local</th><th className="px-2 py-2">Zona</th><th className="px-2 py-2">Seção</th><th className="px-2 py-2 text-right">Votos</th></tr></thead><tbody>{record.pollingResults.map((row, index) => <tr className="border-b border-[var(--line)]" key={`${row.municipality}-${row.zone}-${row.section}-${index}`}><td className="px-2 py-2">{row.municipality}/{row.state}</td><td className="px-2 py-2">{row.name}{row.address ? <small className="block text-xs text-[var(--muted)]">{row.address}</small> : null}</td><td className="px-2 py-2">{row.zone}</td><td className="px-2 py-2">{row.section}</td><td className="px-2 py-2 text-right tabular-nums">{number(row.votes)}</td></tr>)}</tbody></table></div> : <p className="text-sm text-[var(--muted)]">A fonte não detalha locais e seções para esta eleição.</p>}
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div><h4 className="font-medium">Locais e seções com mais votos</h4><p className="text-xs text-[var(--muted)]">Os três principais aparecem primeiro. Pesquise um local ou seção e carregue mais resultados quando precisar.</p></div>
+        <div className="platform-form min-w-64 flex-1 sm:max-w-md">
+          <label htmlFor={`polling-place-search-${record.historyId}`}>Buscar local ou urna</label>
+          <span className="relative block w-full"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" /><input id={`polling-place-search-${record.historyId}`} style={{ paddingLeft: "2.5rem" }} value={placeQuery} onChange={event => updatePlaceQuery(event.target.value)} placeholder="Escola, endereço, nº do local ou seção" autoComplete="off" /></span>
+        </div>
+      </div>
+      {placesError ? <p className="text-sm text-rose-700" role="alert">{placesError}</p> : null}
+      {placeRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-[var(--line)] text-xs text-[var(--muted)]"><th className="px-2 py-2">Município</th><th className="px-2 py-2">Local</th><th className="px-2 py-2">Nº do local</th><th className="px-2 py-2">Zona</th><th className="px-2 py-2">Seção/urna</th><th className="px-2 py-2 text-right">Votos</th></tr></thead><tbody>{placeRows.map((row, index) => <tr className="border-b border-[var(--line)]" key={`${row.municipality}-${row.zone}-${row.placeNumber}-${row.section}-${index}`}><td className="px-2 py-2">{row.municipality}/{row.state}</td><td className="px-2 py-2">{row.name}{row.address ? <small className="block text-xs text-[var(--muted)]">{row.address}</small> : null}</td><td className="px-2 py-2">{row.placeNumber || "—"}</td><td className="px-2 py-2">{row.zone}</td><td className="px-2 py-2">{row.section}</td><td className="px-2 py-2 text-right tabular-nums">{number(row.votes)}</td></tr>)}</tbody></table></div> : placesLoading ? <p className="flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={15} className="animate-spin" /> Buscando locais e urnas…</p> : !placesError ? <p className="text-sm text-[var(--muted)]">{placeQuery.trim() ? "Nenhum local ou urna encontrado. Tente pelo nome, endereço, número do local, zona ou seção." : "A fonte não detalha locais e seções para esta eleição."}</p> : null}
+      {placesHasMore && !placeQuery.trim() ? <button className="btn mt-3" type="button" onClick={loadMorePlaces} disabled={placesLoading}>{placesLoading ? <><LoaderCircle size={15} className="animate-spin" /> Carregando locais…</> : "Ver mais locais e seções"}</button> : null}
+      {placesHasMore && placeQuery.trim() && !placesLoading ? <button className="btn mt-3" type="button" onClick={loadMorePlaces}>Ver mais resultados</button> : null}
+      {placesHasMore && placeQuery.trim() && placesLoading ? <p className="mt-3 flex items-center gap-2 text-sm text-[var(--muted)]" role="status"><LoaderCircle size={15} className="animate-spin" /> Carregando mais resultados…</p> : null}
     </section>
     <p className="text-xs leading-relaxed text-[var(--muted)]">A posição geral e a posição no partido usam os votos nominais identificados no recorte selecionado. Municípios e distritos podem variar entre eleições; a evolução descreve os registros associados à mesma pessoa na base.</p>
-  </article>;
+  </section>;
 }

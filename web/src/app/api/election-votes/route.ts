@@ -16,9 +16,11 @@ type VoteFilters = {
   zone?: string;
   section?: string;
   place?: string;
+  placeQuery?: string;
   party?: string;
   q?: string;
   page?: number;
+  offset?: number;
 };
 
 const CACHE_AGE_MS = 5 * 60_000;
@@ -27,6 +29,7 @@ function readFilters(params: URLSearchParams): VoteFilters {
   const rawYear = Number(params.get("ano"));
   const rawRound = Number(params.get("turno"));
   const rawPage = Number(params.get("page"));
+  const rawOffset = Number(params.get("offset"));
   const bounded = (key: string, limit: number) => (params.get(key) || "").trim().slice(0, limit);
   const state = bounded("uf", 2).toUpperCase();
   return {
@@ -38,9 +41,11 @@ function readFilters(params: URLSearchParams): VoteFilters {
     zone: bounded("zona", 12),
     section: bounded("secao", 12),
     place: bounded("local", 120),
+    placeQuery: bounded("buscaLocal", 120),
     party: bounded("partido", 24),
     q: bounded("q", 100),
     page: Number.isInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 10_000) : 1,
+    offset: Number.isInteger(rawOffset) && rawOffset >= 0 ? Math.min(rawOffset, 10_000) : 0,
   };
 }
 
@@ -51,12 +56,12 @@ function cacheKey(value: unknown) {
 }
 
 async function databaseQuery<T>(
-  mode: "options" | "search" | "details",
+  mode: "options" | "search" | "details" | "places",
   filters: VoteFilters,
   historyIds: number[] = [],
   signal?: AbortSignal,
 ): Promise<T> {
-  const key = cacheKey({ mode, filters, historyIds });
+  const key = cacheKey({ mode: mode === "details" ? "details-v2" : mode, filters, historyIds });
   const previous = cached<T>(key, CACHE_AGE_MS);
   if (previous) return previous;
   const result = await runDatabaseWorker<T>("election-votes-worker.cjs", {
@@ -70,13 +75,14 @@ export async function GET(request: Request) {
   const startedAt = performance.now();
   const params = new URL(request.url).searchParams;
   const mode = params.get("mode") || "search";
-  if (mode !== "options" && mode !== "search" && mode !== "details") {
+  if (mode !== "options" && mode !== "search" && mode !== "details" && mode !== "places") {
     return NextResponse.json({ error: "Tipo de consulta inválido." }, { status: 400 });
   }
 
   const filters = readFilters(params);
   const historyIds = (params.get("ids") || "").split(",").slice(0, 3).map(Number);
-  if (mode === "details" && historyIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+  if ((mode === "details" && historyIds.some(id => !Number.isSafeInteger(id) || id <= 0))
+    || (mode === "places" && (historyIds.length !== 1 || !Number.isSafeInteger(historyIds[0]) || historyIds[0] <= 0))) {
     return NextResponse.json({ error: "Candidaturas inválidas." }, { status: 400 });
   }
 

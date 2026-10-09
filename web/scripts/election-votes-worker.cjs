@@ -250,6 +250,47 @@ function querySearch() {
   };
 }
 
+function queryPollingPlaces(historyId, { pageSize = 12, offset = 0, placeQuery = "" } = {}) {
+  const placeFilter = matchedPlaceFilter();
+  const base = clausesFor({ includeParty: false, includeQuery: false, includeIdentity: false, includePlace: !placeFilter });
+  const where = base.sql ? `${base.sql} AND v.history_id = ?` : "WHERE v.history_id = ?";
+  const queryTokens = normalizeName(placeQuery).split(" ").filter(Boolean).slice(0, 8);
+  const fields = "coalesce(v.polling_place_name,'') || ' ' || coalesce(v.polling_place_address,'') || ' ' || coalesce(v.polling_place_number,'') || ' ' || coalesce(v.municipality,'') || ' ' || coalesce(v.zone_number,'') || ' ' || coalesce(v.section_number,'')";
+  const querySql = queryTokens.map(() => `instr(normalize_public_name(${fields}), ?) > 0`).join(" AND ");
+  const queryArgs = queryTokens;
+  const rows = database.prepare(`
+    ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
+    SELECT coalesce(v.polling_place_name, 'Local sem nome publicado') AS name,
+           v.polling_place_number AS placeNumber, v.municipality AS municipality,
+           v.state AS state, v.zone_number AS zone, v.section_number AS section,
+           v.polling_place_address AS address, sum(v.votes) AS votes
+    FROM election_vote_section v ${placeFilter ? placeFilter.join : ""} JOIN politician_history h ON h.id = v.history_id
+    ${where}${querySql ? ` AND ${querySql}` : ""}
+    GROUP BY v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name,
+             v.polling_place_address, v.section_number, v.municipality, v.state
+    ORDER BY votes DESC, municipality COLLATE NOCASE, CAST(zone AS INTEGER), CAST(section AS INTEGER), placeNumber
+    LIMIT ? OFFSET ?
+  `).all(
+    ...(placeFilter ? placeFilter.args : []),
+    ...base.args,
+    historyId,
+    ...queryArgs,
+    pageSize + 1,
+    offset,
+  );
+  const hasMore = rows.length > pageSize;
+  const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
+  return { rows: pageRows, hasMore, nextOffset: offset + pageRows.length };
+}
+
+function queryPlaces() {
+  const historyId = Number((workerData.historyIds || [])[0]);
+  if (!Number.isSafeInteger(historyId) || historyId <= 0 || !filters.year || !filters.round || !filters.officeCode) {
+    return { rows: [], hasMore: false, nextOffset: 0 };
+  }
+  return queryPollingPlaces(historyId, { offset: filters.offset || 0, placeQuery: filters.placeQuery || "" });
+}
+
 function queryDetails() {
   const ids = [...new Set((workerData.historyIds || []).map(Number).filter(id => Number.isSafeInteger(id) && id > 0))].slice(0, 3);
   if (!ids.length || !filters.year || !filters.round || !filters.officeCode) return { records: [] };
@@ -315,18 +356,7 @@ function queryDetails() {
       GROUP BY v.municipality_code, v.municipality, v.state
       ORDER BY votes DESC LIMIT 12
     `).all(...placeArgs, ...base.args, historyId);
-    const places = database.prepare(`
-      ${placeFilter ? `WITH ${placeFilter.cte}` : ""}
-      SELECT coalesce(v.polling_place_name, 'Local sem nome publicado') AS name,
-             v.polling_place_number AS placeNumber, v.municipality AS municipality,
-             v.state AS state, v.zone_number AS zone, v.section_number AS section,
-             v.polling_place_address AS address, sum(v.votes) AS votes
-      FROM election_vote_section v ${joinPlaces} JOIN politician_history h ON h.id = v.history_id
-      ${base.sql} AND v.history_id = ?
-      GROUP BY v.municipality_code, v.zone_number, v.polling_place_number, v.polling_place_name,
-               v.polling_place_address, v.section_number, v.municipality, v.state
-      ORDER BY votes DESC LIMIT 12
-    `).all(...placeArgs, ...base.args, historyId);
+    const places = queryPollingPlaces(historyId, { pageSize: 3 });
     const timeline = database.prepare(`
       SELECT v.year, v.round, h.party_abbr AS party, h.state, sum(v.votes) AS votes
       FROM election_vote_section v JOIN politician_history h ON h.id = v.history_id
@@ -344,7 +374,8 @@ function queryDetails() {
       rank: rank?.overallRank ?? null,
       partyRank: rank?.partyRank ?? null,
       municipalityResults: municipalities,
-      pollingResults: places,
+      pollingResults: places.rows,
+      pollingHasMore: places.hasMore,
       timeline,
     });
   }
@@ -357,6 +388,7 @@ try {
   else if (workerData.mode === "options") parentPort.postMessage(queryOptions());
   else if (workerData.mode === "search") parentPort.postMessage(querySearch());
   else if (workerData.mode === "details") parentPort.postMessage(queryDetails());
+  else if (workerData.mode === "places") parentPort.postMessage(queryPlaces());
   else parentPort.postMessage({ error: "Unknown election vote query mode" });
 } catch (error) {
   parentPort.postMessage({ error: error instanceof Error ? error.message : "Election vote query failed" });
