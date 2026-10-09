@@ -23,7 +23,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
   const [saved, setSaved] = useState<{key: string; query: string; page: number; rows: LiveSectionVote[]; meta: SectionResponse} | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const zoneSelected = selection.state !== "br" && Boolean(selection.municipality && selection.zone);
+  const municipalitySelected = selection.state !== "br" && Boolean(selection.municipality);
   const selectionKey = useMemo(() => [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id].join(":"), [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id]);
   const {turn, office, state, municipality, zone} = selection;
   const candidateId = candidate.id;
@@ -38,7 +38,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
   }, [search]);
 
   useEffect(() => {
-    if (!open || !zoneSelected) return;
+    if (!open || !municipalitySelected) return;
     let stopped = false;
     let timer: number | undefined;
     const controller = new AbortController();
@@ -52,16 +52,16 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
       try {
         const response = await fetch(query(turn, office, state, municipality, zone, candidateId, page, debouncedSearch), {signal: controller.signal, cache: "no-store"});
         const data = await response.json().catch(() => null) as SectionResponse | null;
-        if (!response.ok || !data || !Array.isArray(data.rows)) throw new Error(data?.error || "Não foi possível consultar os boletins desta zona.");
+        if (!response.ok || !data || !Array.isArray(data.rows)) throw new Error(data?.error || `Não foi possível consultar os boletins ${zone ? `da zona ${Number(zone)}` : "do município"}.`);
         if (!stopped) {
           setSaved(current => {
-            const merged = new Map((current?.key === selectionKey && current.query === debouncedSearch ? current.rows : []).map(row => [row.number, row]));
-            for (const row of data.rows) merged.set(row.number, row);
-            return {key: selectionKey, query: debouncedSearch, page, rows: [...merged.values()].sort((a, b) => a.number.localeCompare(b.number)), meta: data};
+            const merged = new Map((current?.key === selectionKey && current.query === debouncedSearch ? current.rows : []).map(row => [`${row.zone}:${row.number}`, row]));
+            for (const row of data.rows) merged.set(`${row.zone}:${row.number}`, row);
+            return {key: selectionKey, query: debouncedSearch, page, rows: [...merged.values()].sort((a, b) => a.zone.localeCompare(b.zone) || a.number.localeCompare(b.number)), meta: data};
           });
         }
       } catch (failure) {
-        if (!stopped && !controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Não foi possível consultar os boletins desta zona.");
+        if (!stopped && !controller.signal.aborted) setError(failure instanceof Error ? failure.message : `Não foi possível consultar os boletins ${zone ? `da zona ${Number(zone)}` : "do município"}.`);
       } finally {
         if (!stopped) {
           setLoading(false);
@@ -75,7 +75,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
       controller.abort();
       if (timer) window.clearTimeout(timer);
     };
-  }, [open, zoneSelected, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, debouncedSearch]);
+  }, [open, municipalitySelected, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, debouncedSearch]);
 
   const totalPages = meta?.totalPages || 0;
 
@@ -88,20 +88,20 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
         <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--muted-2)] transition-transform${open ? " rotate-180" : ""}`} aria-hidden="true" />
       </button>
       {open ? <div className="border-t border-[var(--border-1)] px-3 py-3 sm:px-4">
-        {!zoneSelected ? <div className="rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Para consultar cada urna, escolha um município e uma zona eleitoral nos filtros acima. A consulta por seção é feita sob demanda para não carregar boletins de todo o estado sem necessidade.</div> : <>
+        {!municipalitySelected ? <div className="rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Para consultar cada urna, escolha um estado e um município nos filtros acima. A consulta é feita sob demanda para não carregar boletins de todo o estado sem necessidade.</div> : <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted-2)]">
-            <span>{meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"}${debouncedSearch ? ` encontrada(s) na zona ${Number(selection.zone)}` : ` nesta zona · página ${page}${totalPages ? ` de ${totalPages}` : ""}`}` : `Consultando seções da zona ${Number(selection.zone)}…`}</span>
+            <span>{meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"}${debouncedSearch ? ` encontrada(s) ${zone ? `na zona ${Number(zone)}` : "no município"}` : ` ${zone ? `na zona ${Number(zone)}` : "no município"} · página ${page}${totalPages ? ` de ${totalPages}` : ""}`}` : `Consultando seções ${zone ? `da zona ${Number(zone)}` : "do município"}…`}</span>
             <span>{finalized ? "Resultado encerrado · última consulta" : "Verificação automática a cada 60 segundos · última consulta"} {dateTime(meta?.checkedAt)}</span>
           </div>
           <label className="mb-3 flex min-h-10 items-center gap-2 rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-3 text-[var(--muted-2)] focus-within:border-[var(--accent-2)]">
             <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <input className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--fg-1)] outline-none placeholder:text-[var(--muted-2)]" type="search" inputMode="numeric" maxLength={4} autoComplete="off" aria-label="Buscar número da seção" placeholder="Buscar seção nesta zona (ex.: 593)" value={search} onChange={event => setSearch(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+            <input className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--fg-1)] outline-none placeholder:text-[var(--muted-2)]" type="search" inputMode="numeric" maxLength={4} autoComplete="off" aria-label="Buscar número da seção" placeholder={`Buscar seção ${zone ? "nesta zona" : "neste município"} (ex.: 593)`} value={search} onChange={event => setSearch(event.target.value.replace(/\D/g, "").slice(0, 4))} />
             {loading ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" aria-label="Buscando seção" /> : null}
           </label>
           {error ? <p role="alert" className="mb-3 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-3 py-2 text-[11px] text-[var(--danger)]">{error}</p> : null}
           {rows.length ? <div className="divide-y divide-[var(--border-1)]">
-            {rows.map(row => <SectionRow key={row.number} row={row} zone={zone}/>) }
-          </div> : !loading && !error ? <p className="py-3 text-[11px] text-[var(--muted)]">{debouncedSearch ? `A seção ${Number(debouncedSearch)} não foi localizada nesta zona.` : "Nenhum boletim de seção foi publicado nesta zona."}</p> : null}
+            {rows.map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
+          </div> : !loading && !error ? <p className="py-3 text-[11px] text-[var(--muted)]">{debouncedSearch ? `A seção ${Number(debouncedSearch)} não foi localizada ${zone ? "nesta zona" : "neste município"}.` : `Nenhum boletim de seção foi publicado ${zone ? "nesta zona" : "neste município"}.`}</p> : null}
           {!debouncedSearch && page < totalPages ? <button type="button" className="mt-3 min-h-10 w-full rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[11px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)]" disabled={loading} onClick={() => setSaved(current => ({key: selectionKey, query: debouncedSearch, page: (current?.key === selectionKey && current.query === debouncedSearch ? current.page : 1) + 1, rows: current?.key === selectionKey && current.query === debouncedSearch ? current.rows : [], meta: current?.key === selectionKey && current.query === debouncedSearch ? current.meta : meta!}))}>{loading ? "Carregando boletins…" : `Carregar próximas ${Math.min(10, Math.max(0, (meta?.total || 0) - rows.length))} seções`}</button> : null}
           {meta?.locationSource ? <a className="mt-3 inline-flex items-center gap-1 text-[10px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">Cadastro de locais de votação do TSE <ExternalLink className="h-3 w-3"/></a> : null}
         </>}
@@ -110,13 +110,13 @@ export function LiveSectionVoteBreakdown({selection, candidate, finalized = fals
   );
 }
 
-function SectionRow({row, zone}: {row: LiveSectionVote; zone: string}) {
+function SectionRow({row}: {row: LiveSectionVote}) {
   const status = row.status === "totalized" ? "boletim publicado" : row.status === "waiting" ? "aguardando boletim do TSE" : "boletim não validado";
   return <article className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
     <div className="min-w-0">
       <strong className="block break-words text-[12px] text-[var(--fg-1)]">{row.localName || `Local de votação ${row.localCode || "não identificado"}`}</strong>
       {row.address ? <span className="mt-0.5 block break-words text-[10px] text-[var(--muted-2)]">{row.address}</span> : null}
-      <span className="mt-1 block font-mono text-[10px] text-[var(--muted)]">Zona {Number(zone)} · Seção {Number(row.number)}{row.mergedSections.length ? ` · agregada(s): ${row.mergedSections.map(Number).join(", ")}` : ""} · {status}</span>
+      <span className="mt-1 block font-mono text-[10px] text-[var(--muted)]">Zona {Number(row.zone)} · Seção {Number(row.number)}{row.mergedSections.length ? ` · agregada(s): ${row.mergedSections.map(Number).join(", ")}` : ""} · {status}</span>
       {row.buGeneratedAt ? <span className="mt-0.5 block text-[9px] text-[var(--muted-2)]">Boletim emitido em {dateTime(row.buGeneratedAt)}</span> : null}
     </div>
     <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">

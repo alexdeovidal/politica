@@ -8,8 +8,9 @@ const SECTION_PAGE_SIZE = 10;
 const SECTION_REFRESH_MS = 60000;
 const LOCATION_SOURCE = "https://dadosabertos.tse.jus.br/dataset/eleitorado-2026/resource/300626b4-2b24-4d2e-b4fc-46b569cfffe5";
 type Json = Record<string, unknown>;
-type PollingSection = {number: string; merged: string[]; date: string; time: string};
+type PollingSection = {zone: string; number: string; merged: string[]; date: string; time: string};
 export type LiveSectionVote = {
+  zone: string;
   number: string;
   mergedSections: string[];
   localCode: string | null;
@@ -95,16 +96,18 @@ function parseSections(value: unknown, state: string, municipality: string, zone
   if (root.f !== "o") throw new Error("Configuração de seções inválida.");
   const area = list(root.abr).find(item => str(item.cd).toLowerCase() === state);
   const city = list(area?.mu).find(item => str(item.cd).padStart(5, "0") === municipality);
-  const pollingZone = list(city?.zon).find(item => str(item.cd).padStart(4, "0") === zone);
-  if (!area || !city || !pollingZone) throw new Error("A zona eleitoral não existe na configuração oficial.");
-  const rows = list(pollingZone.sec).flatMap(item => {
+  const pollingZones = list(city?.zon)
+    .map(pollingZone => ({pollingZone, zone: formatSection(pollingZone.cd)}))
+    .filter(item => item.zone && (!zone || item.zone === zone));
+  if (!area || !city || !pollingZones.length) throw new Error(zone ? "A zona eleitoral não existe na configuração oficial." : "O município não tem zonas eleitorais na configuração oficial.");
+  const rows = pollingZones.flatMap(({pollingZone, zone: pollingZoneCode}) => list(pollingZone.sec).flatMap(item => {
     if (str(item.nsp)) return [];
     const number = formatSection(item.ns);
     if (!number) return [];
     const merged = Array.isArray(item.nsa) ? item.nsa.map(formatSection).filter(Boolean) : [];
-    return [{number, merged, date: str(item.da), time: str(item.ha)}];
-  });
-  return rows.sort((a, b) => a.number.localeCompare(b.number));
+    return [{zone: pollingZoneCode, number, merged, date: str(item.da), time: str(item.ha)}];
+  }));
+  return rows.sort((a, b) => a.zone.localeCompare(b.zone) || a.number.localeCompare(b.number));
 }
 
 function sectionConfigUrl(cycle: string, pleito: string, state: string) {
@@ -185,13 +188,15 @@ async function sectionVote(
   section: PollingSection,
   candidate: LiveCandidate,
 ): Promise<LiveSectionVote> {
+  const sectionSelection = {...selection, zone: section.zone};
   const checkedAt = new Date().toISOString(), baseRow = {
+    zone: section.zone,
     number: section.number,
     mergedSections: section.merged,
   };
-  const auxUrl = sectionAuxUrl(election.cycle, election.pleito, selection.state, selection.municipality, selection.zone, section.number);
+  const auxUrl = sectionAuxUrl(election.cycle, election.pleito, selection.state, selection.municipality, section.zone, section.number);
   const pendingRow = (status: LiveSectionVote["status"], localCode: string | null = null, sourceUrl: string | null = auxUrl): LiveSectionVote => {
-    const place = pollingPlace(selection.state, selection.municipality, selection.zone, localCode);
+    const place = pollingPlace(selection.state, selection.municipality, section.zone, localCode);
     return {...baseRow, localCode, localName: place.name, address: place.address, votes: null, status, buGeneratedAt: null, sourceUrl, checkedAt};
   };
   if (!section.date || !section.time) return pendingRow("waiting");
@@ -219,8 +224,8 @@ async function sectionVote(
     const inner = header[4] && parseBer(header[4].value);
     const localCode = inner?.children[3]?.children[1] ? integer(inner.children[3].children[1]) : null;
     if (localCode === null) throw new Error("Local de votação ausente no boletim.");
-    const votes = decodeCandidateVotes(file.data, {municipality: selection.municipality, zone: selection.zone, section: section.number, electionCode: election.code, office: selection.office, party: candidate.partyNumber, number: candidate.number});
-    const place = pollingPlace(selection.state, selection.municipality, selection.zone, String(localCode));
+    const votes = decodeCandidateVotes(file.data, {municipality: selection.municipality, zone: sectionSelection.zone, section: section.number, electionCode: election.code, office: selection.office, party: candidate.partyNumber, number: candidate.number});
+    const place = pollingPlace(selection.state, selection.municipality, section.zone, String(localCode));
     return {...baseRow, localCode: String(localCode), localName: place.name, address: place.address, votes, status: "totalized", buGeneratedAt: buTime(selectedHash?.dr, selectedHash?.hr), sourceUrl: buUrl, checkedAt: file.checkedAt};
   } catch (error) {
     if (error instanceof SourceUnavailable && ["not-published", "connection", "upstream", "rate-limit", "busy"].includes(error.kind)) return pendingRow("waiting", null, buUrl);
@@ -229,7 +234,7 @@ async function sectionVote(
 }
 
 export async function getLiveSectionVotePage(selection: ElectionSelection, candidateId: string, page: number, sectionQuery = ""): Promise<LiveSectionVotePage> {
-  if (selection.state === "br" || !selection.municipality || !selection.zone) throw new Error("Escolha estado, município e zona eleitoral para ver os votos por seção.");
+  if (selection.state === "br" || !selection.municipality) throw new Error("Escolha um estado e um município para ver os votos por seção.");
   cleanupLiveSectionCache();
   const config = await getLiveConfig(selection.turn), election = findElection(config.elections, selection);
   validateSelection(selection, config.states, election);
