@@ -50,7 +50,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
       setNearViewport(true);
       return;
     }
-    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry.isIntersecting), {rootMargin: "180px 0px"});
+    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry.isIntersecting), {rootMargin: "800px 0px"});
     observer.observe(target);
     return () => observer.disconnect();
   }, []);
@@ -151,7 +151,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
       {error ? <p role="alert" className="mb-2 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-2.5 py-2 text-[10px] text-[var(--danger)]">{error}</p> : null}
       {rows.length ? <div className="grid gap-2 sm:grid-cols-3" aria-live="polite">
         {(expanded ? rows : rows.slice(0, 3)).map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
-      </div> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? "Os dados detalhados por seção estão sendo integrados. A consulta será atualizada automaticamente." : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
+      </div> : !nearViewport ? <p className="py-2 text-[10px] text-[var(--muted)]">Os três locais com mais votos serão carregados automaticamente ao chegar neste candidato.</p> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? "Os dados detalhados por seção estão sendo integrados. A consulta será atualizada automaticamente." : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
 
       {meta && page < totalPages ? <button type="button" className="mt-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[10px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] disabled:opacity-60" disabled={loading} onClick={loadMore}>{loading ? <><RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true"/>Carregando…</> : "Ver mais"}</button> : null}
       {meta?.locationSource ? <a className="ml-3 inline-flex items-center gap-1 text-[9px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">{meta.sourceLabel || "Cadastro de locais do TSE"} <ExternalLink className="h-3 w-3"/></a> : null}

@@ -3,7 +3,7 @@ export const TSE_RESULTS_BASE = "https://resultados.tse.jus.br/oficial";
 export const LIVE_POLL_SECONDS = 30;
 export const ELECTION_YEAR = 2026;
 export const TSE_TECHNICAL_SOURCE = "https://www.tse.jus.br/eleicoes/informacoes-tecnicas-sobre-a-divulgacao-de-resultados";
-const CANDIDATE_OFFICE_CODES = new Set(["1", "3", "5", "6", "7", "8", "11", "25"]);
+const CANDIDATE_OFFICE_CODES = new Set(["1", "3", "5", "6", "7", "8", "25"]);
 
 export type ElectionSelection = { turn: number; office: string; state: string; municipality: string; zone: string };
 export type ElectionOffice = { code: string; name: string; proportional: boolean };
