@@ -385,18 +385,30 @@ def _ingest_archive(
                 rows_extracted=0,
                 rows_rejected=0,
             )
-            con.execute(
-                "DELETE FROM election_vote_section WHERE provenance_id IN "
-                "(SELECT pa.id FROM parse pa JOIN collection old ON old.id = pa.collection_id "
-                "WHERE old.url = ? AND old.id != ?)",
+            old_archive_has_rows = con.execute(
+                "SELECT 1 FROM parse pa JOIN collection old ON old.id = pa.collection_id "
+                "WHERE old.url = ? AND old.id != ? AND pa.rows_extracted > 0 LIMIT 1",
                 (url, collection_id),
-            )
-            con.execute(
-                "DELETE FROM election_vote_section WHERE provenance_id IN "
-                "(SELECT id FROM parse WHERE collection_id = ? AND parser_name = ? "
-                "AND parser_version != ?)",
+            ).fetchone()
+            if old_archive_has_rows:
+                con.execute(
+                    "DELETE FROM election_vote_section WHERE provenance_id IN "
+                    "(SELECT pa.id FROM parse pa JOIN collection old ON old.id = pa.collection_id "
+                    "WHERE old.url = ? AND old.id != ?)",
+                    (url, collection_id),
+                )
+            old_parser_has_rows = con.execute(
+                "SELECT 1 FROM parse WHERE collection_id = ? AND parser_name = ? "
+                "AND parser_version != ? AND rows_extracted > 0 LIMIT 1",
                 (collection_id, PARSER_NAME, PARSER_VERSION),
-            )
+            ).fetchone()
+            if old_parser_has_rows:
+                con.execute(
+                    "DELETE FROM election_vote_section WHERE provenance_id IN "
+                    "(SELECT id FROM parse WHERE collection_id = ? AND parser_name = ? "
+                    "AND parser_version != ?)",
+                    (collection_id, PARSER_NAME, PARSER_VERSION),
+                )
             with zipfile.ZipFile(zip_path) as archive:
                 members = _csv_members(archive, unit)
                 if len(members) != 1:
