@@ -3,7 +3,7 @@ export const TSE_RESULTS_BASE = "https://resultados.tse.jus.br/oficial";
 export const LIVE_POLL_SECONDS = 30;
 export const ELECTION_YEAR = 2026;
 export const TSE_TECHNICAL_SOURCE = "https://www.tse.jus.br/eleicoes/informacoes-tecnicas-sobre-a-divulgacao-de-resultados";
-const CANDIDATE_OFFICE_CODES = new Set(["1", "3", "5", "6", "7", "8", "11", "13", "25"]);
+const CANDIDATE_OFFICE_CODES = new Set(["1", "3", "5", "6", "7", "8", "11", "25"]);
 
 export type ElectionSelection = { turn: number; office: string; state: string; municipality: string; zone: string };
 export type ElectionOffice = { code: string; name: string; proportional: boolean };
@@ -15,7 +15,7 @@ export type PublicConfig = Omit<LiveConfig, "states"> & { states: {code: string;
 export type LiveCandidate = {
   id: string; number: string; partyNumber: string; name: string; legalName: string; party: string; partyName: string;
   coalition: string; votes: number | null; percentage: number | null; destination: string;
-  status: string; photoUrl: string | null; runningMates: {name: string; party: string; role: string}[];
+  status: string; photoUrl: string | null; profileUrl?: string | null; runningMates: {name: string; party: string; role: string}[];
 };
 export type LiveResult = {
   selection: ElectionSelection; election: OfficialElection; office: ElectionOffice;
@@ -69,6 +69,10 @@ export function tseTimestamp(date: unknown, time: unknown): string | null {
 }
 export function normalizeLiveSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]+/g, " ").trim(); }
 export function matchesLiveSearch(text: string, query: string) { const normalized = normalizeLiveSearch(text); return normalizeLiveSearch(query).split(" ").filter(Boolean).every(token => normalized.includes(token)); }
+export function isElectedCandidate(status: string) {
+  const normalized = normalizeLiveSearch(status);
+  return /\beleit[oa]\b/.test(normalized) && !/\bnao eleit[oa]\b/.test(normalized);
+}
 export function displayName(value: string) {
   return value.toLocaleLowerCase("pt-BR").replace(/(^|[\s-])\p{L}/gu, letter => letter.toLocaleUpperCase("pt-BR")).replace(/\b(Da|De|Do|Das|Dos|E)\b/g, word => word.toLowerCase());
 }

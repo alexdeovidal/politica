@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {db, hasTable} from "@/lib/db";
 import {platformStore} from "@/lib/platform/store";
 import {ELECTION_YEAR, findElection, isLiveResultComplete, object, parseElections, parseOverview, parseResult, parseStates, resultUrl, tseTimestamp, validateSelection, TSE_RESULTS_BASE, type ElectionSelection, type LiveConfig, type LiveOverview, type LiveResult, type PublicConfig} from "./model";
 
@@ -20,6 +21,30 @@ let lastSectionCacheCleanup = 0;
 
 export class SourceUnavailable extends Error {
   constructor(public readonly kind: string, public readonly retryAfterSeconds = 60) { super("A fonte oficial está temporariamente indisponível para esta consulta."); }
+}
+
+function attachCandidateProfileUrls<T extends Pick<LiveResult, "election" | "selection" | "candidates">>(result: T): T {
+  const ids = [...new Set(result.candidates.map(candidate => candidate.id).filter(id => /^\d+$/.test(id)))];
+  if (!ids.length) return result;
+  try {
+    if (!hasTable("politician_history")) return result;
+    const profiles = new Map<string, number>();
+    const candidateChunkSize = 500;
+    for (let offset = 0; offset < ids.length; offset += candidateChunkSize) {
+      const chunk = ids.slice(offset, offset + candidateChunkSize);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db().prepare(`SELECT tse_candidacy_id AS candidateId, min(person_id) AS personId,
+          count(DISTINCT person_id) AS peopleCount
+        FROM politician_history
+        WHERE year = ? AND coalesce(round, 1) = ? AND tse_candidacy_id IN (${placeholders})
+        GROUP BY tse_candidacy_id`).all(Number(result.election.cycle.slice(3)), result.selection.turn, ...chunk) as Array<{candidateId: string; personId: number; peopleCount: number}>;
+      for (const row of rows) if (row.peopleCount === 1 && Number.isSafeInteger(row.personId) && row.personId > 0) profiles.set(row.candidateId, row.personId);
+    }
+    return {...result, candidates: result.candidates.map(candidate => ({...candidate, profileUrl: profiles.has(candidate.id) ? `/politico/${profiles.get(candidate.id)}` : null}))};
+  } catch (error) {
+    console.error("Não foi possível localizar algumas fichas de candidatura no acervo.", error);
+    return result;
+  }
 }
 
 function storage() {
@@ -224,7 +249,7 @@ export async function getLiveResult(selection: ElectionSelection): Promise<LiveR
   const config = await getLiveConfig(selection.turn), election = findElection(config.elections, selection);
   validateSelection(selection, config.states, election);
   const file = await officialFile(resultUrl(election, selection), 30000, value => parseResult(value, election, selection, config.states));
-  const result = {...parseResult(file.data, election, selection, config.states), checkedAt: file.checkedAt, stale: file.stale || config.stale};
+  const result = {...attachCandidateProfileUrls(parseResult(file.data, election, selection, config.states)), checkedAt: file.checkedAt, stale: file.stale || config.stale};
   try {
     const completedAt = saveLiveResultSnapshot(result);
     return completedAt ? {...result, completedAt} : result;
@@ -244,7 +269,7 @@ export function getCompletedLiveResult(selection: ElectionSelection): LiveResult
   try {
     const result = JSON.parse(row.payload) as LiveResult;
     if (!isLiveResultComplete(result) || result.selection.turn !== selection.turn || result.selection.office !== selection.office || result.selection.state !== selection.state || result.selection.municipality !== selection.municipality || result.selection.zone !== selection.zone) return null;
-    return {...result, checkedAt: row.sourceCheckedAt, stale: false, completedAt: row.completedAt};
+    return {...attachCandidateProfileUrls(result), checkedAt: row.sourceCheckedAt, stale: false, completedAt: row.completedAt};
   } catch {
     return null;
   }

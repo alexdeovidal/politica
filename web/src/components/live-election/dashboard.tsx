@@ -5,10 +5,10 @@ import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} f
 import Link from "next/link";
 import {useRouter} from "next/navigation";
 import QRCode from "qrcode";
-import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, History, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, WifiOff, X} from "lucide-react";
+import {ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, History, Info, MapPin, Maximize2, Monitor, Pause, Play, Radio, RefreshCw, Search, Share2, SlidersHorizontal, Star, WifiOff, X} from "lucide-react";
 import {BrandMark} from "@/components/brand/brand-lockup";
 import {ThemeToggle} from "@/components/shell/theme-toggle";
-import {displayName, ELECTION_YEAR, isLiveResultComplete, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
+import {displayName, ELECTION_YEAR, isElectedCandidate, isLiveResultComplete, LIVE_POLL_SECONDS, matchesLiveSearch, TSE_TECHNICAL_SOURCE, type ElectionSelection, type LiveCandidate, type LiveOverview, type LiveResult, type PublicConfig} from "@/lib/live-election/model";
 import {LocationPicker} from "./location-picker";
 import {ElectionMap} from "./election-map";
 import {LiveSectionVoteBreakdown} from "./section-vote-breakdown";
@@ -345,11 +345,12 @@ function Metric({label, value, text, emphasis = false}: {label: string; value?: 
 function CandidateCard({candidate, selection, sectionFilter, rank, tv, finalized}: {candidate: LiveCandidate; selection: ElectionSelection; sectionFilter: string; rank: number | null; tv: boolean; finalized: boolean}) {
   const [failed, setFailed] = useState(false);
   const initials = candidate.name.split(/\s+/).filter(Boolean).slice(0, 2).map(name => name[0]).join("");
-  return <article className="live-candidate">
-    <div className="live-candidate__identity">{rank && <span className="live-candidate__rank">{String(rank).padStart(2, "0")}</span>}<div className="live-candidate__photo">{candidate.photoUrl && !failed ? <img src={candidate.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)}/> : <span>{initials || candidate.party.slice(0, 2)}</span>}</div><div className="live-candidate__name"><h3>{displayName(candidate.name)}</h3><p>{candidate.party} <span>·</span> {candidate.number}</p>{candidate.status && <span className="live-candidate__status">{candidate.status}</span>}{candidate.destination && candidate.destination !== "Válido" && <span className="live-candidate__destination">{candidate.destination}</span>}</div></div>
+  const elected = isElectedCandidate(candidate.status);
+  return <article className={`live-candidate${elected ? " live-candidate--elected" : ""}`}>
+    <div className="live-candidate__identity">{rank && <span className="live-candidate__rank">{String(rank).padStart(2, "0")}</span>}<div className="live-candidate__photo">{candidate.photoUrl && !failed ? <img src={candidate.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)}/> : <span>{initials || candidate.party.slice(0, 2)}</span>}</div><div className="live-candidate__name"><h3>{candidate.profileUrl ? <Link href={candidate.profileUrl} aria-label={`Abrir ficha completa de ${displayName(candidate.name)}`}>{displayName(candidate.name)}</Link> : displayName(candidate.name)}{elected && <span className="live-candidate__winner" aria-label="Candidato eleito" title="Eleito segundo o TSE"><Star size={14} fill="currentColor" aria-hidden="true"/> Eleito</span>}</h3><p>{candidate.party} <span>·</span> {candidate.number}</p>{candidate.status && <span className="live-candidate__status">{candidate.status}</span>}{candidate.destination && candidate.destination !== "Válido" && <span className="live-candidate__destination">{candidate.destination}</span>}</div></div>
     <div className="live-candidate__numbers"><strong>{percentage(candidate.percentage)}</strong><span>{number(candidate.votes)} <small>votos</small></span></div>
     <div className="live-candidate__bar" role="img" aria-label={candidate.percentage === null ? "Votação ainda não divulgada" : `${percentage(candidate.percentage)} conforme o TSE`}><i style={{width: `${candidate.percentage || 0}%`}}/></div>
-    {!tv && (selection.municipality || selection.state === "br" && selection.office === "1") && <LiveSectionVoteBreakdown selection={selection} candidate={candidate} sectionFilter={sectionFilter} finalized={finalized}/>}
+    {!tv && (selection.state !== "zz" || selection.office === "1") && <LiveSectionVoteBreakdown selection={selection} candidate={candidate} sectionFilter={sectionFilter} finalized={finalized}/>}
     {!tv && <details className="live-candidate__details"><summary>Detalhes da candidatura <ChevronDown size={12}/></summary><div><p><strong>Nome completo:</strong> {displayName(candidate.legalName)}</p><p><strong>Partido:</strong> {candidate.partyName}</p><p><strong>Coligação ou agrupamento:</strong> {candidate.coalition}</p>{candidate.runningMates.map((mate, index) => <p key={index}><strong>{mate.role}:</strong> {displayName(mate.name)} · {mate.party}</p>)}{candidate.destination && <p><strong>Destinação dos votos:</strong> {candidate.destination}</p>}<p>Percentual de votos computados informado pelo TSE para este cargo e recorte.</p></div></details>}
   </article>;
 }

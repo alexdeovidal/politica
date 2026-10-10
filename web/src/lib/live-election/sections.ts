@@ -253,7 +253,7 @@ export async function getLiveSectionVotePage(selection: ElectionSelection, candi
 
   const normalizedQuery = sectionQuery.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim();
   const numericQuery = /^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(sectionQuery.trim()) || /^SECAO\s*\d{1,4}$/i.test(normalizedQuery);
-  const needsArchivedSections = Number(election.cycle.slice(3)) === 2026 && (selection.state === "br" || Boolean(sectionQuery.trim() && !numericQuery));
+  const needsArchivedSections = Number(election.cycle.slice(3)) === 2026 && (selection.state === "br" || selection.state !== "zz" && !selection.municipality || Boolean(sectionQuery.trim() && !numericQuery));
   if (needsArchivedSections) {
     let archived: ArchivedSectionVotePage;
     try {

@@ -92,13 +92,17 @@
 .live-waiting p { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 4px; }
 .live-candidate-list { display: flex; flex-direction: column; gap: 10px; }
 .live-candidate { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 13px 18px; border: 1px solid var(--live-line); border-radius: 12px; padding: 19px 21px 10px; background: var(--live-panel); min-width: 0; }
+.live-candidate--elected { border-color: color-mix(in srgb, var(--gold) 62%, var(--live-line)); background: linear-gradient(115deg, color-mix(in srgb, var(--gold) 9%, var(--live-panel)), var(--live-panel) 55%); box-shadow: inset 3px 0 0 var(--gold); }
 .live-candidate__identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .live-candidate__rank { width: 19px; color: var(--muted-2); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .live-candidate__photo { width: 58px; height: 58px; border-radius: 50%; border: 2px solid var(--live-line); background: var(--accent-tint); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
 .live-candidate__photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; }
 .live-candidate__photo > span { font-weight: 600; font-size: 18px; color: var(--live-accent); }
 .live-candidate__name { min-width: 0; }
-.live-candidate__name h3 { font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.live-candidate__name h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.live-candidate__name h3 a { color: inherit; text-decoration: none; }
+.live-candidate__name h3 a:hover { color: var(--live-accent); text-decoration: underline; text-underline-offset: 3px; }
+.live-candidate__winner { display: inline-flex; align-items: center; gap: 4px; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .live-candidate__name p { display: flex; gap: 7px; font-size: 11px; font-weight: 500; margin-top: 6px; color: var(--muted); }
 .live-candidate__name p > span { color: var(--muted-2); }
 .live-candidate__numbers { display: flex; flex-direction: column; justify-content: center; text-align: right; gap: 4px; font-variant-numeric: tabular-nums; }

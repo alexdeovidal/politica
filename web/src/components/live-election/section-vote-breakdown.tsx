@@ -30,8 +30,9 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const municipalitySelected = selection.state !== "br" && Boolean(selection.municipality);
-  const breakdownSelected = municipalitySelected || selection.state === "br" && selection.office === "1";
-  const archiveQuery = selection.state === "br" || Boolean(debouncedSearch && !/^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(debouncedSearch));
+  const stateSelected = selection.state !== "br" && selection.state !== "zz";
+  const breakdownSelected = municipalitySelected || stateSelected || selection.state === "br" && selection.office === "1";
+  const archiveQuery = selection.state === "br" || stateSelected && !municipalitySelected || Boolean(debouncedSearch && !/^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(debouncedSearch));
   const selectionKey = useMemo(() => [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id].join(":"), [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id]);
   const viewKey = `${selectionKey}:${debouncedSectionFilter}`;
   const {turn, office, state, municipality, zone} = selection;
