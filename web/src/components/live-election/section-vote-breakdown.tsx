@@ -19,7 +19,7 @@ function query(turn: number, office: string, state: string, municipality: string
   return `/api/apuracao/sections?${params}`;
 }
 
-export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = "", finalized = false}: {selection: ElectionSelection; candidate: LiveCandidate; sectionFilter?: string; finalized?: boolean}) {
+export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = "", finalized = false, preload = false}: {selection: ElectionSelection; candidate: LiveCandidate; sectionFilter?: string; finalized?: boolean; preload?: boolean}) {
   const previewRef = useRef<HTMLElement | null>(null);
   const [nearViewport, setNearViewport] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -33,6 +33,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
   const stateSelected = selection.state !== "br" && selection.state !== "zz";
   const breakdownSelected = municipalitySelected || stateSelected || selection.state === "br" && selection.office === "1";
   const archiveQuery = selection.state === "br" || stateSelected && !municipalitySelected || Boolean(debouncedSearch && !/^(?:se[cç][aã]o\s*)?\d{1,4}$/i.test(debouncedSearch));
+  const shouldLoad = nearViewport || preload;
   const selectionKey = useMemo(() => [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id].join(":"), [selection.turn, selection.office, selection.state, selection.municipality, selection.zone, candidate.id]);
   const viewKey = `${selectionKey}:${debouncedSectionFilter}`;
   const {turn, office, state, municipality, zone} = selection;
@@ -72,7 +73,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
   }, [selectionKey]);
 
   useEffect(() => {
-    if (!nearViewport || !breakdownSelected) return;
+    if (!shouldLoad || !breakdownSelected) return;
     let stopped = false;
     let timer: number | undefined;
     const controller = new AbortController();
@@ -111,7 +112,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
       controller.abort();
       if (timer) window.clearTimeout(timer);
     };
-  }, [nearViewport, breakdownSelected, archiveQuery, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, viewKey, debouncedSectionFilter, debouncedSearch]);
+  }, [shouldLoad, breakdownSelected, archiveQuery, finalized, turn, office, state, municipality, zone, candidateId, page, selectionKey, viewKey, debouncedSectionFilter, debouncedSearch]);
 
   if (!breakdownSelected) return null;
 
@@ -151,7 +152,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
       {error ? <p role="alert" className="mb-2 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-2.5 py-2 text-[10px] text-[var(--danger)]">{error}</p> : null}
       {rows.length ? <div className="grid gap-2 sm:grid-cols-3" aria-live="polite">
         {(expanded ? rows : rows.slice(0, 3)).map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
-      </div> : !nearViewport ? <p className="py-2 text-[10px] text-[var(--muted)]">Os três locais com mais votos serão carregados automaticamente ao chegar neste candidato.</p> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? "Os dados detalhados por seção estão sendo integrados. A consulta será atualizada automaticamente." : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
+      </div> : !shouldLoad ? <p className="py-2 text-[10px] text-[var(--muted)]">Os três locais com mais votos serão carregados automaticamente ao chegar neste candidato.</p> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? "Os dados detalhados por seção estão sendo integrados. A consulta será atualizada automaticamente." : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
 
       {meta && page < totalPages ? <button type="button" className="mt-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[10px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] disabled:opacity-60" disabled={loading} onClick={loadMore}>{loading ? <><RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true"/>Carregando…</> : "Ver mais"}</button> : null}
       {meta?.locationSource ? <a className="ml-3 inline-flex items-center gap-1 text-[9px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">{meta.sourceLabel || "Cadastro de locais do TSE"} <ExternalLink className="h-3 w-3"/></a> : null}
