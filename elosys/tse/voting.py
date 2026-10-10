@@ -21,7 +21,7 @@ from ..util import clean_tse, normalize_name, now_utc
 log = get_logger("elosys.tse.voting")
 
 PARSER_NAME = "tse.voting_sections"
-PARSER_VERSION = "1.3"
+PARSER_VERSION = "1.4"
 URL_TEMPLATE = (
     "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/"
     "votacao_secao_{year}_{unit}.zip"
@@ -187,6 +187,12 @@ def _office(value: str | None) -> str:
     return normalize_name(value or "")
 
 
+def _municipality_code(value: str | None) -> str:
+    """Normalize older TSE files that omit leading zeroes from municipality codes."""
+    code = (value or "").strip()
+    return code.zfill(5) if code.isdigit() else code
+
+
 def _candidate_maps(con: sqlite3.Connection, year: int) -> tuple[dict, dict]:
     by_id: dict[tuple[str, int], int] = {}
     by_fallback: dict[tuple, list[int]] = {}
@@ -209,7 +215,7 @@ def _candidate_maps(con: sqlite3.Connection, year: int) -> tuple[dict, dict]:
             key = (office, str(number), int(round_number))
         elif office in {"PREFEITO", "VEREADOR"}:
             key = (
-                row["state"], office, str(number), str(row["electoral_unit"] or ""), int(round_number),
+                row["state"], office, str(number), _municipality_code(row["electoral_unit"]), int(round_number),
             )
         else:
             key = (row["state"], office, str(number), int(round_number))
@@ -239,7 +245,7 @@ def _match_history(
         key = (office, number, round_number)
     elif office in {"PREFEITO", "VEREADOR"}:
         key = (
-            _g(row, "SG_UF"), office, number, _g(row, "CD_MUNICIPIO") or "", round_number,
+            _g(row, "SG_UF"), office, number, _municipality_code(_g(row, "CD_MUNICIPIO")), round_number,
         )
     else:
         key = (_g(row, "SG_UF"), office, number, round_number)
