@@ -46,11 +46,16 @@ try {
       parentPort.postMessage({ ready: false, rows: [], total: 0, page, pageSize, checkedAt: new Date().toISOString() });
     } else {
       const history = database.prepare(`
-        SELECT id
-        FROM politician_history
-        WHERE year = ? AND coalesce(round, 1) = ? AND tse_candidacy_id = ?
+        SELECT h.id, h.ballot_name AS name, h.candidate_number AS number,
+               h.party_abbr AS party, h.party_number AS partyNumber
+        FROM politician_history h
+        WHERE h.year = ? AND coalesce(h.round, 1) = ? AND h.tse_candidacy_id = ?
+          AND EXISTS (
+            SELECT 1 FROM election_vote_section v
+            WHERE v.history_id = h.id AND v.year = ? AND v.round = ? AND v.office_code = ?
+          )
         LIMIT 1
-      `).get(year, round, candidateId);
+      `).get(year, round, candidateId, year, round, officeCode);
 
       const clauses = ["v.history_id = ?", "v.year = ?", "v.round = ?", "v.office_code = ?"];
       const args = [history?.id ?? -1, year, round, officeCode];
@@ -181,6 +186,13 @@ try {
 
       parentPort.postMessage({
         ready: true,
+        candidate: history ? {
+          id: candidateId,
+          name: history.name || "",
+          number: history.number || "",
+          party: history.party || "",
+          partyNumber: history.partyNumber || "",
+        } : null,
         rows,
         total,
         page,
