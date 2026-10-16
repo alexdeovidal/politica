@@ -68,7 +68,9 @@ try {
         args.push(municipalityCode);
       }
       if (zone) {
-        clauses.push("v.zone_number = ?");
+        // Config URLs use four-digit zones (0007), while the TSE archive can
+        // store the same zone without leading zeroes (7).
+        clauses.push("CAST(v.zone_number AS INTEGER) = CAST(? AS INTEGER)");
         args.push(zone);
       }
       if (/^\d{1,4}$/.test(selectedSection)) {
@@ -115,7 +117,7 @@ try {
           cteArgs.push(municipalityCode);
         }
         if (zone) {
-          placeClauses.push("c.zone_number = ?");
+          placeClauses.push("CAST(c.zone_number AS INTEGER) = CAST(? AS INTEGER)");
           cteArgs.push(zone);
         }
         cte = `WITH matched_places AS MATERIALIZED (
@@ -149,7 +151,7 @@ try {
           cteArgs.push(municipalityCode);
         }
         if (zone) {
-          placeClauses.push("c.zone_number = ?");
+          placeClauses.push("CAST(c.zone_number AS INTEGER) = CAST(? AS INTEGER)");
           cteArgs.push(zone);
         }
         for (const token of searchTokens) {
