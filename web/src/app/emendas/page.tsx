@@ -32,7 +32,7 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
           Emendas parlamentares — destinos, autores e valores
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Pesquise pelo município ou local de aplicação, nome do autor ou favorecido. Os dados vêm do Portal da Transparência. O favorecido é quem recebeu o pagamento registrado e pode não ser o destino final do recurso. A associação do autor ao perfil é feita pelo nome e pode não representar uma identidade confirmada.
+          Pesquise pelo destino informado na emenda, cidade do favorecido, nome do autor ou favorecido. Confira as colunas para distinguir o local de aplicação da cidade cadastral de quem recebeu o pagamento. O favorecido pode não ser o destino final do recurso. Os dados vêm do Portal da Transparência, e a associação do autor ao perfil é feita pelo nome.
         </p>
 
         <Suspense fallback={<EarmarkSummaryFallback />}>
@@ -74,7 +74,7 @@ async function EarmarkFilters({ q, year, type, includePublic }: {
   return <>
     <form className="mt-5 flex flex-wrap items-end gap-3" action="/emendas">
       <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
-        Município, local de aplicação, autor ou favorecido
+        Destino, cidade do favorecido, autor ou nome do favorecido
         <input className="input" name="q" defaultValue={q} placeholder="Ex.: Caldas Novas" />
       </label>
       <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
@@ -118,7 +118,7 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
         <div className="table-wrap">
           <div className="overflow-x-auto">
             <table className="table min-w-[820px]">
-              <thead><tr><th>autor da emenda</th><th>favorecido</th><th>local de aplicação</th><th className="text-right">valor recebido</th></tr></thead>
+              <thead><tr><th>autor da emenda</th><th>favorecido</th><th>local de aplicação (fonte)</th><th className="text-right">valor recebido</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={`${r.earmarkCode}-${r.companyCnpj}`}>
@@ -136,9 +136,9 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
                       <div className="mono" style={{ fontSize: 9.5, color: "var(--muted-2)" }}>{formatCnpj(r.companyCnpj)}</div>
                     </td>
                     <td className="max-w-[240px]">
-                      <div>{r.destinationMunicipalities || "Município não informado"}</div>
-                      {r.destinationLocalities ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted)" }}>{r.destinationLocalities}</div> : null}
-                      {r.beneficiaryLocation ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted-2)" }}>Local do favorecido: {r.beneficiaryLocation}</div> : null}
+                      <div>{formatDestinationMunicipalities(r.destinationMunicipalities)}</div>
+                      {formatDestinationLocalities(r.destinationLocalities) ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted)" }}>{formatDestinationLocalities(r.destinationLocalities)}</div> : null}
+                      {r.beneficiaryLocation ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted-2)" }}>Cidade do favorecido (cadastro): {r.beneficiaryLocation}</div> : null}
                     </td>
                     <td className="num">{formatBRL(r.amountCents)}
                       <details className="text-xs whitespace-normal"><summary>Detalhes da emenda</summary><p>{r.earmarkType || "Tipo não informado"} · {r.purpose || "Finalidade não informada"}</p><p>Coleta: {r.collectedAt ? new Date(r.collectedAt).toLocaleString("pt-BR") : "Não informada"}</p>{r.sourceUrl && <a className="source-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">Arquivo oficial</a>}</details>
@@ -153,6 +153,33 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
       )}
     </section>
   </>;
+}
+
+function normalizePlace(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim().replace(/\s+/g, " ");
+}
+
+function formatDestinationMunicipalities(value: string | null | undefined) {
+  if (!value) return "Município não informado";
+  const multipleValues = new Set(["MULTIPLO", "MULTIPLOS", "VARIOS", "VARIOS MUNICIPIOS", "DIVERSOS"]);
+  const notReportedValues = new Set(["", "SEM INFORMACAO", "NAO INFORMADO", "NAO INFORMADA"]);
+  const locations = value.split(",").map((location) => {
+    const [municipalityPart, ...stateParts] = location.split("/");
+    const municipality = municipalityPart?.trim() ?? "";
+    const state = stateParts.join("/").trim();
+    const normalizedMunicipality = normalizePlace(municipality);
+    if (multipleValues.has(normalizedMunicipality)) return "Vários municípios";
+    if (notReportedValues.has(normalizedMunicipality)) return state ? `${state} (UF)` : "Município não informado";
+    return state && normalizePlace(state) !== normalizedMunicipality ? `${municipality}/${state}` : municipality;
+  });
+  return [...new Set(locations)].join(" · ") || "Município não informado";
+}
+
+function formatDestinationLocalities(value: string | null | undefined) {
+  if (!value) return "";
+  const placeholders = new Set(["MULTIPLO", "MULTIPLOS", "VARIOS", "VARIOS MUNICIPIOS", "DIVERSOS", "SEM INFORMACAO"]);
+  const localities = value.split(",").filter((locality) => !placeholders.has(normalizePlace(locality)));
+  return [...new Set(localities)].join(" · ");
 }
 
 function EarmarkSummaryFallback() {
