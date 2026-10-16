@@ -1278,7 +1278,13 @@ export type EarmarkPaymentRow = {
   companyName: string | null;
   companyCnpj: string;
   amountCents: number;
-  earmarkType:string|null; purpose:string|null; locality:string|null; sourceUrl:string|null; collectedAt:string|null;
+  earmarkType: string | null;
+  purpose: string | null;
+  destinationMunicipalities?: string | null;
+  destinationLocalities?: string | null;
+  beneficiaryLocation?: string | null;
+  sourceUrl: string | null;
+  collectedAt: string | null;
 };
 
 export type EarmarkPaymentPage = { rows: EarmarkPaymentRow[]; total: number };

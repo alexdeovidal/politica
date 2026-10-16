@@ -49,20 +49,53 @@ try {
              agg.beneficiary_name AS companyName, agg.amountCents,
              author.author_name AS authorName, author.author_person_id AS authorPersonId,
              author.year AS year, author.earmark_type AS earmarkType,
-             author.program_name || ' · ' || author.action_name AS purpose, author.locality,
+             author.program_name || ' · ' || author.action_name AS purpose,
              (SELECT col.url FROM parliamentary_earmark_beneficiary b JOIN parse pa ON pa.id=b.provenance_id JOIN collection col ON col.id=pa.collection_id WHERE b.earmark_code=agg.earmark_code AND b.beneficiary_doc=agg.beneficiary_doc LIMIT 1) AS sourceUrl,
              (SELECT max(b.collected_at) FROM parliamentary_earmark_beneficiary b WHERE b.earmark_code=agg.earmark_code AND b.beneficiary_doc=agg.beneficiary_doc) AS collectedAt
-      FROM agg LEFT JOIN author ON author.earmark_code=agg.earmark_code AND author.rn=1
+      FROM agg
+      LEFT JOIN author ON author.earmark_code=agg.earmark_code AND author.rn=1
     )`;
     const filters = [];
     const queryArgs = [];
-    if (query) { filters.push("(instr(normalize_public_name(companyName), normalize_public_name(?)) > 0 OR instr(normalize_public_name(authorName), normalize_public_name(?)) > 0)"); queryArgs.push(query, query); }
+    if (query) {
+      filters.push(`(
+        instr(normalize_public_name(companyName), normalize_public_name(?)) > 0
+        OR instr(normalize_public_name(authorName), normalize_public_name(?)) > 0
+        OR EXISTS (
+          SELECT 1 FROM parliamentary_earmark e
+          WHERE e.earmark_code = joined.earmarkCode AND (
+            instr(normalize_public_name(e.municipality), normalize_public_name(?)) > 0
+            OR instr(normalize_public_name(e.locality), normalize_public_name(?)) > 0
+            OR instr(normalize_public_name(e.state), normalize_public_name(?)) > 0
+          )
+        )
+        OR EXISTS (
+          SELECT 1 FROM parliamentary_earmark_beneficiary b
+          WHERE b.earmark_code = joined.earmarkCode AND b.beneficiary_doc = joined.companyCnpj AND (
+            instr(normalize_public_name(b.municipality), normalize_public_name(?)) > 0
+            OR instr(normalize_public_name(b.state), normalize_public_name(?)) > 0
+          )
+        )
+      )`);
+      queryArgs.push(query, query, query, query, query, query, query);
+    }
     if (year !== null) { filters.push("year = ?"); queryArgs.push(year); }
     if (type) { filters.push("earmarkType = ?"); queryArgs.push(type); }
     const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
     const cteArgs = includePublic ? [] : [...passthrough, ...governmentPatterns];
     const total = database.prepare(`${cte} SELECT count(*) AS total FROM joined ${where}`).get(...cteArgs, ...queryArgs).total;
-    const rows = database.prepare(`${cte} SELECT * FROM joined ${where} ORDER BY amountCents DESC LIMIT ? OFFSET ?`)
+    const rows = database.prepare(`${cte}
+      SELECT joined.*,
+        (SELECT group_concat(DISTINCT CASE
+          WHEN trim(coalesce(e.municipality, '')) = '' THEN NULL
+          ELSE trim(e.municipality) || CASE WHEN trim(coalesce(e.state, '')) = '' THEN '' ELSE '/' || upper(trim(e.state)) END
+        END) FROM parliamentary_earmark e WHERE e.earmark_code=joined.earmarkCode) AS destinationMunicipalities,
+        (SELECT group_concat(DISTINCT NULLIF(trim(e.locality), '')) FROM parliamentary_earmark e WHERE e.earmark_code=joined.earmarkCode) AS destinationLocalities,
+        (SELECT group_concat(DISTINCT CASE
+          WHEN trim(coalesce(b.municipality, '')) = '' THEN NULL
+          ELSE trim(b.municipality) || CASE WHEN trim(coalesce(b.state, '')) = '' THEN '' ELSE '/' || upper(trim(b.state)) END
+        END) FROM parliamentary_earmark_beneficiary b WHERE b.earmark_code=joined.earmarkCode AND b.beneficiary_doc=joined.companyCnpj) AS beneficiaryLocation
+      FROM joined ${where} ORDER BY amountCents DESC LIMIT ? OFFSET ?`)
       .all(...cteArgs, ...queryArgs, 50, offset);
     const personIds = [...new Set(rows.map(row => row.authorPersonId).filter(id => id != null))];
     let photos = new Map();
@@ -86,7 +119,9 @@ try {
         amountCents: row.amountCents,
         earmarkType: row.earmarkType ?? null,
         purpose: row.purpose ?? null,
-        locality: row.locality ?? null,
+        destinationMunicipalities: row.destinationMunicipalities ?? null,
+        destinationLocalities: row.destinationLocalities ?? null,
+        beneficiaryLocation: row.beneficiaryLocation ?? null,
         sourceUrl: row.sourceUrl ?? null,
         collectedAt: row.collectedAt ?? null,
       })),

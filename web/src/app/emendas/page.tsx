@@ -29,16 +29,14 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
 
       <section>
         <h1 className="text-[26px] leading-tight font-medium tracking-tight">
-          Emendas parlamentares — autoria, valores e favorecidos
+          Emendas parlamentares — destinos, autores e valores
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Registros coletados do Portal da Transparência com favorecido pessoa jurídica. O filtro permite incluir órgãos públicos e intermediários bancários. Favorecido não significa necessariamente fornecedor contratado. O autor é identificado só
-          por <strong style={{ color: "var(--fg-2)" }}>nome</strong>, não por CPF (a fonte não tem
-          esse vínculo): é um cruzamento provável, não uma identidade confirmada.
+          Pesquise pelo município ou local de aplicação, nome do autor ou favorecido. Os dados vêm do Portal da Transparência. O favorecido é quem recebeu o pagamento registrado e pode não ser o destino final do recurso. A associação do autor ao perfil é feita pelo nome e pode não representar uma identidade confirmada.
         </p>
 
         <Suspense fallback={<EarmarkSummaryFallback />}>
-          <EarmarkFilters q={q} year={year} type={type} includePublic={includePublic} page={page} />
+          <EarmarkFilters q={q} year={year} type={type} includePublic={includePublic} />
         </Suspense>
         <a className="source-link" href="https://portaldatransparencia.gov.br/emendas" target="_blank" rel="noopener noreferrer">Fonte oficial · Portal da Transparência</a>
       </section>
@@ -56,7 +54,7 @@ async function getEarmarkPage({ q, year, type, includePublic, page }: {
   const filters = { q, year, type, includePublic, page };
   const cacheId = createHash("sha256").update(JSON.stringify(filters)).digest("hex");
   return runCachedDatabaseWorker<EarmarkPage>(
-    `derived:earmark-page:v1:${cacheId}`,
+    `derived:earmark-page:v2:${cacheId}`,
     "earmark-page-worker.cjs",
     filters,
     "local database earmark page snapshot",
@@ -64,8 +62,8 @@ async function getEarmarkPage({ q, year, type, includePublic, page }: {
   );
 }
 
-async function EarmarkFilters({ q, year, type, includePublic, page }: {
-  q: string; year?: number; type: string; includePublic: boolean; page: number;
+async function EarmarkFilters({ q, year, type, includePublic }: {
+  q: string; year?: number; type: string; includePublic: boolean;
 }) {
   const { types } = await runCachedDatabaseWorker<{ types: string[] }>(
     "derived:earmark-options:v1",
@@ -74,13 +72,20 @@ async function EarmarkFilters({ q, year, type, includePublic, page }: {
     "local database earmark filter options",
   );
   return <>
-    <form className="mt-5 flex flex-wrap items-center gap-2" action="/emendas">
-      <div className="input" style={{ width: 280 }}>
-        <input name="q" defaultValue={q} placeholder="buscar autor ou empresa…" />
-      </div>
-      <label>Ano<input className="input" type="number" name="ano" defaultValue={year}/></label>
-      <label>Tipo<select className="input" name="tipo" defaultValue={type}><option value="">Todos</option>{types.map((name) => <option key={name}>{name}</option>)}</select></label>
-      <label>Favorecidos<select className="input" name="destino" defaultValue={includePublic ? "todos" : "empresas"}><option value="empresas">Empresas · exclui órgãos e bancos intermediários</option><option value="todos">Todas as pessoas jurídicas</option></select></label>
+    <form className="mt-5 flex flex-wrap items-end gap-3" action="/emendas">
+      <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Município, local de aplicação, autor ou favorecido
+        <input className="input" name="q" defaultValue={q} placeholder="Ex.: Caldas Novas" />
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Ano da emenda<input className="input" type="number" name="ano" min="2014" max="2100" defaultValue={year} placeholder="Todos os anos" />
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Tipo da emenda<select className="input" name="tipo" defaultValue={type}><option value="">Todos os tipos</option>{types.map((name) => <option key={name}>{name}</option>)}</select>
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Favorecidos<select className="input" name="destino" defaultValue={includePublic ? "todos" : "empresas"}><option value="empresas">Empresas e entidades privadas</option><option value="todos">Incluir órgãos públicos e bancos</option></select>
+      </label>
       <button className="btn">Aplicar filtros</button>
     </form>
   </>;
@@ -104,7 +109,7 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
 
   return <>
     <div className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
-      <span style={{ color: "var(--fg-1)" }}>{total.toLocaleString("pt-BR")}</span> registros de emendas e favorecidos
+      <span style={{ color: "var(--fg-1)" }}>{total.toLocaleString("pt-BR")}</span> registros encontrados para os filtros
     </div>
     <section>
       {rows.length === 0 ? (
@@ -112,8 +117,8 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
       ) : (
         <div className="table-wrap">
           <div className="overflow-x-auto">
-            <table className="table min-w-[680px]">
-              <thead><tr><th>autor da emenda</th><th>empresa</th><th className="text-right">valor</th></tr></thead>
+            <table className="table min-w-[820px]">
+              <thead><tr><th>autor da emenda</th><th>favorecido</th><th>local de aplicação</th><th className="text-right">valor recebido</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={`${r.earmarkCode}-${r.companyCnpj}`}>
@@ -130,7 +135,14 @@ async function EarmarkResults({ q, year, type, includePublic, page }: {
                       <Link href={`/cnpj/${r.companyCnpj}`} className="hover:underline">{r.companyName ?? formatCnpj(r.companyCnpj)}</Link>
                       <div className="mono" style={{ fontSize: 9.5, color: "var(--muted-2)" }}>{formatCnpj(r.companyCnpj)}</div>
                     </td>
-                    <td className="num">{formatBRL(r.amountCents)}<div className="text-xs whitespace-normal">Valor recebido pelo favorecido</div>{r.sourceUrl && <a className="source-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">Arquivo oficial</a>}<details className="text-xs whitespace-normal"><summary>Finalidade e execução</summary><p>{r.earmarkType || "Tipo não informado"} · {r.locality || "Localidade não informada"}</p><p>{r.purpose || "Finalidade não informada na coleta"}</p><p>Coleta: {r.collectedAt ? new Date(r.collectedAt).toLocaleString("pt-BR") : "Não informada"}</p></details></td>
+                    <td className="max-w-[240px]">
+                      <div>{r.destinationMunicipalities || "Município não informado"}</div>
+                      {r.destinationLocalities ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted)" }}>{r.destinationLocalities}</div> : null}
+                      {r.beneficiaryLocation ? <div className="text-xs whitespace-normal" style={{ color: "var(--muted-2)" }}>Local do favorecido: {r.beneficiaryLocation}</div> : null}
+                    </td>
+                    <td className="num">{formatBRL(r.amountCents)}
+                      <details className="text-xs whitespace-normal"><summary>Detalhes da emenda</summary><p>{r.earmarkType || "Tipo não informado"} · {r.purpose || "Finalidade não informada"}</p><p>Coleta: {r.collectedAt ? new Date(r.collectedAt).toLocaleString("pt-BR") : "Não informada"}</p>{r.sourceUrl && <a className="source-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">Arquivo oficial</a>}</details>
+                    </td>
                   </tr>
                 ))}
               </tbody>
