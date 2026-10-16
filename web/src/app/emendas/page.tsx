@@ -17,9 +17,17 @@ type EarmarkPage = { rows: EarmarkPaymentRow[]; total: number; types: string[]; 
 export default async function EmendasPage({ searchParams }: PageProps<"/emendas">) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.slice(0, 120) : "";
+  const parliamentarian = typeof sp.parlamentar === "string" ? sp.parlamentar.slice(0, 120) : "";
   const page = Math.min(10000, Math.max(1, Number(sp.page) || 1));
-  const parsedYear = Number(sp.ano);
-  const year = Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2100 ? parsedYear : undefined;
+  const parseYear = (value: string | string[] | undefined) => {
+    if (typeof value !== "string" || !/^\d{4}$/.test(value)) return undefined;
+    const parsed = Number(value);
+    return parsed >= 1900 && parsed <= 2100 ? parsed : undefined;
+  };
+  const legacyYear = parseYear(sp.ano);
+  const hasYearRange = typeof sp.anoInicial === "string" || typeof sp.anoFinal === "string";
+  const yearStart = parseYear(sp.anoInicial) ?? (hasYearRange ? undefined : legacyYear);
+  const yearEnd = parseYear(sp.anoFinal) ?? (hasYearRange ? undefined : legacyYear);
   const type = typeof sp.tipo === "string" ? sp.tipo.slice(0, 120) : "";
   const includePublic = sp.destino === "todos";
 
@@ -32,29 +40,29 @@ export default async function EmendasPage({ searchParams }: PageProps<"/emendas"
           Emendas parlamentares — destinos, autores e valores
         </h1>
         <p className="mt-4 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Pesquise pelo destino informado na emenda, cidade do favorecido, nome do autor ou favorecido. Confira as colunas para distinguir o local de aplicação da cidade cadastral de quem recebeu o pagamento. O favorecido pode não ser o destino final do recurso. Os dados vêm do Portal da Transparência, e a associação do autor ao perfil é feita pelo nome.
+          Pesquise pelo destino informado na emenda ou pelo favorecido. Para localizar emendas de um parlamentar, use o campo próprio e informe o nome do autor. Confira as colunas para distinguir o local de aplicação da cidade cadastral de quem recebeu o pagamento. O favorecido pode não ser o destino final do recurso. Os dados vêm do Portal da Transparência, e a associação do autor ao perfil é feita pelo nome.
         </p>
 
         <Suspense fallback={<EarmarkSummaryFallback />}>
-          <EarmarkFilters q={q} year={year} type={type} includePublic={includePublic} />
+          <EarmarkFilters q={q} parliamentarian={parliamentarian} yearStart={yearStart} yearEnd={yearEnd} type={type} includePublic={includePublic} />
         </Suspense>
         <a className="source-link" href="https://portaldatransparencia.gov.br/emendas" target="_blank" rel="noopener noreferrer">Fonte oficial · Portal da Transparência</a>
       </section>
 
       <Suspense fallback={<EarmarkResultsFallback />}>
-        <EarmarkResults q={q} year={year} type={type} includePublic={includePublic} page={page} />
+        <EarmarkResults q={q} parliamentarian={parliamentarian} yearStart={yearStart} yearEnd={yearEnd} type={type} includePublic={includePublic} page={page} />
       </Suspense>
     </div>
   );
 }
 
-async function getEarmarkPage({ q, year, type, includePublic, page }: {
-  q: string; year?: number; type: string; includePublic: boolean; page: number;
+async function getEarmarkPage({ q, parliamentarian, yearStart, yearEnd, type, includePublic, page }: {
+  q: string; parliamentarian: string; yearStart?: number; yearEnd?: number; type: string; includePublic: boolean; page: number;
 }) {
-  const filters = { q, year, type, includePublic, page };
+  const filters = { q, parliamentarian, yearStart, yearEnd, type, includePublic, page };
   const cacheId = createHash("sha256").update(JSON.stringify(filters)).digest("hex");
   return runCachedDatabaseWorker<EarmarkPage>(
-    `derived:earmark-page:v2:${cacheId}`,
+    `derived:earmark-page:v3:${cacheId}`,
     "earmark-page-worker.cjs",
     filters,
     "local database earmark page snapshot",
@@ -62,8 +70,8 @@ async function getEarmarkPage({ q, year, type, includePublic, page }: {
   );
 }
 
-async function EarmarkFilters({ q, year, type, includePublic }: {
-  q: string; year?: number; type: string; includePublic: boolean;
+async function EarmarkFilters({ q, parliamentarian, yearStart, yearEnd, type, includePublic }: {
+  q: string; parliamentarian: string; yearStart?: number; yearEnd?: number; type: string; includePublic: boolean;
 }) {
   const { types } = await runCachedDatabaseWorker<{ types: string[] }>(
     "derived:earmark-options:v1",
@@ -74,11 +82,17 @@ async function EarmarkFilters({ q, year, type, includePublic }: {
   return <>
     <form className="mt-5 flex flex-wrap items-end gap-3" action="/emendas">
       <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
-        Destino, cidade do favorecido, autor ou nome do favorecido
+        Destino ou favorecido
         <input className="input" name="q" defaultValue={q} placeholder="Ex.: Caldas Novas" />
       </label>
       <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
-        Ano da emenda<input className="input" type="number" name="ano" min="2014" max="2100" defaultValue={year} placeholder="Todos os anos" />
+        Parlamentar (autor da emenda)<input className="input" name="parlamentar" defaultValue={parliamentarian} placeholder="Nome do parlamentar" />
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Ano inicial<input className="input" type="number" name="anoInicial" min="1900" max="2100" defaultValue={yearStart} placeholder="Desde" />
+      </label>
+      <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+        Ano final<input className="input" type="number" name="anoFinal" min="1900" max="2100" defaultValue={yearEnd} placeholder="Até" />
       </label>
       <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
         Tipo da emenda<select className="input" name="tipo" defaultValue={type}><option value="">Todos os tipos</option>{types.map((name) => <option key={name}>{name}</option>)}</select>
@@ -91,16 +105,18 @@ async function EarmarkFilters({ q, year, type, includePublic }: {
   </>;
 }
 
-async function EarmarkResults({ q, year, type, includePublic, page }: {
-  q: string; year?: number; type: string; includePublic: boolean; page: number;
+async function EarmarkResults({ q, parliamentarian, yearStart, yearEnd, type, includePublic, page }: {
+  q: string; parliamentarian: string; yearStart?: number; yearEnd?: number; type: string; includePublic: boolean; page: number;
 }) {
-  const { rows, total } = await getEarmarkPage({ q, year, type, includePublic, page });
+  const { rows, total } = await getEarmarkPage({ q, parliamentarian, yearStart, yearEnd, type, includePublic, page });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hrefFor = (nextPage: number) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
+    if (parliamentarian) params.set("parlamentar", parliamentarian);
     if (nextPage > 1) params.set("page", String(nextPage));
-    if (year) params.set("ano", String(year));
+    if (yearStart) params.set("anoInicial", String(yearStart));
+    if (yearEnd) params.set("anoFinal", String(yearEnd));
     if (type) params.set("tipo", type);
     if (includePublic) params.set("destino", "todos");
     const query = params.toString();

@@ -23,7 +23,9 @@ try {
     const page = Math.max(1, Math.min(10000, Math.floor(Number(workerData.page) || 1)));
     const offset = (page - 1) * 50;
     const query = String(workerData.q || "").trim().slice(0, 200);
-    const year = Number.isInteger(workerData.year) ? workerData.year : null;
+    const parliamentarian = String(workerData.parliamentarian || "").trim().slice(0, 120);
+    const yearStart = Number.isInteger(workerData.yearStart) && workerData.yearStart >= 1900 && workerData.yearStart <= 2100 ? workerData.yearStart : null;
+    const yearEnd = Number.isInteger(workerData.yearEnd) && workerData.yearEnd >= 1900 && workerData.yearEnd <= 2100 ? workerData.yearEnd : null;
     const type = String(workerData.type || "").slice(0, 120);
     const includePublic = workerData.includePublic === true;
     const passthrough = ["00000000000191", "00360305000104", "00038166000105"];
@@ -60,7 +62,6 @@ try {
     if (query) {
       filters.push(`(
         instr(normalize_public_name(companyName), normalize_public_name(?)) > 0
-        OR instr(normalize_public_name(authorName), normalize_public_name(?)) > 0
         OR EXISTS (
           SELECT 1 FROM parliamentary_earmark e
           WHERE e.earmark_code = joined.earmarkCode AND (
@@ -77,9 +78,14 @@ try {
           )
         )
       )`);
-      queryArgs.push(query, query, query, query, query, query, query);
+      queryArgs.push(query, query, query, query, query, query);
     }
-    if (year !== null) { filters.push("year = ?"); queryArgs.push(year); }
+    if (parliamentarian) {
+      filters.push("instr(normalize_public_name(authorName), normalize_public_name(?)) > 0");
+      queryArgs.push(parliamentarian);
+    }
+    if (yearStart !== null) { filters.push("year >= ?"); queryArgs.push(yearStart); }
+    if (yearEnd !== null) { filters.push("year <= ?"); queryArgs.push(yearEnd); }
     if (type) { filters.push("earmarkType = ?"); queryArgs.push(type); }
     const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
     const cteArgs = includePublic ? [] : [...passthrough, ...governmentPatterns];
