@@ -49,7 +49,17 @@ function writePersistentRanking(key: string, fingerprint: string, snapshot: Rank
   }
 }
 
-async function loadExpenseRanking(category: string | undefined, year: number | undefined, page: number) {
+function normalizeSearch(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+}
+
+function matchesExpenseSearch(row: ExpenseCategoryRow, query: string) {
+  if (!query) return true;
+  const searchable = normalizeSearch([row.name, row.office, row.state].filter(Boolean).join(" "));
+  return query.split(/\s+/).every((term) => searchable.includes(term));
+}
+
+async function loadExpenseRanking(category: string | undefined, year: number | undefined, page: number, query: string) {
   const fingerprint = databaseFingerprint();
   const key = `${fingerprint}:${category ?? "*"}:${year ?? "*"}`;
   let snapshot = rankingCache.get(key);
@@ -74,7 +84,11 @@ async function loadExpenseRanking(category: string | undefined, year: number | u
     }
     snapshot = await flight;
   }
-  return { total: snapshot.total, rows: snapshot.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) };
+  const matchingRows = query ? snapshot.rows.filter((row) => matchesExpenseSearch(row, query)) : snapshot.rows;
+  return {
+    total: matchingRows.length,
+    rows: matchingRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+  };
 }
 
 export default async function DespesaDesproporcionalPage({
@@ -95,6 +109,8 @@ export default async function DespesaDesproporcionalPage({
     : years.includes(Number(yearParam)) ? Number(yearParam)
     : years[0];
   const yearLabel = year != null ? String(year) : "todos os anos";
+  const query = typeof sp.q === "string" ? sp.q.slice(0, 100).trim() : "";
+  const normalizedQuery = normalizeSearch(query);
 
   const page = Math.max(1, Number(sp.page) || 1);
 
@@ -102,6 +118,7 @@ export default async function DespesaDesproporcionalPage({
     const usp = new URLSearchParams();
     if (p.categoria && p.categoria !== ALL) usp.set("categoria", p.categoria);
     if (p.ano) usp.set("ano", p.ano);
+    if (p.q) usp.set("q", p.q);
     if (p.page && p.page !== "1") usp.set("page", p.page);
     const s = usp.toString();
     return `/sinais/despesa-desproporcional${s ? `?${s}` : ""}`;
@@ -112,7 +129,7 @@ export default async function DespesaDesproporcionalPage({
       <PageHeader
         group="Sinais"
         current="Despesa desproporcional"
-        actions={<YearSelect basePath="/sinais/despesa-desproporcional" years={years} value={year} allLabel="todos" />}
+        actions={<YearSelect basePath="/sinais/despesa-desproporcional" years={years} value={year} allLabel="todos" preserveParams={{ categoria: category, q: query }} />}
       />
 
       <section>
@@ -126,12 +143,25 @@ export default async function DespesaDesproporcionalPage({
           desproporção, não fraude confirmada.
         </p>
 
-        <div className="mt-5">
+        <div className="mt-5 flex flex-wrap items-end gap-3">
           <ExpenseCategorySelect
             basePath="/sinais/despesa-desproporcional"
             categories={EXPENSE_CATEGORIES}
             value={category}
+            preserveParams={{ ano: year != null ? String(year) : undefined, q: query }}
           />
+          <form className="flex flex-wrap items-end gap-2" action="/sinais/despesa-desproporcional">
+            {category ? <input type="hidden" name="categoria" value={category} /> : null}
+            {year != null ? <input type="hidden" name="ano" value={year} /> : null}
+            <label className="flex flex-col gap-1">
+              <span className="mono-label">buscar</span>
+              <span className="input" style={{ width: "min(360px, 75vw)" }}>
+                <input name="q" type="search" maxLength={100} defaultValue={query} placeholder="candidato, cargo ou estado…" aria-label="Buscar candidato, cargo ou estado" />
+              </span>
+            </label>
+            <button className="btn btn--primary" type="submit">buscar</button>
+            {query ? <a className="btn" href={hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL })}>limpar</a> : null}
+          </form>
         </div>
       </section>
 
@@ -140,7 +170,7 @@ export default async function DespesaDesproporcionalPage({
           <EmptyState icon="◌" title="nenhuma despesa de campanha coletada ainda" hint={<code>elosys tse-accounts --db elosys.db</code>} />
         ) : (
           <Suspense fallback={<RankingFallback />}>
-            <RankingResults category={category} categoryLabel={categoryLabel} year={year} yearLabel={yearLabel} page={page} hrefFor={hrefFor} />
+            <RankingResults category={category} categoryLabel={categoryLabel} year={year} yearLabel={yearLabel} page={page} query={normalizedQuery} queryLabel={query} hrefFor={hrefFor} />
           </Suspense>
         )}
       </section>
@@ -149,35 +179,38 @@ export default async function DespesaDesproporcionalPage({
 }
 
 async function RankingResults({
-  category, categoryLabel, year, yearLabel, page, hrefFor,
+  category, categoryLabel, year, yearLabel, page, query, queryLabel, hrefFor,
 }: {
   category?: string;
   categoryLabel: string;
   year?: number;
   yearLabel: string;
   page: number;
+  query: string;
+  queryLabel: string;
   hrefFor: (params: Record<string, string | undefined>) => string;
 }) {
   let result: RankingSnapshot & { rows: ExpenseCategoryRow[] };
   try {
-    result = await loadExpenseRanking(category, year, page);
+    result = await loadExpenseRanking(category, year, page, query);
   } catch (error) {
     console.error("Unable to load disproportionate expense ranking:", error);
-    return <EmptyState icon="◌" title="não foi possível carregar o ranking agora" hint={<a className="source-link" href={hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, page: String(page) })}>Tentar novamente</a>} />;
+    return <EmptyState icon="◌" title="não foi possível carregar o ranking agora" hint={<a className="source-link" href={hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, q: queryLabel, page: String(page) })}>Tentar novamente</a>} />;
   }
   const { rows, total } = result;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (rows.length === 0) return <EmptyState icon="◌" title={`ninguém gastou em ${categoryLabel} em ${yearLabel}.`} />;
+  if (rows.length === 0) return <EmptyState icon="◌" title={queryLabel ? `nenhum resultado para “${queryLabel}”.` : `ninguém gastou em ${categoryLabel} em ${yearLabel}.`} hint={queryLabel ? <a className="source-link" href={hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL })}>Limpar a busca</a> : undefined} />;
 
   return (
     <div className="table-wrap">
+      {queryLabel ? <p className="px-4 pt-3 text-xs text-[var(--muted)]">{total.toLocaleString("pt-BR")} resultado(s) para “{queryLabel}”.</p> : null}
       <div className="overflow-x-auto">
         <table className="table min-w-[820px]">
           <thead><tr><th>candidato</th><th>cargo/estado</th><th className="text-right">gasto</th><th className="text-right">% receita</th><th className="text-right">média dos pares</th></tr></thead>
           <tbody>{rows.map((r) => <CategoryExpenseRow key={r.personId} r={r} category={category} year={year} />)}</tbody>
         </table>
       </div>
-      {totalPages > 1 ? <div className="table-footer"><PaginationLinks page={page} totalPages={totalPages} makeHref={(p) => hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, page: String(p) })} /></div> : null}
+      {totalPages > 1 ? <div className="table-footer"><PaginationLinks page={page} totalPages={totalPages} makeHref={(p) => hrefFor({ categoria: category ?? ALL, ano: year != null ? String(year) : ALL, q: queryLabel, page: String(p) })} /></div> : null}
     </div>
   );
 }
