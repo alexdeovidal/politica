@@ -77,14 +77,16 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
     let stopped = false;
     let timer: number | undefined;
     const controller = new AbortController();
+    let needsLocalData = meta?.ready === false;
     const refresh = async () => {
       if (document.visibilityState === "hidden") {
-        if (!finalized || archiveQuery) timer = window.setTimeout(refresh, 60000);
+        if (!finalized || archiveQuery || needsLocalData) timer = window.setTimeout(refresh, 60000);
         return;
       }
       setLoading(true);
       setError("");
       let retryIn = 60000;
+      let shouldCheckAgain = !finalized || archiveQuery || needsLocalData;
       try {
         const response = await fetch(query(turn, office, state, municipality, zone, candidateId, page, debouncedSearch, debouncedSectionFilter), {signal: controller.signal, cache: "no-store"});
         const data = await response.json().catch(() => null) as SectionResponse | null;
@@ -97,12 +99,14 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
           });
         }
         retryIn = data.refreshSeconds > 0 ? data.refreshSeconds * 1000 : 0;
+        needsLocalData = data.ready === false;
+        shouldCheckAgain = !finalized || archiveQuery || needsLocalData;
       } catch (failure) {
         if (!stopped && !controller.signal.aborted) setError(failure instanceof Error ? failure.message : `Não foi possível consultar os boletins ${zone ? `da zona ${Number(zone)}` : "do município"}.`);
       } finally {
         if (!stopped) {
           setLoading(false);
-          if ((!finalized || archiveQuery) && retryIn > 0) timer = window.setTimeout(refresh, retryIn);
+          if (shouldCheckAgain && retryIn > 0) timer = window.setTimeout(refresh, retryIn);
         }
       }
     };
@@ -140,7 +144,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
           <MapPin className="h-3.5 w-3.5 text-[var(--accent-2)]" aria-hidden="true" />
           Votos por local e seção
         </h4>
-        <span className="text-[9px] text-[var(--muted-2)]">{meta?.ready === false ? "Aguardando importação no banco local" : meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"} ${state === "br" ? "no Brasil" : zone ? `na zona ${Number(zone)}` : municipality ? "no município" : "no estado"} · banco atualizado ${dateTime(meta.checkedAt)}` : "Banco de dados local · origem TSE"}</span>
+        <span className="text-[9px] text-[var(--muted-2)]">{meta?.ready === false ? `Aguardando dados do ${turn === 2 ? "2º" : "1º"} turno no banco local` : meta ? `${number.format(meta.total)} ${meta.total === 1 ? "seção" : "seções"} ${state === "br" ? "no Brasil" : zone ? `na zona ${Number(zone)}` : municipality ? "no município" : "no estado"} · banco atualizado ${dateTime(meta.checkedAt)}` : "Banco de dados local · origem TSE"}</span>
       </div>
 
       <label className="mb-2 flex min-h-9 items-center gap-2 rounded-[var(--r-sm)] border border-[var(--border-1)] bg-[var(--surface-2)] px-2.5 text-[var(--muted-2)] focus-within:border-[var(--accent-2)]">
@@ -152,7 +156,7 @@ export function LiveSectionVoteBreakdown({selection, candidate, sectionFilter = 
       {error ? <p role="alert" className="mb-2 rounded-[var(--r-sm)] border border-[var(--danger)]/30 bg-[var(--danger)]/5 px-2.5 py-2 text-[10px] text-[var(--danger)]">{error}</p> : null}
       {rows.length ? <div className="grid gap-2 sm:grid-cols-3" aria-live="polite">
         {(expanded ? rows : rows.slice(0, 3)).map(row => <SectionRow key={`${row.zone}:${row.number}`} row={row}/>) }
-      </div> : !shouldLoad ? <p className="py-2 text-[10px] text-[var(--muted)]">Os três locais com mais votos serão carregados do banco local ao chegar neste candidato.</p> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções do banco local…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? "Os dados ainda não foram importados para o banco local. A tela verificará novamente." : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
+      </div> : !shouldLoad ? <p className="py-2 text-[10px] text-[var(--muted)]">Os três locais com mais votos serão carregados do banco local ao chegar neste candidato.</p> : loading ? <p className="flex items-center gap-2 py-2 text-[10px] text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true"/>Carregando os locais e as seções do banco local…</p> : error ? null : <p className="py-2 text-[10px] text-[var(--muted)]">{meta?.ready === false ? `Os votos por seção do ${turn === 2 ? "2º" : "1º"} turno ainda não estão no banco local. A tela verificará automaticamente a cada minuto e mostrará as urnas quando os dados oficiais forem incorporados.` : debouncedSearch ? `Nenhuma escola, endereço ou seção encontrada para “${debouncedSearch}”.` : "Nenhum voto por seção localizado para esta candidatura."}</p>}
 
       {meta && page < totalPages ? <button type="button" className="mt-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border-1)] px-3 text-[10px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] disabled:opacity-60" disabled={loading} onClick={loadMore}>{loading ? <><RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true"/>Carregando…</> : "Ver mais"}</button> : null}
       {meta?.locationSource ? <a className="ml-3 inline-flex items-center gap-1 text-[9px] text-[var(--muted-2)] hover:text-[var(--accent-2)] hover:underline" href={meta.locationSource} target="_blank" rel="noopener noreferrer">{meta.sourceLabel || "Cadastro de locais do TSE"} <ExternalLink className="h-3 w-3"/></a> : null}

@@ -38,9 +38,10 @@ try {
       FROM election_vote_section v
       JOIN parse p ON p.id = v.provenance_id
       JOIN collection c ON c.id = p.collection_id
-      WHERE v.year = ? AND instr(c.url, ?) > 0
+      WHERE v.year = ? AND v.round = ? AND v.office_code = ?
+        AND instr(c.url, ?) > 0
       LIMIT 1
-    `).get(year, `/${sourceFile}`));
+    `).get(year, round, officeCode, `/${sourceFile}`));
 
     if (!archiveReady) {
       parentPort.postMessage({ ready: false, rows: [], total: 0, page, pageSize, checkedAt: new Date().toISOString() });
@@ -49,13 +50,14 @@ try {
         SELECT h.id, h.ballot_name AS name, h.candidate_number AS number,
                h.party_abbr AS party, h.party_number AS partyNumber
         FROM politician_history h
-        WHERE h.year = ? AND coalesce(h.round, 1) = ? AND h.tse_candidacy_id = ?
+        WHERE h.year = ? AND h.tse_candidacy_id = ?
           AND EXISTS (
             SELECT 1 FROM election_vote_section v
             WHERE v.history_id = h.id AND v.year = ? AND v.round = ? AND v.office_code = ?
           )
+        ORDER BY CASE WHEN coalesce(h.round, 1) = ? THEN 0 ELSE 1 END, h.id
         LIMIT 1
-      `).get(year, round, candidateId, year, round, officeCode);
+      `).get(year, candidateId, year, round, officeCode, round);
 
       const clauses = ["v.history_id = ?", "v.year = ?", "v.round = ?", "v.office_code = ?"];
       const args = [history?.id ?? -1, year, round, officeCode];

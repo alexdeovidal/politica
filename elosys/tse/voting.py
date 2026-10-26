@@ -21,7 +21,7 @@ from ..util import clean_tse, normalize_name, now_utc
 log = get_logger("elosys.tse.voting")
 
 PARSER_NAME = "tse.voting_sections"
-PARSER_VERSION = "1.4"
+PARSER_VERSION = "1.5"
 URL_TEMPLATE = (
     "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/"
     "votacao_secao_{year}_{unit}.zip"
@@ -193,9 +193,17 @@ def _municipality_code(value: str | None) -> str:
     return code.zfill(5) if code.isdigit() else code
 
 
-def _candidate_maps(con: sqlite3.Connection, year: int) -> tuple[dict, dict]:
-    by_id: dict[tuple[str, int], int] = {}
+def _candidate_maps(con: sqlite3.Connection, year: int) -> tuple[dict, dict, dict, dict]:
+    by_id: dict[tuple[str, int], list[int]] = {}
+    by_id_any_round: dict[str, list[int]] = {}
     by_fallback: dict[tuple, list[int]] = {}
+    by_fallback_any_round: dict[tuple, list[int]] = {}
+
+    def add(mapping: dict, key: tuple | str, history_id: int) -> None:
+        matches = mapping.setdefault(key, [])
+        if history_id not in matches:
+            matches.append(history_id)
+
     rows = con.execute(
         "SELECT id, tse_candidacy_id, round, state, office, candidate_number, electoral_unit "
         "FROM politician_history WHERE year = ?",
@@ -205,36 +213,44 @@ def _candidate_maps(con: sqlite3.Connection, year: int) -> tuple[dict, dict]:
         candidacy_id = row["tse_candidacy_id"]
         round_number = row["round"] or 1
         if candidacy_id:
-            by_id[(str(candidacy_id), int(round_number))] = int(row["id"])
+            add(by_id, (str(candidacy_id), int(round_number)), int(row["id"]))
+            add(by_id_any_round, str(candidacy_id), int(row["id"]))
 
         number = row["candidate_number"]
         if not number:
             continue
         office = _office(row["office"])
         if office == "PRESIDENTE":
-            key = (office, str(number), int(round_number))
+            base_key = (office, str(number))
         elif office in {"PREFEITO", "VEREADOR"}:
-            key = (
-                row["state"], office, str(number), _municipality_code(row["electoral_unit"]), int(round_number),
-            )
+            base_key = (row["state"], office, str(number), _municipality_code(row["electoral_unit"]))
         else:
-            key = (row["state"], office, str(number), int(round_number))
-        by_fallback.setdefault(key, []).append(int(row["id"]))
-    return by_id, by_fallback
+            base_key = (row["state"], office, str(number))
+        history_id = int(row["id"])
+        add(by_fallback, (*base_key, int(round_number)), history_id)
+        add(by_fallback_any_round, base_key, history_id)
+    return by_id, by_id_any_round, by_fallback, by_fallback_any_round
 
 
 def _match_history(
     row: dict[str, str],
     year: int,
-    by_id: dict[tuple[str, int], int],
+    by_id: dict[tuple[str, int], list[int]],
+    by_id_any_round: dict[str, list[int]],
     by_fallback: dict[tuple, list[int]],
+    by_fallback_any_round: dict[tuple, list[int]],
 ) -> int | None:
     round_number = _integer(_g(row, "NR_TURNO"), 1) or 1
     candidacy_id = _g(row, "SQ_CANDIDATO")
     if candidacy_id:
-        found = by_id.get((candidacy_id, round_number))
-        if found is not None:
-            return found
+        exact_matches = by_id.get((candidacy_id, round_number), [])
+        if len(exact_matches) == 1:
+            return exact_matches[0]
+        # Runoff section data can arrive without a second-round history row.
+        # Reuse the first-round row only when the TSE candidacy ID is unique.
+        any_round_matches = by_id_any_round.get(candidacy_id, [])
+        if len(any_round_matches) == 1:
+            return any_round_matches[0]
 
     number = _g(row, "NR_VOTAVEL")
     office = _office(_g(row, "DS_CARGO"))
@@ -242,15 +258,16 @@ def _match_history(
         return None
 
     if office == "PRESIDENTE":
-        key = (office, number, round_number)
+        base_key = (office, number)
     elif office in {"PREFEITO", "VEREADOR"}:
-        key = (
-            _g(row, "SG_UF"), office, number, _municipality_code(_g(row, "CD_MUNICIPIO")), round_number,
-        )
+        base_key = (_g(row, "SG_UF"), office, number, _municipality_code(_g(row, "CD_MUNICIPIO")))
     else:
-        key = (_g(row, "SG_UF"), office, number, round_number)
-    matches = by_fallback.get(key, [])
-    return matches[0] if len(matches) == 1 else None
+        base_key = (_g(row, "SG_UF"), office, number)
+    exact_matches = by_fallback.get((*base_key, round_number), [])
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    any_round_matches = by_fallback_any_round.get(base_key, [])
+    return any_round_matches[0] if len(any_round_matches) == 1 else None
 
 
 def _csv_members(archive: zipfile.ZipFile, unit: str) -> list[str]:
@@ -266,8 +283,10 @@ def _ingest_csv(
     filename: str,
     year: int,
     parse_id: int,
-    by_id: dict[tuple[str, int], int],
+    by_id: dict[tuple[str, int], list[int]],
+    by_id_any_round: dict[str, list[int]],
     by_fallback: dict[tuple, list[int]],
+    by_fallback_any_round: dict[tuple, list[int]],
 ) -> tuple[int, int, int, int]:
     staged: list[dict] = []
     imported = 0
@@ -293,7 +312,7 @@ def _ingest_csv(
             if not _g(row, "SQ_CANDIDATO") and year not in {2012, 2014}:
                 ignored_without_candidate_id += 1
                 continue
-            history_id = _match_history(row, year, by_id, by_fallback)
+            history_id = _match_history(row, year, by_id, by_id_any_round, by_fallback, by_fallback_any_round)
             if history_id is None:
                 rejected += 1
                 continue
@@ -374,7 +393,7 @@ def _ingest_archive(
             zip_path.unlink(missing_ok=True)
         return {"unit": unit, "already_collected": True, "rows": previous_parse["rows_extracted"]}
 
-    by_id, by_fallback = _candidate_maps(con, year)
+    by_id, by_id_any_round, by_fallback, by_fallback_any_round = _candidate_maps(con, year)
     try:
         with con:
             parse_id = record_parse(
@@ -414,7 +433,8 @@ def _ingest_archive(
                 if len(members) != 1:
                     raise ValueError(f"Esperado um CSV de votação em {zip_path.name}; encontrados {len(members)}")
                 imported, rejected, ignored_without_candidate_id, ignored_non_candidate_votes = _ingest_csv(
-                    con, archive, members[0], year, parse_id, by_id, by_fallback
+                    con, archive, members[0], year, parse_id, by_id, by_id_any_round,
+                    by_fallback, by_fallback_any_round
                 )
             con.execute(
                 "UPDATE parse SET rows_extracted = ?, rows_rejected = ? WHERE id = ?",
