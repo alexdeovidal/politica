@@ -6,6 +6,7 @@ export PYTHONPATH=/data/elosys-python:/data/politica-source
 case "${1:-current}" in
   current) /bin/python3 -m elosys.tse.monitor ;;
   history) /bin/python3 -m elosys.tse.archive_monitor --max-updates 5 ;;
+  sections-2026) /bin/python3 -m elosys.tse.archive_monitor --live-votes-2026 --max-updates 2 ;;
   *) exit 2 ;;
 esac
 collection_status=$?

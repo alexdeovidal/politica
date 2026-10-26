@@ -46,7 +46,7 @@ A cobertura depende dos conjuntos públicos coletados. Processos são da Justiç
 
 ### Operação e atualização
 
-As rotinas do Coolify verificam bases atuais do TSE, fontes históricas, propostas atuais e PNCP a cada quatro horas. Há auditoria diária e coleta diária de propostas históricas. Não existe garantia de atualização em tempo real: a publicação pelo órgão, o tamanho dos arquivos e a disponibilidade do serviço determinam o processamento.
+As rotinas gerais do Coolify verificam bases atuais do TSE, fontes históricas, propostas atuais e PNCP a cada quatro horas. A votação por seção de 2026 tem um comando dedicado (`scripts/refresh-tse.sh sections-2026`) para monitorar somente os arquivos presidencial (BR) e local (GO); configure essa tarefa no Coolify para rodar a cada cinco minutos. Quando o TSE alterar um arquivo, o monitor importa os dados no banco local e publica o manifesto. A disponibilidade continua dependendo da publicação do arquivo oficial e do tempo necessário para baixá-lo e processá-lo. Há auditoria diária e coleta diária de propostas históricas.
 
 Os coletores Python usam `/data/politica-source`, bibliotecas em `/data/elosys-python` e o comando persistente `scripts/refresh-tse.sh`. Os monitores e o cálculo dos sinais compartilham uma trava de escrita. Arquivos são validados e publicados atomicamente; uma falha preserva o conjunto válido anterior. PNCP respeita limites do provedor, repete requisições interrompidas e retoma o cursor salvo. A janela recente só é considerada fresca por quatro horas; sua data não é renovada quando a execução apenas retoma o histórico. O histórico é preenchido progressivamente.
 

@@ -31,11 +31,16 @@ def sources():
                 result.append((f"votes_{year}_{unit}",year,[voting.URL_TEMPLATE.format(year=year,unit=unit)],unit,None))
     return result
 
-def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
+def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1,source_names=None):
     state=_read_state(state_path);known=state.setdefault("sources",{})
     # The Federal District has no municipal elections or corresponding section archives.
     for year in (2016,2020,2024):known.pop(f"votes_{year}_DF",None)
-    items=sources();cursor=int(state.get("archive_cursor",0))%len(items)
+    items=sources()
+    if source_names is not None:
+        items=[item for item in items if item[0] in source_names]
+        if len(items) != len(source_names):
+            raise ValueError("uma ou mais fontes solicitadas não foram configuradas")
+    cursor=int(state.get("archive_cursor",0))%len(items) if source_names is None else 0
     failed=[index for index,item in enumerate(items) if known.get(item[0],{}).get('status')=='failed']
     pending_2026=[index for index,item in enumerate(items) if item[0].startswith("votes_2026_") and not known.get(item[0],{}).get("synced_at")]
     if failed:cursor=failed[0]
@@ -68,7 +73,9 @@ def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
                     if not report.get("rows",report.get("source_rows",0)):raise ValueError("Arquivo sem linhas verificáveis; sincronização não declarada")
                     synced=datetime.now(timezone.utc).isoformat(timespec="seconds")
                     previous.update({"signature":signatures,"synced_at":synced,"status":"updated"})
-                    state["generated_at"]=synced;state["archive_cursor"]=(index+1)%len(items);updated+=1
+                    state["generated_at"]=synced
+                    if source_names is None:state["archive_cursor"]=(index+1)%len(items)
+                    updated+=1
                     if name.startswith(("candidates_","finance_")):state["derived_refresh_pending"]=True
                     write_manifest(con,manifest)
                 known[name]=previous;state["checked_at"]=now
@@ -79,7 +86,7 @@ def run(db_path:Path,state_path:Path,tmp:Path,manifest:Path,max_updates=1):
     return results
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument("--db",type=Path,default=Path("/data/elosys.db"));p.add_argument("--state",type=Path,default=Path("/data/tse-source-monitor.json"));p.add_argument("--tmp",type=Path,default=Path("/data/tse-history-tmp"));p.add_argument("--manifest",type=Path,default=Path("/data/manifest.json"));p.add_argument("--max-updates",type=int,default=1);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument("--db",type=Path,default=Path("/data/elosys.db"));p.add_argument("--state",type=Path,default=Path("/data/tse-source-monitor.json"));p.add_argument("--tmp",type=Path,default=Path("/data/tse-history-tmp"));p.add_argument("--manifest",type=Path,default=Path("/data/manifest.json"));p.add_argument("--max-updates",type=int,default=1);p.add_argument("--live-votes-2026",action="store_true",help="Verifica somente os arquivos locais de votação por seção de 2026.");a=p.parse_args()
     a.state.parent.mkdir(parents=True,exist_ok=True)
     with a.state.with_suffix(".lock").open("w") as lock,a.state.with_suffix(".ingest.lock").open("w") as ingest_lock:
         try:
@@ -88,6 +95,7 @@ def main():
         except BlockingIOError:return 0
         from .search_index import ensure
         ensure(a.db)
-        results=run(a.db,a.state,a.tmp,a.manifest,max(1,a.max_updates));print(json.dumps(results,ensure_ascii=False))
+        source_names={"votes_2026_BR","votes_2026_GO"} if a.live_votes_2026 else None
+        results=run(a.db,a.state,a.tmp,a.manifest,max(1,a.max_updates),source_names);print(json.dumps(results,ensure_ascii=False))
     return int(any(r["status"]=="failed" for r in results))
 if __name__=="__main__":raise SystemExit(main())
