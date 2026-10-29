@@ -133,8 +133,9 @@
 .sectionHeading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 7px; margin-bottom: 13px; }
 .sectionHeading span { color: var(--report-text); font: 600 9px/1.5 var(--font-jetbrains-mono), monospace; letter-spacing: .06em; }
 .sectionHeading small { color: var(--report-subtle); font-size: 9px; }
-.chartRow { display: grid; grid-template-columns: 45px minmax(0, 1fr) 72px; align-items: center; gap: 10px; margin: 9px 0; }
+.chartRow { display: grid; grid-template-columns: 95px minmax(0, 1fr) 72px; align-items: center; gap: 10px; margin: 9px 0; }
 .chartRow > span { color: var(--report-muted); font: 500 10px/1.4 var(--font-jetbrains-mono), monospace; }
+.chartRow > span small { display: block; margin-top: 2px; color: var(--report-subtle); font: 400 7px/1.4 var(--font-inter), Inter, Arial, sans-serif; }
 .chartRow > strong { color: var(--report-text); font: 600 10px/1.4 var(--font-jetbrains-mono), monospace; text-align: right; }
 .barTrack { height: 8px; overflow: hidden; border-radius: 99px; background: var(--report-track); }
 .barTrack span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: var(--report-accent); }

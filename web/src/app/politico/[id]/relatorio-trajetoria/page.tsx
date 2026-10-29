@@ -65,6 +65,19 @@ function electionRows(results: PersonVoteResult[], details: ElectionBreakdown[])
     .map((result) => ({ result, detail: detailById.get(result.historyId) ?? null }));
 }
 
+function normalizedOffice(office: string | null | undefined) {
+  return (office || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-BR");
+}
+
+function previousSameOfficeIndex(elections: ReportElection[], index: number) {
+  const office = normalizedOffice(elections[index]?.result.office);
+  if (!office) return null;
+  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
+    if (normalizedOffice(elections[previousIndex]?.result.office) === office) return previousIndex;
+  }
+  return null;
+}
+
 function cityKey(city: MunicipalityBreakdown) {
   const identity = city.municipalityCode || city.municipality.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
   return `${city.state.trim().toLocaleUpperCase("pt-BR")}|${identity}`;
@@ -102,8 +115,8 @@ function signedPercent(value: number) {
   return `${prefix}${percent}%`;
 }
 
-function cityVariation(current: number, previous: number, currentDataAvailable: boolean, previousDataAvailable: boolean, isFirstElection: boolean) {
-  if (isFirstElection) return { label: "base inicial", tone: "neutral" as const, amount: "" };
+function cityVariation(current: number, previous: number, currentDataAvailable: boolean, previousDataAvailable: boolean, hasPreviousSameOffice: boolean) {
+  if (!hasPreviousSameOffice) return { label: "1ª disputa neste cargo", tone: "neutral" as const, amount: "" };
   if (!currentDataAvailable || !previousDataAvailable) return { label: "sem dados comparáveis", tone: "neutral" as const, amount: "" };
   if (previous === 0 && current === 0) return { label: "sem votos nos dois anos", tone: "neutral" as const, amount: "" };
   if (previous === 0) return { label: "percentual não calculável", tone: "neutral" as const, amount: `${signedNumber(current)} votos · base anterior zero` };
@@ -168,6 +181,8 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
   const municipalityTrajectories = cityTrajectories(elections);
   const first = elections[0] ?? null;
   const latest = elections.at(-1) ?? null;
+  const latestPriorSameOfficeIndex = latest ? previousSameOfficeIndex(elections, elections.length - 1) : null;
+  const latestPriorSameOffice = latestPriorSameOfficeIndex === null ? null : elections[latestPriorSameOfficeIndex];
   const firstDetail = first?.detail;
   const latestDetail = latest?.detail;
   const firstMunicipalityCount = firstDetail?.municipalities.filter((item) => item.municipality !== "Município não informado").length ?? 0;
@@ -175,7 +190,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
   const firstStateCount = firstDetail?.states.filter((item) => item.state !== "UF não informada").length ?? 0;
   const latestStateCount = latestDetail?.states.filter((item) => item.state !== "UF não informada").length ?? 0;
   const maxVotes = Math.max(1, ...elections.map(({ result }) => result.totalVotes));
-  const overallChange = first && latest ? changeLabel(latest.result.totalVotes, first.result.totalVotes) : null;
+  const latestSameOfficeChange = latest && latestPriorSameOffice ? changeLabel(latest.result.totalVotes, latestPriorSameOffice.result.totalVotes) : null;
   const yearRange = first && latest ? `${first.result.year}-${latest.result.year}` : "sem-período";
   const generatedAt = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "long",
@@ -227,19 +242,19 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
               <div className={styles.heroMetrics}>
                 <article><span>VOTOS NA PRIMEIRA ELEIÇÃO</span><strong>{formatNumber(first?.result.totalVotes ?? 0)}</strong><small>{first?.result.year ?? "—"} · {first?.result.office || "cargo n/i"}</small></article>
                 <article><span>VOTOS NA MAIS RECENTE</span><strong>{formatNumber(latest?.result.totalVotes ?? 0)}</strong><small>{latest?.result.year ?? "—"} · {latest?.result.office || "cargo n/i"}</small></article>
-                <article className={overallChange && overallChange.change < 0 ? styles.negativeMetric : styles.positiveMetric}>
-                  <span>VARIAÇÃO NO PERÍODO</span>
-                  <strong>{overallChange ? `${signedNumber(overallChange.change)} votos` : "—"}</strong>
-                  <small>{overallChange ? `${overallChange.percent} em relação à primeira eleição` : "É necessário haver mais de uma eleição"}</small>
+                <article className={latestSameOfficeChange && latestSameOfficeChange.change < 0 ? styles.negativeMetric : styles.positiveMetric}>
+                  <span>VARIAÇÃO VS. MESMO CARGO</span>
+                  <strong>{latestSameOfficeChange ? `${signedNumber(latestSameOfficeChange.change)} votos` : "—"}</strong>
+                  <small>{latestSameOfficeChange && latestPriorSameOffice ? `${latestSameOfficeChange.percent} em relação a ${latestPriorSameOffice.result.year}` : "Ainda não há eleição anterior deste cargo para comparar"}</small>
                 </article>
               </div>
 
               {elections.length > 1 ? (
                 <section className={styles.chart} aria-label="Comparativo de votos por eleição">
-                  <div className={styles.sectionHeading}><span>EVOLUÇÃO DA VOTAÇÃO NOMINAL</span><small>escala comparável entre eleições</small></div>
+                  <div className={styles.sectionHeading}><span>VOTAÇÃO NOMINAL POR ELEIÇÃO</span><small>cargo identificado em cada ano</small></div>
                   {elections.map(({ result }) => (
                     <div className={styles.chartRow} key={result.historyId}>
-                      <span>{result.year}</span><PrintBar votes={result.totalVotes} max={maxVotes} />
+                      <span>{result.year}<small>{result.office || "Cargo n/i"}</small></span><PrintBar votes={result.totalVotes} max={maxVotes} />
                       <strong>{formatNumber(result.totalVotes)}</strong>
                     </div>
                   ))}
@@ -265,9 +280,10 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
 
             <div className={styles.tableWrap}>
               <table className={styles.table}>
-                <thead><tr><th>Ano / turno</th><th>Cargo e candidatura</th><th>Partido</th><th className={styles.number}>Votos nominais</th><th className={styles.number}>Seções</th><th className={styles.number}>Variação</th></tr></thead>
+                <thead><tr><th>Ano / turno</th><th>Cargo e candidatura</th><th>Partido</th><th className={styles.number}>Votos nominais</th><th className={styles.number}>Seções</th><th className={styles.number}>Variação no mesmo cargo</th></tr></thead>
                 <tbody>{elections.map(({ result }, index) => {
-                  const prior = index > 0 ? elections[index - 1]?.result : null;
+                  const priorIndex = previousSameOfficeIndex(elections, index);
+                  const prior = priorIndex === null ? null : elections[priorIndex]?.result;
                   const change = prior ? changeLabel(result.totalVotes, prior.totalVotes) : null;
                   const ChangeIcon = change ? change.change > 0 ? ArrowUpRight : change.change < 0 ? ArrowDownRight : Minus : null;
                   return (
@@ -277,7 +293,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
                       <td>{result.partyAbbr || "—"}</td>
                       <td className={styles.number}>{formatNumber(result.totalVotes)}</td>
                       <td className={styles.number}>{formatNumber(result.sectionCount)}</td>
-                      <td className={styles.number}>{change && ChangeIcon ? <span className={change.change < 0 ? styles.down : styles.up}><ChangeIcon size={12} aria-hidden="true" /> {signedNumber(change.change)} ({change.percent})</span> : "—"}</td>
+                      <td className={styles.number}>{change && ChangeIcon ? <span className={change.change < 0 ? styles.down : styles.up}><ChangeIcon size={12} aria-hidden="true" /> {signedNumber(change.change)} ({change.percent})</span> : <span className={styles.cityNoChange}>1ª disputa neste cargo</span>}</td>
                     </tr>
                   );
                 })}</tbody>
@@ -285,31 +301,35 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
             </div>
             <div className={styles.methodBox}>
               <strong>Como interpretar</strong>
-              <p>A variação compara totais brutos de votos nominais, mesmo quando o candidato disputou cargos ou territórios diferentes. Ela não mede, sozinha, crescimento ou perda de apoio, nem substitui o percentual oficial sobre votos válidos. Percentuais nas tabelas territoriais indicam a parcela dos votos nominais do candidato naquele recorte.</p>
+              <p>As variações comparam o resultado com a eleição anterior do mesmo cargo, pulando disputas de outros cargos. São diferenças em votos nominais e não medem sozinhas crescimento ou perda de apoio, nem substituem o percentual oficial sobre votos válidos. Percentuais nas tabelas territoriais indicam a parcela dos votos nominais do candidato naquele recorte.</p>
             </div>
           </section>
 
           <section className={`${styles.summaryPage} ${styles.cityEvolutionPage}`}>
             <div className={styles.pageEyebrow}>02 · COMPARAÇÃO TERRITORIAL</div>
             <h2>Evolução por município</h2>
-            <p className={styles.lead}>Compare os votos nominais registrados em cada cidade ao longo das eleições. Em cada ano, a variação percentual é calculada em relação à eleição anterior da trajetória.</p>
+            <p className={styles.lead}>Compare os votos nominais registrados em cada cidade. A variação percentual usa a eleição anterior do mesmo cargo, mesmo que existam disputas de outros cargos entre elas.</p>
             {municipalityTrajectories.length ? (
               <>
                 <div className={styles.cityEvolutionSummary}>
                   <strong>{formatNumber(municipalityTrajectories.length)} municípios na trajetória</strong>
-                  <span>Ordenados pela votação mais recente; cada coluna mostra votos e variação frente ao ano anterior.</span>
+                  <span>Ordenados pela votação mais recente; cada variação usa a disputa anterior do mesmo cargo.</span>
                 </div>
                 <div className={`${styles.tableWrap} ${styles.cityEvolutionTableWrap}`}>
                   <table className={`${styles.table} ${styles.cityEvolutionTable}`}>
                     <thead>
                       <tr>
                         <th>Município / UF</th>
-                        {elections.map(({ result }, index) => (
-                          <th className={styles.number} key={result.historyId}>
-                            {result.year}
-                            <small>{result.office || "Cargo não informado"}{index > 0 ? ` · var. vs. ${elections[index - 1]?.result.year}` : " · base"}</small>
-                          </th>
-                        ))}
+                        {elections.map(({ result }, index) => {
+                          const previousIndex = previousSameOfficeIndex(elections, index);
+                          const previousYear = previousIndex === null ? null : elections[previousIndex]?.result.year;
+                          return (
+                            <th className={styles.number} key={result.historyId}>
+                              {result.year}
+                              <small>{result.office || "Cargo não informado"}{previousYear ? ` · var. vs. ${previousYear}` : " · 1ª disputa neste cargo"}</small>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -317,10 +337,11 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
                         <tr key={city.key}>
                           <th>{city.municipality}<small>{city.state}{city.municipalityCode ? ` · código ${city.municipalityCode}` : ""}</small></th>
                           {elections.map(({ result, detail }, index) => {
-                            const previousDetail = index > 0 ? elections[index - 1]?.detail : null;
+                            const previousIndex = previousSameOfficeIndex(elections, index);
+                            const previousDetail = previousIndex === null ? null : elections[previousIndex]?.detail;
                             const votes = city.votesByElection[index] ?? 0;
-                            const previousVotes = city.votesByElection[index - 1] ?? 0;
-                            const variation = cityVariation(votes, previousVotes, detail !== null, previousDetail !== null, index === 0);
+                            const previousVotes = previousIndex === null ? 0 : city.votesByElection[previousIndex] ?? 0;
+                            const variation = cityVariation(votes, previousVotes, detail !== null, previousDetail !== null, previousIndex !== null);
                             const variationClass = variation.tone === "up" ? styles.cityIncrease : variation.tone === "down" ? styles.cityDecrease : styles.cityNoChange;
                             return (
                               <td className={styles.cityEvolutionCell} key={result.historyId}>
@@ -337,14 +358,15 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
                 </div>
                 <div className={styles.methodBox}>
                   <strong>Como interpretar a comparação</strong>
-                  <p>A variação usa votos nominais por município e compara anos consecutivos da trajetória, mesmo quando cargo ou abrangência mudam. Ela descreve a diferença observada, mas não mede sozinha crescimento ou perda de apoio. Com dados disponíveis para a eleição, uma cidade sem linha de votos é exibida com zero registro nominal. Quando a base anterior é zero, mostramos a quantidade de votos e indicamos que a porcentagem não pode ser calculada; quando faltam dados da eleição, a comparação fica indisponível.</p>
+                  <p>A variação usa votos nominais por município e compara a disputa anterior do mesmo cargo, sem usar eleições intermediárias de outros cargos. Ela descreve a diferença observada, mas não mede sozinha crescimento ou perda de apoio. Com dados disponíveis para a eleição, uma cidade sem linha de votos é exibida com zero registro nominal. Quando a base anterior é zero, mostramos a quantidade de votos e indicamos que a porcentagem não pode ser calculada; quando faltam dados da eleição, a comparação fica indisponível.</p>
                 </div>
               </>
             ) : <p className={styles.noRows}>Não há distribuição municipal suficiente para comparar as eleições desta trajetória.</p>}
           </section>
 
           {elections.map(({ result, detail }, index) => {
-            const prior = index > 0 ? elections[index - 1]?.result : null;
+            const previousIndex = previousSameOfficeIndex(elections, index);
+            const prior = previousIndex === null ? null : elections[previousIndex]?.result;
             const change = prior ? changeLabel(result.totalVotes, prior.totalVotes) : null;
             const scope = result.municipality
               ? `${result.municipality}/${result.state || "UF não informada"}`
@@ -360,7 +382,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
                   <span>ABRANGÊNCIA REGISTRADA<strong>{scope}</strong></span>
                   <span>PARTIDO<strong>{result.partyAbbr || "Não informado"}</strong></span>
                   <span>SEÇÕES COM REGISTRO<strong>{formatNumber(detail?.sectionCount ?? result.sectionCount)}</strong></span>
-                  {change ? <span>VARIAÇÃO VS. {prior?.year}<strong className={change.change < 0 ? styles.downText : styles.upText}>{signedNumber(change.change)} · {change.percent}</strong></span> : null}
+                  <span>VARIAÇÃO VS. MESMO CARGO<strong className={change ? change.change < 0 ? styles.downText : styles.upText : ""}>{change && prior ? `${signedNumber(change.change)} · ${change.percent} (vs. ${prior.year})` : "Primeira disputa identificada neste cargo"}</strong></span>
                 </div>
 
                 <div className={styles.detailGrid}>
