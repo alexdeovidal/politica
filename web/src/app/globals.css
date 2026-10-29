@@ -2496,11 +2496,23 @@ tr.source-zone--hover::before {
 }
 
 @media print {
+  html:has(body.trajectory-report-page),
+  html:has(body.trajectory-report-page) body {
+    color-scheme: light !important;
+    background: #fff !important;
+  }
   body.trajectory-report-page {
     color: #172b36 !important;
     background: #fff !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+  body.trajectory-report-page .shell-layout,
+  body.trajectory-report-page .shell-main,
+  body.trajectory-report-page .content__inner {
+    color: #172b36 !important;
+    background: #fff !important;
+    box-shadow: none !important;
   }
   body.trajectory-report-page .shell-layout { display: block !important; min-height: 0 !important; }
   body.trajectory-report-page #primary-navigation,
