@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, MapPin, Minus, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, FileDown, MapPin, Minus, TrendingUp } from "lucide-react";
 import type { PersonVoteResult } from "@/lib/queries";
 
 export type PersonVoteElectionGeography = {
@@ -76,10 +76,12 @@ function VoteChange({ current, previous }: { current: number; previous: number }
 }
 
 export function PersonVoteTrajectory({
+  personId,
   results,
   geographies,
   cityComparison,
 }: {
+  personId: number;
   results: PersonVoteResult[];
   geographies: PersonVoteElectionGeography[];
   cityComparison: PersonVoteCityComparison[];
@@ -93,7 +95,20 @@ export function PersonVoteTrajectory({
 
   return (
     <section id="trajetoria-eleitoral" data-toc-title="trajetória eleitoral" className="animate-in py-7">
-      <div className="section-title mb-2">trajetória eleitoral</div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+        <div className="section-title">trajetória eleitoral</div>
+        {elections.length > 0 ? (
+          <a
+            className="btn inline-flex items-center gap-2"
+            href={`/politico/${personId}/relatorio-trajetoria`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <FileDown size={15} aria-hidden="true" />
+            Emitir relatório completo (PDF)
+          </a>
+        ) : null}
+      </div>
       <p className="mb-4 max-w-4xl text-[12px] leading-relaxed text-[var(--muted)]">
         Acompanhe os votos nominais do candidato de 2012 a 2026, as cidades e os estados onde recebeu votos. A sequência inclui cargos diferentes para mostrar os números de cada eleição.
       </p>

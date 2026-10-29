@@ -381,7 +381,7 @@ async function VotingSection({ personId }: { personId: number }) {
     }
   }
   return <>
-    <PersonVoteTrajectory results={results} geographies={geography.elections} cityComparison={geography.cityComparison} />
+    <PersonVoteTrajectory personId={personId} results={results} geographies={geography.elections} cityComparison={geography.cityComparison} />
     <PersonVoteResults results={results} />
   </>;
 }

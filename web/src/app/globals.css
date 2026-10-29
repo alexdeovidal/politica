@@ -2479,3 +2479,33 @@ tr.source-zone--hover::before {
 @media(max-width:500px){.news-story-cover__copy{max-width:66%;bottom:21%}.news-story-cover__copy>span{font-size:8px}.news-story-cover__copy>strong{font-size:clamp(27px,8vw,38px)}.news-story-cover__copy>p{font-size:12px}.news-story-cover__note{font-size:8px;max-width:88%;left:4%;bottom:3%}}
 @media(max-width:500px){.news-story-cover__generated-copy{width:68%;top:10%;gap:7px}.news-story-cover__generated-copy>strong{-webkit-line-clamp:2;font-size:clamp(17px,5.2vw,24px)}.news-story-cover__generated-copy>p{gap:4px 7px}.news-story-cover__generated-copy>p small{font-size:7px}.news-story-cover__generated-copy>p b{font-size:clamp(13px,3.7vw,18px)}.news-story-cover__document{right:10%;width:31%;opacity:.7}.news-story-cover__document--back{right:21%}.news-story-cover__chart{right:10%;width:24%}}
 @media(max-width:430px){.news-card{padding:16px}.news-card--lead{padding:18px}.news-article{padding:18px 15px}.news-article__summary{font-size:15px}.news-article__body p{font-size:13px}.news-share-actions .btn{flex:1 1 calc(50% - 8px)}.news-share-actions .btn--primary{flex-basis:100%}}
+
+@page {
+  size: A4 portrait;
+  margin: 15mm 14mm 18mm;
+  @bottom-left {
+    color: #71828a;
+    content: "POLITICA007 · DADOS PÚBLICOS";
+    font: 7pt var(--font-jetbrains-mono), monospace;
+  }
+  @bottom-right {
+    color: #71828a;
+    content: "Página " counter(page) " de " counter(pages);
+    font: 7pt var(--font-jetbrains-mono), monospace;
+  }
+}
+
+@media print {
+  body.trajectory-report-page {
+    color: #172b36 !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  body.trajectory-report-page .shell-layout { display: block !important; min-height: 0 !important; }
+  body.trajectory-report-page #primary-navigation,
+  body.trajectory-report-page .shell-main > :not(.content__inner),
+  body.trajectory-report-page .content__inner > :not(.trajectory-report) { display: none !important; }
+  body.trajectory-report-page .shell-main { display: block !important; width: 100% !important; min-width: 0 !important; }
+  body.trajectory-report-page .content__inner { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+}
