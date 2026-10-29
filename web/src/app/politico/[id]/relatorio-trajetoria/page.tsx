@@ -23,6 +23,13 @@ type ElectionBreakdown = {
 type ReportWorkerResult = { elections: ElectionBreakdown[]; error?: string };
 
 type ReportElection = { result: PersonVoteResult; detail: ElectionBreakdown | null };
+type CityTrajectory = {
+  key: string;
+  state: string;
+  municipality: string;
+  municipalityCode: string;
+  votesByElection: number[];
+};
 
 function formatNumber(value: number) {
   return value.toLocaleString("pt-BR");
@@ -56,6 +63,57 @@ function electionRows(results: PersonVoteResult[], details: ElectionBreakdown[])
   return [...byYear.values()]
     .sort((a, b) => a.year - b.year)
     .map((result) => ({ result, detail: detailById.get(result.historyId) ?? null }));
+}
+
+function cityKey(city: MunicipalityBreakdown) {
+  const identity = city.municipalityCode || city.municipality.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  return `${city.state.trim().toLocaleUpperCase("pt-BR")}|${identity}`;
+}
+
+function cityTrajectories(elections: ReportElection[]): CityTrajectory[] {
+  const cities = new Map<string, CityTrajectory>();
+  elections.forEach(({ detail }, electionIndex) => {
+    if (!detail) return;
+    for (const city of detail.municipalities) {
+      const key = cityKey(city);
+      const trajectory = cities.get(key) ?? {
+        key,
+        state: city.state,
+        municipality: city.municipality,
+        municipalityCode: city.municipalityCode,
+        votesByElection: elections.map(() => 0),
+      };
+      trajectory.votesByElection[electionIndex] += city.votes;
+      cities.set(key, trajectory);
+    }
+  });
+
+  return [...cities.values()].sort((a, b) => {
+    const latestDifference = (b.votesByElection.at(-1) ?? 0) - (a.votesByElection.at(-1) ?? 0);
+    if (latestDifference !== 0) return latestDifference;
+    const totalDifference = b.votesByElection.reduce((sum, votes) => sum + votes, 0) - a.votesByElection.reduce((sum, votes) => sum + votes, 0);
+    return totalDifference || a.municipality.localeCompare(b.municipality, "pt-BR");
+  });
+}
+
+function signedPercent(value: number) {
+  const prefix = value > 0 ? "+" : value < 0 ? "−" : "";
+  const percent = Math.abs(value).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `${prefix}${percent}%`;
+}
+
+function cityVariation(current: number, previous: number, currentDataAvailable: boolean, previousDataAvailable: boolean, isFirstElection: boolean) {
+  if (isFirstElection) return { label: "base inicial", tone: "neutral" as const, amount: "" };
+  if (!currentDataAvailable || !previousDataAvailable) return { label: "sem dados comparáveis", tone: "neutral" as const, amount: "" };
+  if (previous === 0 && current === 0) return { label: "sem votos nos dois anos", tone: "neutral" as const, amount: "" };
+  if (previous === 0) return { label: "percentual não calculável", tone: "neutral" as const, amount: `${signedNumber(current)} votos · base anterior zero` };
+
+  const change = current - previous;
+  return {
+    label: signedPercent(change / previous * 100),
+    tone: change > 0 ? "up" as const : change < 0 ? "down" as const : "neutral" as const,
+    amount: `${signedNumber(change)} votos`,
+  };
 }
 
 function PrintBar({ votes, max }: { votes: number; max: number }) {
@@ -107,6 +165,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
   }
 
   const elections = electionRows(candidacies, details);
+  const municipalityTrajectories = cityTrajectories(elections);
   const first = elections[0] ?? null;
   const latest = elections.at(-1) ?? null;
   const firstDetail = first?.detail;
@@ -230,6 +289,60 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
             </div>
           </section>
 
+          <section className={`${styles.summaryPage} ${styles.cityEvolutionPage}`}>
+            <div className={styles.pageEyebrow}>02 · COMPARAÇÃO TERRITORIAL</div>
+            <h2>Evolução por município</h2>
+            <p className={styles.lead}>Compare os votos nominais registrados em cada cidade ao longo das eleições. Em cada ano, a variação percentual é calculada em relação à eleição anterior da trajetória.</p>
+            {municipalityTrajectories.length ? (
+              <>
+                <div className={styles.cityEvolutionSummary}>
+                  <strong>{formatNumber(municipalityTrajectories.length)} municípios na trajetória</strong>
+                  <span>Ordenados pela votação mais recente; cada coluna mostra votos e variação frente ao ano anterior.</span>
+                </div>
+                <div className={`${styles.tableWrap} ${styles.cityEvolutionTableWrap}`}>
+                  <table className={`${styles.table} ${styles.cityEvolutionTable}`}>
+                    <thead>
+                      <tr>
+                        <th>Município / UF</th>
+                        {elections.map(({ result }, index) => (
+                          <th className={styles.number} key={result.historyId}>
+                            {result.year}
+                            <small>{result.office || "Cargo não informado"}{index > 0 ? ` · var. vs. ${elections[index - 1]?.result.year}` : " · base"}</small>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {municipalityTrajectories.map((city) => (
+                        <tr key={city.key}>
+                          <th>{city.municipality}<small>{city.state}{city.municipalityCode ? ` · código ${city.municipalityCode}` : ""}</small></th>
+                          {elections.map(({ result, detail }, index) => {
+                            const previousDetail = index > 0 ? elections[index - 1]?.detail : null;
+                            const votes = city.votesByElection[index] ?? 0;
+                            const previousVotes = city.votesByElection[index - 1] ?? 0;
+                            const variation = cityVariation(votes, previousVotes, detail !== null, previousDetail !== null, index === 0);
+                            const variationClass = variation.tone === "up" ? styles.cityIncrease : variation.tone === "down" ? styles.cityDecrease : styles.cityNoChange;
+                            return (
+                              <td className={styles.cityEvolutionCell} key={result.historyId}>
+                                {detail ? <strong>{formatNumber(votes)}</strong> : <strong className={styles.cityUnavailable}>—</strong>}
+                                <span className={variationClass}>{detail ? variation.label : "dados indisponíveis"}</span>
+                                {variation.amount ? <small className={styles.cityChangeAmount}>{variation.amount}</small> : null}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className={styles.methodBox}>
+                  <strong>Como interpretar a comparação</strong>
+                  <p>A variação usa votos nominais por município e compara anos consecutivos da trajetória, mesmo quando cargo ou abrangência mudam. Ela descreve a diferença observada, mas não mede sozinha crescimento ou perda de apoio. Com dados disponíveis para a eleição, uma cidade sem linha de votos é exibida com zero registro nominal. Quando a base anterior é zero, mostramos a quantidade de votos e indicamos que a porcentagem não pode ser calculada; quando faltam dados da eleição, a comparação fica indisponível.</p>
+                </div>
+              </>
+            ) : <p className={styles.noRows}>Não há distribuição municipal suficiente para comparar as eleições desta trajetória.</p>}
+          </section>
+
           {elections.map(({ result, detail }, index) => {
             const prior = index > 0 ? elections[index - 1]?.result : null;
             const change = prior ? changeLabel(result.totalVotes, prior.totalVotes) : null;
@@ -238,7 +351,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
               : result.state || result.electoralUnit || "Abrangência não informada";
             return (
               <section className={styles.electionPage} key={result.historyId}>
-                <div className={styles.pageEyebrow}>{String(index + 2).padStart(2, "0")} · DETALHAMENTO POR ELEIÇÃO</div>
+                <div className={styles.pageEyebrow}>{String(index + 3).padStart(2, "0")} · DETALHAMENTO POR ELEIÇÃO</div>
                 <div className={styles.electionTitleRow}>
                   <div><h2>{result.year}</h2><p>{result.round}º turno · {result.office || "Cargo não informado"}</p></div>
                   <div className={styles.electionVotes}><strong>{formatNumber(detail?.totalVotes ?? result.totalVotes)}</strong><span>votos nominais</span></div>
