@@ -14,7 +14,8 @@ type VoteSectionsResponse = {
 };
 
 export function PersonVoteResults({ results }: { results: PersonVoteResult[] }) {
-  if (results.length === 0) return null;
+  const visibleResults = results.filter((result) => result.sectionCount > 0 || result.year === 2026);
+  if (visibleResults.length === 0) return null;
 
   return (
     <section id="votos-por-local" data-toc-title="votos por local" className="animate-in py-7">
@@ -24,7 +25,7 @@ export function PersonVoteResults({ results }: { results: PersonVoteResult[] }) 
         Os dados são agregados e não identificam o voto de nenhuma pessoa.
       </p>
       <div className="flex flex-col gap-3">
-        {results.map((result, index) => result.year === 2026
+        {visibleResults.map((result, index) => result.year === 2026
           ? <LivePersonVoteResults key={result.historyId} result={result} initiallyOpen={index === 0} />
           : <HistoricalElectionVote key={result.historyId} result={result} initiallyOpen={index === 0} />)}
       </div>

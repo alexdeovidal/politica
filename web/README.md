@@ -56,9 +56,14 @@ Se `elosys.db` não existir ainda, rode o pipeline Python primeiro (ver
   candidatos (`donor_person_id IS NOT NULL`), quem doou à esquerda, pra quem
   ele doou à direita, mais uma camada em cada direção.
 - `src/components/person-vote-results.tsx` — votos por eleição, município,
-  local de votação, zona e seção. Os dados usam a tabela opcional
+  local de votação, zona e seção. `src/components/person-vote-trajectory.tsx`
+  resume os resultados de 2012 a 2026, mesmo quando o cargo muda, compara a
+  variação bruta de votos nominais e mostra estados e municípios com maior
+  votação em cada pleito. A variação não é apresentada como percentual oficial
+  de votos válidos. A distribuição é calculada em
+  `person-vote-trajectory-worker.cjs` a partir da tabela opcional
   `election_vote_section`, preenchida pelo comando `elosys tse-voting-sections`;
-  quando ela não existe no banco implantado, essa seção não aparece.
+  quando não há dados por seção, o perfil explica a limitação.
 - `src/app/votos/page.tsx` + `src/components/election-vote-explorer.tsx` —
   consulta do **Raio-X Votos** (`/votos`): filtros encadeados por eleição,
   turno, cargo, UF, município, zona, seção, partido, candidatura e local;

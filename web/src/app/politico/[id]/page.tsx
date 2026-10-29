@@ -27,6 +27,7 @@ import { AssetsYearCards } from "@/components/assets-year-cards";
 import { SocialCard } from "@/components/social-card";
 import { TweetCard } from "@/components/tweet-card";
 import { PersonVoteResults } from "@/components/person-vote-results";
+import { PersonVoteTrajectory, type PersonVoteCityComparison, type PersonVoteElectionGeography } from "@/components/person-vote-trajectory";
 import { PersonElectoralCases } from "@/components/person-electoral-cases";
 import { Skeleton } from "@/components/skeleton";
 import { PageHeader } from "@/components/shell/shell-context";
@@ -35,7 +36,7 @@ import { formatBRL, formatCnpj, formatCpf, resultTone } from "@/lib/format";
 import { ELECTION_YEAR, normalizeLiveSearch, type ElectionSelection, type LiveResult } from "@/lib/live-election/model";
 import { getCompletedLiveResult } from "@/lib/live-election/service";
 import { databasePath } from "@/lib/db";
-import { runDatabaseWorker } from "@/lib/database-worker";
+import { runCachedDatabaseWorker, runDatabaseWorker } from "@/lib/database-worker";
 
 const DISCOURSE_SHOWN = 8;
 const getCachedPersonHeader = cache((personId: number) => getPersonHeader(personId));
@@ -365,7 +366,24 @@ async function VotingSection({ personId }: { personId: number }) {
   await yieldToStreamingRenderer();
   const results = getPersonVoteResults(personId);
   if (results.length === 0) return null;
-  return <PersonVoteResults results={results} />;
+  let geography: { elections: PersonVoteElectionGeography[]; cityComparison: PersonVoteCityComparison[] } = { elections: [], cityComparison: [] };
+  if (results.some((result) => result.sectionCount > 0)) {
+    try {
+      geography = await runCachedDatabaseWorker(
+        `derived:person-vote-trajectory:v1:${personId}`,
+        "person-vote-trajectory-worker.cjs",
+        { personId },
+        "candidate election vote geography",
+        { priority: 5, lane: "interactive" },
+      );
+    } catch (error) {
+      console.error("Unable to load candidate vote trajectory:", error);
+    }
+  }
+  return <>
+    <PersonVoteTrajectory results={results} geographies={geography.elections} cityComparison={geography.cityComparison} />
+    <PersonVoteResults results={results} />
+  </>;
 }
 
 async function ElectoralCasesSection({ personId }: { personId: number }) {

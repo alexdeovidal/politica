@@ -1,7 +1,6 @@
 import { companyPartners, personCompanies, partnerById, partnerOtherCompanies } from "./platform/relations";
 import { db, hasTable,dataVersion,databaseFingerprint,databaseFingerprintsMatch } from "./db";
 import { digitsOnly, normalizeName } from "./normalize";
-import { ELECTION_YEAR } from "./live-election/model";
 import { cached as cachedPersistent,cacheResult } from "./platform/store";
 
 export type Provenance = {
@@ -582,6 +581,8 @@ export type PersonVoteResult = {
   round: number;
   office: string | null;
   state: string | null;
+  electoralUnit: string | null;
+  municipality: string | null;
   partyAbbr: string | null;
   candidateNumber: string | null;
   tseCandidacyId: string | null;
@@ -600,22 +601,19 @@ export function getPersonVoteResults(personId: number): PersonVoteResult[] {
   const sectionCount = hasSections
     ? "(SELECT COUNT(*) FROM election_vote_section t WHERE t.history_id = h.id)"
     : "0";
-  const historyFilter = hasSections
-    ? `h.year = ? OR EXISTS (SELECT 1 FROM election_vote_section t WHERE t.history_id = h.id)`
-    : "h.year = ?";
 
   const rows = db()
     .prepare(
       `SELECT h.id AS historyId, h.year, h.round, h.office,
-              h.state, h.party_abbr AS partyAbbr, h.candidate_number AS candidateNumber,
+              h.state, h.electoral_unit AS electoralUnit, h.municipality,
+              h.party_abbr AS partyAbbr, h.candidate_number AS candidateNumber,
               h.tse_candidacy_id AS tseCandidacyId, h.full_name AS fullName, h.ballot_name AS ballotName,
               h.result, ${totalVotes} AS totalVotes, ${sectionCount} AS sectionCount
        FROM politician_history h
        WHERE h.person_id = ?
-         AND (${historyFilter})
        ORDER BY h.year DESC, h.round DESC, h.office`
     )
-    .all(personId, ELECTION_YEAR) as Array<Record<string, unknown>>;
+    .all(personId) as Array<Record<string, unknown>>;
 
   return rows.map((row) => ({
     historyId: row.historyId as number,
@@ -623,6 +621,8 @@ export function getPersonVoteResults(personId: number): PersonVoteResult[] {
     round: (row.round as number) ?? 1,
     office: (row.office as string) ?? null,
     state: (row.state as string) ?? null,
+    electoralUnit: (row.electoralUnit as string) ?? null,
+    municipality: (row.municipality as string) ?? null,
     partyAbbr: (row.partyAbbr as string) ?? null,
     candidateNumber: (row.candidateNumber as string) ?? null,
     tseCandidacyId: (row.tseCandidacyId as string) ?? null,
