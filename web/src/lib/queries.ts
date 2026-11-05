@@ -500,21 +500,32 @@ export function getPersonPhotoProvenance(personId: number): Provenance | null {
   return row ? pickProvenance(row) : null;
 }
 
+function chunkArray<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+const SQLITE_IN_CHUNK_SIZE = 500;
+
 function batchPhotoUrls(personIds: number[]): Map<number, string> {
   const out = new Map<number, string>();
   const ids = [...new Set(personIds)];
   if (ids.length === 0 || !hasTable("candidate_photo")) return out;
-  const placeholders = ids.map(() => "?").join(", ");
-  const rows = db()
-    .prepare(
-      `SELECT person_id AS personId, photo_url AS photoUrl, max(year) AS year
-       FROM candidate_photo WHERE person_id IN (${placeholders}) GROUP BY person_id`
-    )
-    .all(...ids) as Array<{ personId: number; photoUrl: string; year: number }>;
-  for (const r of rows) out.set(r.personId, r.photoUrl);
+  for (const batch of chunkArray(ids, SQLITE_IN_CHUNK_SIZE)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    const rows = db()
+      .prepare(
+        `SELECT person_id AS personId, photo_url AS photoUrl, max(year) AS year
+         FROM candidate_photo WHERE person_id IN (${placeholders}) GROUP BY person_id`
+      )
+      .all(...batch) as Array<{ personId: number; photoUrl: string; year: number }>;
+    for (const r of rows) out.set(r.personId, r.photoUrl);
+  }
   return out;
 }
-
 export function getPersonCandidacies(personId: number): Candidacy[] {
   const rows = db()
     .prepare(
@@ -2284,42 +2295,44 @@ function lookupNodes(
   rawIds: string[],
   edges: Array<{ source: string; target: string; kind: GraphEdgeKind }> = []
 ): Map<string, GraphNodeInfo> {
-  const clean = rawIds.filter((id): id is string => typeof id === "string" && id.length > 0);
-  const placeholders = clean.map(() => "?").join(", ");
+  const clean = [...new Set(rawIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
   const nodeById = new Map<string, GraphNodeInfo>();
   if (clean.length === 0) return nodeById;
 
-  // Only people who ran for office have a `people` row, so presence there marks a politician
-  const people = db()
-    .prepare(`SELECT id, cpf, canonical_name FROM people WHERE cpf IN (${placeholders})`)
-    .all(...clean) as Array<{ id: number; cpf: string; canonical_name: string | null }>;
-  const companies = db()
-    .prepare(
-      `SELECT c.cnpj, c.kind, coalesce(cr.legal_name, c.legal_name) AS name,
-              cr.registry_status AS registryStatus
-       FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
-       WHERE c.cnpj IN (${placeholders})`
-    )
-    .all(...clean) as Array<{ cnpj: string; kind: string | null; name: string | null; registryStatus: string | null }>;
-  const sanctioned = new Set(
-    (
-      db()
-        .prepare(`SELECT DISTINCT cpf_cnpj FROM sanction WHERE cpf_cnpj IN (${placeholders})`)
-        .all(...clean) as Array<{ cpf_cnpj: string }>
-    ).map((r) => r.cpf_cnpj)
-  );
-  // A campaign committee CNPJ resolves to its candidate; fallback for raw CNPJs reaching here
+  const people: Array<{ id: number; cpf: string; canonical_name: string | null }> = [];
+  const companies: Array<{ cnpj: string; kind: string | null; name: string | null; registryStatus: string | null }> = [];
+  const sanctioned = new Set<string>();
   const committeeOwner = new Map<string, { name: string | null; personId: number }>();
-  for (const r of db()
-    .prepare(
-      `SELECT DISTINCT c.cnpj, p.canonical_name AS name, p.id AS personId FROM campaign_org co
-       JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
-       WHERE c.cnpj IN (${placeholders}) AND co.cnpj=c.cnpj`
-    )
-    .all(...clean) as Array<{ cnpj: string; name: string | null; personId: number }>) {
-    if (!committeeOwner.has(r.cnpj)) committeeOwner.set(r.cnpj, { name: r.name, personId: r.personId });
-  }
 
+  // Keep every IN query below SQLite's default bind-variable limit.
+  for (const batch of chunkArray(clean, SQLITE_IN_CHUNK_SIZE)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    people.push(...db()
+      .prepare(`SELECT id, cpf, canonical_name FROM people WHERE cpf IN (${placeholders})`)
+      .all(...batch) as Array<{ id: number; cpf: string; canonical_name: string | null }>);
+    companies.push(...db()
+      .prepare(
+        `SELECT c.cnpj, c.kind, coalesce(cr.legal_name, c.legal_name) AS name,
+                cr.registry_status AS registryStatus
+         FROM companies c LEFT JOIN company_registry cr ON cr.company_id = c.id
+         WHERE c.cnpj IN (${placeholders})`
+      )
+      .all(...batch) as Array<{ cnpj: string; kind: string | null; name: string | null; registryStatus: string | null }>);
+    for (const row of db()
+      .prepare(`SELECT DISTINCT cpf_cnpj FROM sanction WHERE cpf_cnpj IN (${placeholders})`)
+      .all(...batch) as Array<{ cpf_cnpj: string }>) {
+      sanctioned.add(row.cpf_cnpj);
+    }
+    for (const row of db()
+      .prepare(
+        `SELECT DISTINCT c.cnpj, p.canonical_name AS name, p.id AS personId FROM campaign_org co
+         JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
+         WHERE c.cnpj IN (${placeholders}) AND co.cnpj=c.cnpj`
+      )
+      .all(...batch) as Array<{ cnpj: string; name: string | null; personId: number }>) {
+      if (!committeeOwner.has(row.cnpj)) committeeOwner.set(row.cnpj, { name: row.name, personId: row.personId });
+    }
+  }
   for (const id of clean) {
     nodeById.set(id, {
       cpfCnpj: id, type: id.length === 14 ? "company" : "person",
@@ -2385,96 +2398,110 @@ type IncidentRow = {
   evidence?: GraphEdge["evidence"];
 };
 
-function incidentEdges(anchorIds: string[],year?:number): IncidentRow[] {
+function incidentEdges(anchorIds: string[], year?: number): IncidentRow[] {
   if (anchorIds.length === 0) return [];
-  const ph = anchorIds.map(() => "?").join(", ");
-  const sql = `
-    SELECT d.donor_cpf_cnpj AS anchor, p.cpf AS other, 'donation' AS kind,
-           sum(d.amount_cents) AS amountCents, count(*) AS n, 1 AS anchorIsSource
-    FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
-    JOIN people p ON p.id = co.person_id
-    WHERE d.donor_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}`:""}
-    GROUP BY d.donor_cpf_cnpj, p.cpf
-    UNION ALL
-    SELECT p.cpf AS anchor, d.donor_cpf_cnpj AS other, 'donation',
-           sum(d.amount_cents), count(*), 0
-    FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
-    JOIN people p ON p.id = co.person_id
-    WHERE p.cpf IN (${ph}) AND d.donor_cpf_cnpj IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}`:""}
-    GROUP BY p.cpf, d.donor_cpf_cnpj
-    UNION ALL
-    SELECT p.cpf AS anchor, e.supplier_cpf_cnpj AS other, 'payment',
-           sum(e.amount_cents), count(*), 1
-    FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
-    JOIN people p ON p.id = co.person_id
-    WHERE p.cpf IN (${ph}) AND e.supplier_cpf_cnpj IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}`:""}
-    GROUP BY p.cpf, e.supplier_cpf_cnpj
-    UNION ALL
-    SELECT e.supplier_cpf_cnpj AS anchor, p.cpf AS other, 'payment',
-           sum(e.amount_cents), count(*), 0
-    FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
-    JOIN people p ON p.id = co.person_id
-    WHERE e.supplier_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}`:""}
-    GROUP BY e.supplier_cpf_cnpj, p.cpf
-  `;
-  const params: string[] = [];
-  for (let i = 0; i < 4; i++) params.push(...anchorIds);
-  const rows=db().prepare(sql).all(...params) as IncidentRow[];
-  const seen=new Set<string>();
-  for(const anchor of anchorIds){
-    const person=anchor.length===11?db().prepare("SELECT id FROM people WHERE cpf=?").get(anchor) as {id:number}|undefined:undefined;
-    const partner=anchor.startsWith("soc:")?partnerById(Number(anchor.slice(4))):null;
-    const related=partner?partnerOtherCompanies(partner):anchor.length===14?companyPartners(anchor):person?personCompanies(person.id):[];
-    for(const relation of related){
-      const owner=relation.confidence==="documento"&&relation.personCpf?relation.personCpf:relation.href.startsWith("/cnpj/")?relation.href.split("/").pop()!: `soc:${relation.id}`;
-      const kind:GraphEdgeKind=/ADMIN|DIRETOR|PRESIDENTE/i.test(relation.role||"")?"administration":"ownership";
-      const other=anchor.length===14?owner:person&&owner!==anchor?`soc:${relation.id}`:relation.cnpj;
-      const linkKind:GraphEdgeKind=person&&owner!==anchor?"possibleidentity":kind;
-      const key=`${anchor}|${other}|${linkKind}`;if(anchor===other||seen.has(key))continue;seen.add(key);
-      rows.push({anchor,other,kind:linkKind,amountCents:0,n:1,anchorIsSource:anchor.length===14?0:1,evidence:{role:relation.role,entryDate:relation.entryDate,collectedAt:relation.collectedAt,url:relation.sourceUrl,partnerId:relation.id}});
+  const rows: IncidentRow[] = [];
+
+  // The UNION query binds each anchor four times. Batches of 200 use at most 800
+  // variables, below SQLite's default limit of 999.
+  for (const batch of chunkArray(anchorIds, 200)) {
+    const ph = batch.map(() => "?").join(", ");
+    const sql = `
+      SELECT d.donor_cpf_cnpj AS anchor, p.cpf AS other, 'donation' AS kind,
+             sum(d.amount_cents) AS amountCents, count(*) AS n, 1 AS anchorIsSource
+      FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
+      JOIN people p ON p.id = co.person_id
+      WHERE d.donor_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}` : ""}
+      GROUP BY d.donor_cpf_cnpj, p.cpf
+      UNION ALL
+      SELECT p.cpf AS anchor, d.donor_cpf_cnpj AS other, 'donation',
+             sum(d.amount_cents), count(*), 0
+      FROM campaign_donation d JOIN campaign_org co ON co.id = d.campaign_org_id
+      JOIN people p ON p.id = co.person_id
+      WHERE p.cpf IN (${ph}) AND d.donor_cpf_cnpj IS NOT NULL AND d.donor_cpf_cnpj != p.cpf ${year ? `AND d.year=${year}` : ""}
+      GROUP BY p.cpf, d.donor_cpf_cnpj
+      UNION ALL
+      SELECT p.cpf AS anchor, e.supplier_cpf_cnpj AS other, 'payment',
+             sum(e.amount_cents), count(*), 1
+      FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
+      JOIN people p ON p.id = co.person_id
+      WHERE p.cpf IN (${ph}) AND e.supplier_cpf_cnpj IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}` : ""}
+      GROUP BY p.cpf, e.supplier_cpf_cnpj
+      UNION ALL
+      SELECT e.supplier_cpf_cnpj AS anchor, p.cpf AS other, 'payment',
+             sum(e.amount_cents), count(*), 0
+      FROM campaign_expense e JOIN campaign_org co ON co.id = e.campaign_org_id
+      JOIN people p ON p.id = co.person_id
+      WHERE e.supplier_cpf_cnpj IN (${ph}) AND p.cpf IS NOT NULL AND p.cpf != e.supplier_cpf_cnpj ${year ? `AND e.year=${year}` : ""}
+      GROUP BY e.supplier_cpf_cnpj, p.cpf
+    `;
+    const params: string[] = [];
+    for (let index = 0; index < 4; index++) params.push(...batch);
+    rows.push(...db().prepare(sql).all(...params) as IncidentRow[]);
+  }
+
+  const seen = new Set<string>();
+  for (const anchor of anchorIds) {
+    const person = anchor.length === 11 ? db().prepare("SELECT id FROM people WHERE cpf=?").get(anchor) as { id: number } | undefined : undefined;
+    const partner = anchor.startsWith("soc:") ? partnerById(Number(anchor.slice(4))) : null;
+    const related = partner ? partnerOtherCompanies(partner) : anchor.length === 14 ? companyPartners(anchor) : person ? personCompanies(person.id) : [];
+    for (const relation of related) {
+      const owner = relation.confidence === "documento" && relation.personCpf
+        ? relation.personCpf
+        : relation.href.startsWith("/cnpj/") ? relation.href.split("/").pop()! : `soc:${relation.id}`;
+      const kind: GraphEdgeKind = /ADMIN|DIRETOR|PRESIDENTE/i.test(relation.role || "") ? "administration" : "ownership";
+      const other = anchor.length === 14 ? owner : person && owner !== anchor ? `soc:${relation.id}` : relation.cnpj;
+      const linkKind: GraphEdgeKind = person && owner !== anchor ? "possibleidentity" : kind;
+      const key = `${anchor}|${other}|${linkKind}`;
+      if (anchor === other || seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        anchor, other, kind: linkKind, amountCents: 0, n: 1, anchorIsSource: anchor.length === 14 ? 0 : 1,
+        evidence: { role: relation.role, entryDate: relation.entryDate, collectedAt: relation.collectedAt, url: relation.sourceUrl, partnerId: relation.id },
+      });
     }
   }
   return rows;
 }
-
 type GraphIdentity = { canonical: string; name: string | null; aliases: string[] };
 
 function getGraphIdentity(ids: string[]): Map<string, GraphIdentity> {
   const out = new Map<string, GraphIdentity>();
   const clean = [...new Set(ids.map(digitsOnly).filter((d) => d.length === 11 || d.length === 14))];
   if (clean.length === 0) return out;
-  const ph = clean.map(() => "?").join(", ");
 
   const cnpjOwner = new Map<string, string>();
-  for (const r of db()
-    .prepare(
-      `SELECT DISTINCT c.cnpj, p.cpf FROM campaign_org co
-       JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
-       WHERE c.cnpj IN (${ph}) AND co.cnpj=c.cnpj AND p.cpf IS NOT NULL`
-    )
-    .all(...clean) as Array<{ cnpj: string; cpf: string }>) {
-    if (!cnpjOwner.has(r.cnpj)) cnpjOwner.set(r.cnpj, r.cpf);
+  for (const batch of chunkArray(clean, SQLITE_IN_CHUNK_SIZE)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    for (const row of db()
+      .prepare(
+        `SELECT DISTINCT c.cnpj, p.cpf FROM campaign_org co
+         JOIN companies c ON c.id = co.company_id JOIN people p ON p.id = co.person_id
+         WHERE c.cnpj IN (${placeholders}) AND co.cnpj=c.cnpj AND p.cpf IS NOT NULL`
+      )
+      .all(...batch) as Array<{ cnpj: string; cpf: string }>) {
+      if (!cnpjOwner.has(row.cnpj)) cnpjOwner.set(row.cnpj, row.cpf);
+    }
   }
 
   const cpfs = [...new Set([...clean.filter((d) => d.length === 11), ...cnpjOwner.values()])];
   const byCpf = new Map<string, { name: string | null; cnpjs: Set<string> }>();
-  if (cpfs.length > 0) {
-    const cph = cpfs.map(() => "?").join(", ");
-    for (const r of db()
+  for (const batch of chunkArray(cpfs, SQLITE_IN_CHUNK_SIZE)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    for (const row of db()
       .prepare(
         `SELECT p.cpf, p.canonical_name AS name, c.cnpj
          FROM people p
          LEFT JOIN campaign_org co ON co.person_id = p.id
          LEFT JOIN companies c ON c.id = co.company_id AND c.cnpj=co.cnpj
-         WHERE p.cpf IN (${cph})`
+         WHERE p.cpf IN (${placeholders})`
       )
-      .all(...cpfs) as Array<{ cpf: string; name: string | null; cnpj: string | null }>) {
-      const rec = byCpf.get(r.cpf) ?? { name: r.name, cnpjs: new Set<string>() };
-      if (r.cnpj) rec.cnpjs.add(r.cnpj);
-      byCpf.set(r.cpf, rec);
+      .all(...batch) as Array<{ cpf: string; name: string | null; cnpj: string | null }>) {
+      const record = byCpf.get(row.cpf) ?? { name: row.name, cnpjs: new Set<string>() };
+      if (row.cnpj) record.cnpjs.add(row.cnpj);
+      byCpf.set(row.cpf, record);
     }
   }
-
   for (const id of clean) {
     if (id.length === 11 && byCpf.has(id)) {
       const rec = byCpf.get(id)!;
