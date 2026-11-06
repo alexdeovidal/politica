@@ -172,3 +172,24 @@ parece corrigido na `13.0.3`, mas se for mexer nessa dependência de novo,
 teste sempre `node -e "new (require('better-sqlite3'))(':memory:')"` **e**
 depois `npm run dev` com uso real por um minuto ou dois (o crash do Node 24
 só aparece depois de servir pelo menos uma request, não na abertura).
+
+## Disponibilidade do serviço web
+
+`npm run start` inicia um supervisor HTTP com uma instância reservada para a
+página inicial, busca e indicadores, e duas instâncias para as demais páginas.
+Os processos Next escutam apenas em loopback. `/api/health/live` verifica a
+resposta HTTP sem consultar o banco. Instâncias sem resposta são retiradas do
+atendimento e substituídas, mantendo as outras disponíveis. O Coolify deve usar
+essa rota como healthcheck antes de concluir uma publicação gradual.
+
+Consultas de grafo, caminhos e totais de votos são executadas fora do processo
+HTTP. Os workers de banco têm prazo máximo de 30 segundos (10 para consultas de
+grafo), incluindo espera na fila. O isolamento em subprocesso permite encerrar
+SQLite nativo travado e liberar a fila. Relatórios já salvos podem ser servidos
+enquanto sua atualização é executada.
+
+Verificações locais: `node --test scripts/test-server-supervisor.cjs` e, após a
+compilação dos workers, `node --test scripts/test-isolated-query.cjs`. O primeiro
+simula duas páginas travadas e confirma abertura da home, busca e recuperação.
+A proteção cobre travamentos da aplicação; o servidor e o armazenamento continuam
+sendo compartilhados e não constituem redundância entre máquinas.

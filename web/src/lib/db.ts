@@ -11,7 +11,7 @@ let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
   if (_db) return _db;
-  _db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+  _db = new Database(DB_PATH, { readonly: true, fileMustExist: true, timeout: 250 });
   _db.pragma("query_only = ON");
   _db.function("normalize_public_name", {deterministic:true}, (value:unknown)=>normalizeName(String(value??"")));
   _db.function("public_timestamp", {deterministic:true}, normalizePublicTimestamp);
