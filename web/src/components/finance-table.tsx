@@ -63,6 +63,8 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [data, setData] = useState<FinancePage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => setPage(1), [year]);
@@ -73,6 +75,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
     abort.current = controller;
     const t = setTimeout(() => {
       setLoading(true);
+      setError(null);
       const usp = new URLSearchParams({ scope, id, dir, page: String(page), sort, order });
       if (q.trim()) usp.set("q", q.trim());
       if (year != null) usp.set("year", String(year));
@@ -84,9 +87,14 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
       if (maxCents != null) usp.set("amountMax", String(maxCents));
       if (onlyPoliticianOwned) usp.set("onlyPoliticianOwned", "1");
       fetch(`/api/finance?${usp}`, { signal: controller.signal })
-        .then((r) => r.json())
-        .then((d: FinancePage) => setData(d))
-        .catch(() => {})
+        .then(async (r) => {
+          if (!r.ok) throw new Error("Não foi possível carregar esta consulta. Tente novamente.");
+          return r.json();
+        })
+        .then((d: FinancePage) => { if (!controller.signal.aborted) setData(d); })
+        .catch((e: Error) => {
+          if (!controller.signal.aborted) { setData(null); setError(e.message); }
+        })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
         });
@@ -95,7 +103,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
       clearTimeout(t);
       controller.abort();
     };
-  }, [scope, id, dir, page, q, year, sort, order, dateFrom, dateTo, amountMin, amountMax, onlyPoliticianOwned]);
+  }, [scope, id, dir, page, q, year, sort, order, dateFrom, dateTo, amountMin, amountMax, onlyPoliticianOwned, retry]);
 
   const total = data?.total ?? 0;
   const pageSize = data?.pageSize ?? 25;
@@ -165,6 +173,11 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
           ) : null}
         </button>
       </div>
+
+      {error ? <div role="alert" className="mb-4 flex items-center gap-3">
+        <p>{error}</p>
+        <button type="button" className="btn" onClick={() => setRetry((n) => n + 1)}>Tentar novamente</button>
+      </div> : null}
 
       {filtersOpen ? (
         <Modal title={`filtros — ${counterpartyLabel}`} onClose={() => setFiltersOpen(false)}>
@@ -270,7 +283,7 @@ export function FinanceTable({ title, scope, id, dir, counterpartyLabel, tone, y
         </Modal>
       ) : null}
 
-      {total === 0 && !loading ? (
+      {error ? null : total === 0 && !loading ? (
         <EmptyState
           icon="◌"
           title={activeFilterCount > 0 ? "Nada encontrado para esses filtros." : "Nenhum registro."}

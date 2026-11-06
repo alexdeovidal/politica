@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getFinancePage, type FinanceQuery, type FinanceSort } from "@/lib/queries";
+import { type FinancePage, type FinanceQuery, type FinanceSort } from "@/lib/queries";
+import { isolatedQuery } from "@/lib/isolated-query";
 
 const SORTS: FinanceSort[] = ["amount", "paid", "year", "date", "name"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,5 +46,11 @@ export async function GET(request: Request) {
     amountMaxCents: parseCents(sp.get("amountMax")),
     onlyPoliticianOwned: sp.get("onlyPoliticianOwned") === "1",
   };
-  return NextResponse.json(getFinancePage(params));
+  try {
+    const result = await isolatedQuery<FinancePage>({ mode: "finance-page", params }, request.signal);
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Finance page query failed:", error);
+    return NextResponse.json({ error: "Não foi possível concluir esta consulta financeira. Tente novamente." }, { status: 503 });
+  }
 }
