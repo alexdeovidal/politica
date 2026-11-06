@@ -2105,7 +2105,8 @@ export function getFinancePage(params: FinanceQuery): FinancePage {
     dateCol = "t.receipt_date";
     paidExpr = "NULL";
     politicianOwnedExpr = politicianOwnedExists.replace("%CNPJ_COL%", "t.donor_cpf_cnpj");
-    from = `campaign_donation t JOIN campaign_org co ON co.id = t.campaign_org_id
+    // Start at the indexed person -> campaign mapping, never the nationwide ledger.
+    from = `campaign_org co CROSS JOIN campaign_donation t ON t.campaign_org_id = co.id
             LEFT JOIN company_registry cr ON cr.cnpj = t.donor_cpf_cnpj
             ${PROVENANCE_JOIN}`;
     select = `t.id, t.year AS yr, ${dateCol} AS date, t.amount_cents AS amountCents, ${paidExpr} AS paidCents,
@@ -2121,7 +2122,7 @@ export function getFinancePage(params: FinanceQuery): FinancePage {
     paidExpr = `(SELECT coalesce(sum(x.amount_cents), 0) FROM campaign_expense_payment x
                  WHERE x.campaign_expense_id = t.id)`;
     politicianOwnedExpr = politicianOwnedExists.replace("%CNPJ_COL%", "t.supplier_cpf_cnpj");
-    from = `campaign_expense t JOIN campaign_org co ON co.id = t.campaign_org_id
+    from = `campaign_org co CROSS JOIN campaign_expense t ON t.campaign_org_id = co.id
             LEFT JOIN company_registry cr ON cr.cnpj = t.supplier_cpf_cnpj
             ${PROVENANCE_JOIN}`;
     select = `t.id, t.year AS yr, ${dateCol} AS date, t.amount_cents AS amountCents,

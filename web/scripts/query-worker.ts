@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { getGraphPaths, getGraphNodeNetwork, resolveGraphNode, getPersonVoteResults, type GraphEdge } from "../src/lib/queries";
+import { getGraphPaths, getGraphNodeNetwork, resolveGraphNode, getPersonVoteResults, getFinancePage, type GraphEdge } from "../src/lib/queries";
 
 function run() {
   const d = workerData;
@@ -7,6 +7,7 @@ function run() {
   if (d.mode === "graph-expand") return getGraphNodeNetwork(d.cpfCnpj, d.limit, d.year, d.relation);
   if (d.mode === "graph-node") return { node: resolveGraphNode(d.cpfCnpj) };
   if (d.mode === "person-votes") return getPersonVoteResults(d.personId);
+  if (d.mode === "finance-page") return getFinancePage(d.params);
   if (d.mode !== "network-path") throw new Error("Unknown query mode");
   const start = resolveGraphNode(d.a), end = resolveGraphNode(d.b);
   if (!start || !end) return { missing: true };

@@ -336,7 +336,9 @@ export function runDatabaseWorker<T>(
           fail(error);
           releaseSlot();
         });
-        worker.once("exit", (code) => {
+        // IPC may still have a buffered result when exit fires. Close follows
+        // the channel closing, so large replies are not mistaken for failures.
+        worker.once("close", (code) => {
           if (code !== 0) fail(new Error(`Database worker exited with code ${code}`));
           else if (!settled) fail(new Error("Database worker exited without a result"));
           releaseSlot();
