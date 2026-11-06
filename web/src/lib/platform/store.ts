@@ -9,7 +9,7 @@ export function platformStore(){
   if(connection)return connection;
   const filename=process.env.POLITICA_PLATFORM_DB_PATH || path.join(path.dirname(process.env.ELOSYS_DB_PATH || path.resolve(process.cwd(),"../elosys.db")),"politica-platform.db");
   mkdirSync(/*turbopackIgnore: true*/ path.dirname(filename),{recursive:true});
-  connection=new Database(filename);connection.function("normalize_public_name",{deterministic:true},(value:unknown)=>normalizeName(String(value??"")));connection.pragma("journal_mode=WAL");connection.pragma("busy_timeout=5000");
+  connection=new Database(filename);connection.function("normalize_public_name",{deterministic:true},(value:unknown)=>normalizeName(String(value??"")));connection.pragma("journal_mode=WAL");connection.pragma("busy_timeout=250");
   connection.exec(`CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL,updated_at TEXT NOT NULL,source_url TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS metric(day TEXT NOT NULL,event TEXT NOT NULL,area TEXT NOT NULL,count INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,event,area));
     CREATE TABLE IF NOT EXISTS candidate_profile_access_daily(day TEXT NOT NULL,person_id INTEGER NOT NULL,views INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,person_id));
@@ -28,7 +28,7 @@ export function cached<T>(key:string,maxAge=86400000):T|null {
   const row=platformStore().prepare("SELECT payload,updated_at FROM cache WHERE key=?").get(key) as {payload:string;updated_at:string}|undefined;
   return row && Date.now()-Date.parse(row.updated_at)<maxAge ? JSON.parse(row.payload) as T:null;
 }
-export function cacheResult(key:string,payload:unknown,url:string){platformStore().prepare("INSERT INTO cache VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,source_url=excluded.source_url").run(key,JSON.stringify(payload),new Date().toISOString(),url);}
+export function cacheResult(key:string,payload:unknown,url:string){try { platformStore().prepare("INSERT INTO cache VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,source_url=excluded.source_url").run(key,JSON.stringify(payload),new Date().toISOString(),url); } catch(error) { if ((error as {code?:string}).code !== "SQLITE_BUSY") throw error; console.warn("Cache write deferred: database busy"); }}
 
 export function rateLimit(request:Request,scope:string,max=30):boolean{
   // Platform actions are bounded in persistent minute windows; no raw IP is stored.

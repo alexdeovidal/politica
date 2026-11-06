@@ -1,3 +1,4 @@
+import { personVoteResults } from "@/lib/isolated-query";
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import { ProfileNavigation,ProfileTimeline } from "@/components/platform/profile-overview";
 import { FinanceInsights, ProfileFinanceSummary } from "@/components/platform/profile-finance";
@@ -16,7 +17,7 @@ import {
   getPersonSocialMedia, getPersonAssets, getPersonSignals, getCycleEdgeAmounts,
   getPoliticianDonationNetwork, getDiscourseSignals, getExpenseYears,
   getPersonPhotoUrl, getPersonPhotoProvenance, getPersonEarmarks,
-  getPersonVoteResults, getPersonElectoralCases,
+  getPersonElectoralCases,
 } from "@/lib/queries";
 import { SourceZone } from "@/components/source-zone";
 import { PoliticianNetwork } from "@/components/politician-network";
@@ -364,7 +365,7 @@ async function CandidaciesSection({ personId }: { personId: number }) {
 
 async function VotingSection({ personId }: { personId: number }) {
   await yieldToStreamingRenderer();
-  const results = getPersonVoteResults(personId);
+  const results = await personVoteResults(personId);
   if (results.length === 0) return null;
   let geography: { elections: PersonVoteElectionGeography[]; cityComparison: PersonVoteCityComparison[] } = { elections: [], cityComparison: [] };
   if (results.some((result) => result.sectionCount > 0)) {
@@ -374,7 +375,7 @@ async function VotingSection({ personId }: { personId: number }) {
         "person-vote-trajectory-worker.cjs",
         { personId },
         "candidate election vote geography",
-        { priority: 5, lane: "interactive" },
+        { priority: 5, lane: "interactive", staleWhileRevalidate: true },
       );
     } catch (error) {
       console.error("Unable to load candidate vote trajectory:", error);

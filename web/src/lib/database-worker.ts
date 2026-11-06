@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
+import { fork, type ChildProcess } from "node:child_process";
 import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
 import { cached, cacheResult } from "@/lib/platform/store";
 
@@ -257,9 +258,10 @@ export function runDatabaseWorker<T>(
 
   return new Promise<T>((resolve, reject) => {
     let settled = false;
-    let worker: Worker | null = null;
+    let worker: ChildProcess | null = null;
     let job: QueuedWorker;
-    const signal = options.signal;
+    const deadline = AbortSignal.timeout(30_000);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     const cleanup = () => signal?.removeEventListener("abort", onAbort);
     const fail = (error: Error) => {
       if (settled) return;
@@ -299,7 +301,7 @@ export function runDatabaseWorker<T>(
       cancel: () => {
         if (job.state !== "running" || !worker) return;
         fail(abortedError());
-        void worker.terminate();
+        worker.kill("SIGKILL");
       },
       start: () => {
         if (signal?.aborted) {
@@ -312,7 +314,8 @@ export function runDatabaseWorker<T>(
           return;
         }
         try {
-          worker = new Worker(scriptPath, { workerData });
+          worker = fork(path.join(path.dirname(scriptPath), "database-worker-host.cjs"), [], { execArgv: [], stdio: ["ignore", "inherit", "inherit", "ipc"] });
+          worker.send({ scriptPath, workerData });
         } catch (error) {
           fail(error instanceof Error ? error : new Error("Could not start database worker"));
           releaseSlot();
@@ -382,7 +385,7 @@ export async function runCachedDatabaseWorkerSnapshot<T>(
     return { value: stored.value, stale: true };
   }
 
-  const flightKey = `${cacheKey}:${fingerprint}`;
+  const flightKey = cacheKey;
   let flight = cachedWorkerFlights.get(flightKey) as Promise<T> | undefined;
 
   if (!flight) {

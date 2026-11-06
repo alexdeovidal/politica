@@ -1,9 +1,10 @@
+import { personVoteResults } from "@/lib/isolated-query";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Minus, MapPin, ShieldCheck } from "lucide-react";
 import { TrajectoryReportPrintButton } from "@/components/trajectory-report-print-button";
-import { getPersonHeader, getPersonVoteResults, type PersonVoteResult } from "@/lib/queries";
+import { getPersonHeader, type PersonVoteResult } from "@/lib/queries";
 import { runCachedDatabaseWorker } from "@/lib/database-worker";
 import styles from "./trajectory-report.module.css";
 
@@ -155,7 +156,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
   const header = getPersonHeader(personId);
   if (!header) notFound();
   const candidateName = header.person.canonicalName || "Nome não informado";
-  const candidacies = getPersonVoteResults(personId);
+  const candidacies = await personVoteResults(personId);
   const hasLocalResults = candidacies.some((result) => result.year >= 2012 && result.sectionCount > 0);
   let reportError = false;
   let details: ElectionBreakdown[] = [];
@@ -167,7 +168,7 @@ export default async function ElectoralTrajectoryReportPage({ params }: PageProp
         "person-vote-trajectory-report-worker.cjs",
         { personId },
         "complete candidate vote trajectory report",
-        { priority: 2, lane: "bulk" },
+        { priority: 2, lane: "bulk", staleWhileRevalidate: true },
       );
       if (workerResult.error) throw new Error(workerResult.error);
       details = workerResult.elections;
