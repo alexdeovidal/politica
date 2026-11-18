@@ -84,10 +84,19 @@ test("late tag load, repeated readiness, withdrawal, and blocked storage fail sa
   const id = "G-TEST123456";
   const views = () => commands.filter((command) => command[0] === "event" && command[1] === "page_view");
   try {
-    updateAnalyticsPage(id, "/cpf/12345678900", null);
+    assert.equal(updateAnalyticsPage(id, "/cpf/12345678900", null), false);
     assert.equal(commands.length, 0, "no consent means no Google commands");
-    updateAnalyticsPage(id, "/cpf/12345678900", "granted");
+    assert.equal(updateAnalyticsPage(id, "/cpf/12345678900", "granted"), true);
     assert.equal(views().length, 0, "wait for the tag before measuring");
+    const initialConfig = commands.find((command) => command[0] === "config");
+    assert.equal(initialConfig?.[1], id, "configure the destination before the tag is ready");
+    assert.equal((initialConfig?.[2] as Record<string, unknown>).send_page_view, false);
+    assert.ok(commands.some((command) => command[0] === "set" && command[1] === "send_page_view" && command[2] === false), "automatic views are disabled globally before the script loads");
+    assert.equal(commands[0][0], "consent", "consent is queued before initialization");
+    assert.equal((commands[0][2] as Record<string, unknown>).analytics_storage, "granted");
+    const initialDefaults = commands.find((command) => command[0] === "set" && typeof command[1] === "object")?.[1] as Record<string, unknown>;
+    assert.equal(initialDefaults.page_location, "https://politica007.com.br/cpf/perfil", "safe page defaults precede library execution");
+    assert.doesNotMatch(JSON.stringify(commands), /12345678900/);
     stopAnalytics(id);
     markAnalyticsReady(id);
     assert.equal(views().length, 0, "withdrawal cancels a pending page view");

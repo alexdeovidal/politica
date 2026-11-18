@@ -40,6 +40,7 @@ function AnalyticsControls({ measurementId }: { measurementId?: string }) {
   const previousId = useRef<string | null>(null);
   const [consent, setConsent] = useState<AnalyticsConsent | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [preparedId, setPreparedId] = useState<string | null>(null);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [storageNotice, setStorageNotice] = useState("");
 
@@ -68,7 +69,11 @@ function AnalyticsControls({ measurementId }: { measurementId?: string }) {
   useEffect(() => {
     if (previousId.current && previousId.current !== id) stopAnalytics(previousId.current);
     previousId.current = id;
-    if (hydrated && id) updateAnalyticsPage(id, pathname ?? "/", consent, document.referrer);
+    if (hydrated && id) {
+      // Prepare consent and safe defaults before rendering the external Script.
+      const prepared = updateAnalyticsPage(id, pathname ?? "/", consent, document.referrer);
+      setPreparedId(prepared ? id : null);
+    }
   }, [id, hydrated, consent, pathname]);
 
   function choose(choice: AnalyticsConsent) {
@@ -81,7 +86,7 @@ function AnalyticsControls({ measurementId }: { measurementId?: string }) {
   }
 
   if (!id || !hydrated) return null;
-  const canLoadTag = consent === "granted" && isAnalyticsHost() && getAnalyticsPage(pathname ?? "/") !== null;
+  const canLoadTag = preparedId === id && consent === "granted" && isAnalyticsHost() && getAnalyticsPage(pathname ?? "/") !== null;
 
   return (
     <>

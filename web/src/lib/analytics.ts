@@ -183,27 +183,27 @@ const advertisingDenied = {
   ad_personalization: "denied",
 };
 
-function flushPage(runtime: AnalyticsRuntime) {
-  if (!runtime.ready || !runtime.enabled || !runtime.pending) return;
-  const { key, page, referrer } = runtime.pending;
-  if (!runtime.navigation.claim(key)) {
-    runtime.pending = null;
-    return;
-  }
-
-  const parameters = {
+function pageParameters(runtime: AnalyticsRuntime, { page, referrer }: PendingPage) {
+  return {
     page_location: `${ANALYTICS_ORIGIN}${page.path}`,
     page_title: `${page.title} | Politica007`,
     page_referrer: runtime.previousPage || sanitizeAnalyticsReferrer(referrer),
   };
+}
 
-  // Safe defaults also apply to Google's automatic session/engagement events.
-  googleCommand("set", parameters);
-  googleCommand("set", "ads_data_redaction", true);
-  googleCommand("set", "url_passthrough", false);
-  disableGoogleCollection(runtime.id, false);
+function prepareAnalytics(runtime: AnalyticsRuntime) {
+  if (!runtime.enabled || !runtime.pending || (runtime.configured && runtime.consentGranted)) return;
+
   if (!runtime.configured) {
     googleCommand("consent", "default", { ...advertisingDenied, analytics_storage: "granted" });
+  }
+
+  // Queue these before the tag downloads, including defaults for automatic events.
+  googleCommand("set", pageParameters(runtime, runtime.pending));
+  googleCommand("set", "send_page_view", false);
+  googleCommand("set", "ads_data_redaction", true);
+  googleCommand("set", "url_passthrough", false);
+  if (!runtime.configured) {
     googleCommand("js", new Date());
     googleCommand("config", runtime.id, {
       send_page_view: false,
@@ -220,6 +220,18 @@ function flushPage(runtime: AnalyticsRuntime) {
     googleCommand("consent", "update", { ...advertisingDenied, analytics_storage: "granted" });
   }
   runtime.consentGranted = true;
+  disableGoogleCollection(runtime.id, false);
+}
+
+function flushPage(runtime: AnalyticsRuntime) {
+  if (!runtime.ready || !runtime.enabled || !runtime.pending) return;
+  if (!runtime.navigation.claim(runtime.pending.key)) {
+    runtime.pending = null;
+    return;
+  }
+
+  const parameters = pageParameters(runtime, runtime.pending);
+  googleCommand("set", parameters);
   googleCommand("event", "page_view", { send_to: runtime.id, ...parameters });
   runtime.previousPage = parameters.page_location;
   runtime.pending = null;
@@ -257,17 +269,19 @@ export function stopAnalytics(id: string) {
   removeAnalyticsCookies();
 }
 
-export function updateAnalyticsPage(id: string, pathname: string, consent: AnalyticsConsent | null, referrer = "") {
+export function updateAnalyticsPage(id: string, pathname: string, consent: AnalyticsConsent | null, referrer = ""): boolean {
   const page = getAnalyticsPage(pathname);
   const key = analyticsNavigationKey(pathname);
   if (consent !== "granted" || !page || !key || !isAnalyticsHost()) {
     stopAnalytics(id);
-    return;
+    return false;
   }
   const runtime = runtimeFor(id);
   runtime.enabled = true;
   runtime.pending = { key, page, referrer };
+  prepareAnalytics(runtime);
   flushPage(runtime);
+  return true;
 }
 
 export function markAnalyticsReady(id: string) {
