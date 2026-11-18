@@ -4,16 +4,30 @@ import {notFound} from "next/navigation";
 import {PageHeader} from "@/components/shell/shell-context";
 import {NewsArticleGrid} from "@/components/news-article-card";
 import {getDailyNewsEdition,getDailyNewsArchive} from "@/lib/platform/news";
+import {cache} from "react";
+import {pageMetadata} from "@/lib/seo-metadata";
+import type {Metadata} from "next";
 
 export const dynamic="force-dynamic";
-export const metadata={title:"Arquivo de notícias · Politica007",description:"Consulte edições anteriores e matérias públicas salvas no Politica007."};
+const getEdition=cache(getDailyNewsEdition);
+
+export async function generateMetadata({params}:{params:Promise<{day:string}>}):Promise<Metadata>{
+  const {day}=await params;
+  const feed=await getEdition(day);
+  if(!feed)notFound();
+  return {
+    ...pageMetadata(`Notícias de ${dateLabel(day)} · Politica007`,"Consulte as matérias desta edição do Politica007, com registros públicos, contexto e links para as fontes oficiais.",`/news/${day}`),
+    // Empty archive days are valid navigation states, not search landing pages.
+    ...(feed.articles.length===0?{robots:{index:false,follow:true}}:{}),
+  };
+}
 
 function dateLabel(day:string){return new Date(`${day}T12:00:00-03:00`).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",weekday:"long",day:"numeric",month:"long",year:"numeric"});}
 function timeLabel(value:string|null){if(!value)return null;return new Date(value).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"});}
 
 export default async function NewsEditionPage({params}:{params:Promise<{day:string}>}){
   const {day}=await params;
-  const feed=await getDailyNewsEdition(day);
+  const feed=await getEdition(day);
   if(!feed)notFound();
   const previousEditions=getDailyNewsArchive(day,14);
   return <main className="news-page">

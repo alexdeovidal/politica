@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAiReviewCount, getAiReviews, getAiReviewSummary, type AiVerdict } from "@/lib/queries";
@@ -5,6 +6,10 @@ import { formatBRL } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Análise automatizada de sinais públicos · Politica007", "Consulte revisões automatizadas de sinais encontrados em dados públicos. Classificações podem conter erros e precisam de conferência nas fontes.", "/sinais/analise-ia", await searchParams, {verdict:["bizarro","inconclusivo","plausivel"],rule:RULES.map(rule=>rule.value)});
+}
 
 export const dynamic = "force-dynamic";
 

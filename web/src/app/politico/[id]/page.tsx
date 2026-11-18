@@ -75,12 +75,19 @@ function completedCandidate(result: LiveResult | null, candidacy: ReturnType<typ
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({params,searchParams}:PageProps<"/politico/[id]">){const {id}=await params;const sp=await searchParams;const person=getCachedPersonHeader(Number(id));return shareMetadata(person?.person.canonicalName||"Perfil público",`/politico/${id}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
+export async function generateMetadata({params,searchParams}:PageProps<"/politico/[id]">){
+  const {id}=await params;const personId=Number(id);
+  if(!Number.isSafeInteger(personId)||personId<1)notFound();
+  const person=getCachedPersonHeader(personId);if(!person)notFound();
+  const sp=await searchParams;
+  const name=person.person.canonicalName||"Perfil público";
+  return shareMetadata(name,`/politico/${personId}`,`Consulte candidaturas, bens declarados, receitas, despesas e fontes públicas relacionadas a ${name}.`,typeof sp.ano==="string"&&/^20\d{2}$/.test(sp.ano)?{ano:sp.ano}:{});
+}
 
 export default async function PoliticoPage({ params, searchParams }: PageProps<"/politico/[id]">) {
   const { id } = await params;
   const personId = Number(id);
-  if (!Number.isInteger(personId)) notFound();
+  if (!Number.isSafeInteger(personId) || personId < 1) notFound();
 
   const sp = await searchParams;
   const anoParam = typeof sp.ano === "string" ? Number(sp.ano) : NaN;

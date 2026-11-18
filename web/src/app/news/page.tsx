@@ -3,9 +3,10 @@ import {ArrowUpRight,Newspaper,Search} from "lucide-react";
 import {PageHeader} from "@/components/shell/shell-context";
 import {NewsArticleGrid} from "@/components/news-article-card";
 import {getDailyNews,getDailyNewsArchive,getPreviousNewsEditionDay} from "@/lib/platform/news";
+import {pageMetadata} from "@/lib/seo-metadata";
 
 export const dynamic="force-dynamic";
-export const metadata={title:"Notícias dos dados públicos · Politica007",description:"Matérias sobre registros eleitorais, processos e prestações de contas, com contexto, comparações identificadas e links para fontes."};
+export const metadata=pageMetadata("Notícias dos dados públicos · Politica007","Matérias sobre registros eleitorais, processos e prestações de contas, com contexto, comparações identificadas e links para fontes.","/news");
 
 function dateLabel(day:string){return new Date(`${day}T12:00:00-03:00`).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",weekday:"long",day:"numeric",month:"long",year:"numeric"});}
 function timeLabel(value:string|null){if(!value)return null;return new Date(value).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"});}

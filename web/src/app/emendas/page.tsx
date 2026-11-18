@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import { createHash } from "node:crypto";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -8,6 +9,10 @@ import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchAvatar } from "@/components/search-avatar";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Emendas parlamentares e recursos públicos · Politica007", "Pesquise emendas parlamentares, beneficiários e valores publicados nas fontes oficiais, com filtros por período e parlamentar.", "/emendas", await searchParams, {ano:/^(?:19\d{2}|20\d{2}|2100)$/,anoInicial:/^(?:19\d{2}|20\d{2}|2100)$/,anoFinal:/^(?:19\d{2}|20\d{2}|2100)$/,destino:["todos"],tipo:/^[\p{L} _-]{1,60}$/u});
+}
 
 export const dynamic = "force-dynamic";
 

@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import Link from "next/link";
 import {
@@ -10,6 +11,10 @@ import { formatBRL, formatCnpj } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Sócios de fornecedores de campanhas · Politica007", "Confira possíveis relações societárias de fornecedores de campanhas, com fontes e limites de correspondência de identidade.", "/sinais/socio-fornecedor", await searchParams, {filtro:["self","others"]});
+}
 
 export const dynamic = "force-dynamic";
 

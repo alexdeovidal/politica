@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
+import { Analytics } from "@/components/analytics";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <AppShell aiReviewEnabled={aiReviewEnabled}>
           {children}
         </AppShell>
+        <Analytics measurementId="G-JRQ9NJH4PR" />
       </body>
     </html>
   );

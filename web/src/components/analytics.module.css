@@ -1,0 +1,45 @@
+.preferences {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 900;
+  width: min(420px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  color: var(--fg-1);
+}
+
+.card {
+  width: 100%;
+  padding: 18px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.card p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.card .detail { font-size: 11px; }
+.detail a { color: var(--fg-1); text-decoration: underline; text-underline-offset: 3px; }
+.close { padding: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.actions button, .reopen {
+  min-height: 38px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--fg-1);
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.actions button { flex: 1; }
+.actions button:hover, .reopen:hover { background: var(--hover); border-color: var(--muted); }
+.reopen { min-height: 34px; font-size: 10px; padding: 6px 10px; box-shadow: var(--shadow-card); }
+.storageNotice { max-width: 100%; padding: 10px; border: 1px solid var(--border-2); border-radius: 8px; font-size: 11px; line-height: 1.5; background: var(--surface); }
+
+@media print { .preferences { display: none; } }

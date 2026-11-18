@@ -1,3 +1,6 @@
+import { pageMetadata } from "@/lib/seo-metadata";
 import {NetworkPath} from "@/components/platform/network-path";
 import {PageHeader} from "@/components/shell/shell-context";
+export const metadata = pageMetadata("Relações entre pessoas e empresas · Politica007", "Explore conexões documentadas por doações, contratações e participações empresariais, com fontes e limites de identificação.", "/conexoes");
+
 export default async function Page({searchParams}:PageProps<"/conexoes">){const p=await searchParams,value=(key:string)=>typeof p[key]==="string"?p[key] as string:"";return <main className="platform-page"><PageHeader group="Relações" current="Como estes registros se conectam"/><h1>Como duas pessoas ou empresas se conectam?</h1><p>Explore caminhos documentados por doações, contratações e participações empresariais. Cada possível correspondência de identidade é identificada; vínculos não significam irregularidade.</p><NetworkPath initialA={value("a")} initialB={value("b")} initialYear={value("ano")} initialKind={value("tipo")||"todos"}/></main>;}

@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import Link from "next/link";
 import { auditStatus } from "@/lib/platform/audit-status";
 import { platformStore } from "@/lib/platform/store";
@@ -6,6 +7,10 @@ import { getTseUpdateStatus } from "@/lib/tse-update-status";
 import { TseUpdateStatus } from "@/components/tse-update-status";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { PageHeader } from "@/components/shell/shell-context";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Fontes oficiais e atualização dos dados · Politica007", "Confira as fontes oficiais, a cobertura histórica e as datas de coleta e atualização dos dados públicos do Politica007.", "/fontes", await searchParams, {}, ["execucoes","cobertura","fontes","historico"]);
+}
 
 export const dynamic = "force-dynamic";
 

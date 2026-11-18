@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import Link from "next/link";
 import { Suspense } from "react";
 import { databaseFingerprint, databasePath } from "@/lib/db";
@@ -11,6 +12,10 @@ import {
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Atividade e temas em redes sociais · Politica007", "Consulte publicações públicas e sinais classificados automaticamente, com links originais e contexto para verificação.", "/sinais/discurso", await searchParams, {grupo:["1"],categoria:ALL_CATEGORIES,severidade:["high","medium","low"]});
+}
 
 export const dynamic = "force-dynamic";
 

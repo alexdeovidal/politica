@@ -6,7 +6,7 @@ import "../apuracao.css";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const metadata: Metadata = {title: "Histórico da apuração · Politica007", description: "Consulte versões anteriores dos resultados eleitorais guardadas pelo Politica007."};
+export const metadata: Metadata = {title: "Histórico da apuração · Politica007", description: "Consulte versões anteriores dos resultados eleitorais guardadas pelo Politica007.", alternates: {canonical: "/apuracao/historico"}};
 
 const number = new Intl.NumberFormat("pt-BR");
 const percent = new Intl.NumberFormat("pt-BR", {minimumFractionDigits: 2, maximumFractionDigits: 2});

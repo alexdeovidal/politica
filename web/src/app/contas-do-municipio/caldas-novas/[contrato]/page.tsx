@@ -7,15 +7,28 @@ import { getMunicipalContract, municipalContractFunding, municipalOrgs, municipa
 import styles from "../painel.module.css";
 import { ContractAmendments } from "../amendments";
 import { SupplierInvestigation } from "../supplier-investigation";
+import { cache } from "react";
+import { pageMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Ficha de contrato · Contas de Caldas Novas | Politica007" };
+const getContract = cache(getMunicipalContract);
+export async function generateMetadata({params}:PageProps<"/contas-do-municipio/caldas-novas/[contrato]">){
+  const {contrato}=await params;
+  if(!/^\d{14}-2-\d{1,12}-\d{4}$/.test(contrato))notFound();
+  const row=getContract(contrato.replace(/-(\d{4})$/,"/$1"));
+  if(row===undefined)notFound();
+  return pageMetadata(
+    `Contrato ${row?.number||contrato} — Caldas Novas | Politica007`,
+    row?.title?.slice(0,180)||"Confira o contrato, o órgão, os valores e os documentos oficiais publicados para Caldas Novas.",
+    `/contas-do-municipio/caldas-novas/${contrato}`,
+  );
+}
 const date = (value: string | null) => value ? value.slice(0, 10).split("-").reverse().join("/") : "Não informado";
 
 export default async function MunicipalContractPage({ params }: PageProps<"/contas-do-municipio/caldas-novas/[contrato]">) {
   const { contrato } = await params;
   if (!/^\d{14}-2-\d{1,12}-\d{4}$/.test(contrato)) notFound();
-  const row = getMunicipalContract(contrato.replace(/-(\d{4})$/, "/$1"));
+  const row = getContract(contrato.replace(/-(\d{4})$/, "/$1"));
   if (row === undefined) notFound();
   const tender = row?.tender?.match(/^(\d{14})-1-(\d+)\/(\d{4})$/);
   const funding = tender && row?.tender ? municipalContractFunding(row.tender) : null;

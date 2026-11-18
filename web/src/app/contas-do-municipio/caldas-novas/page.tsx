@@ -10,9 +10,12 @@ import styles from "./painel.module.css";
 import { PaidStreetParking } from "./paid-street-parking";
 import { AmendmentSignals } from "./amendments";
 import { SupplierInvestigationSignals } from "./supplier-investigation";
+import { listingMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Contas do Município · Caldas Novas | Politica007" };
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Contas do Município · Caldas Novas | Politica007", "Consulte receitas, despesas, contratos e fornecedores de Caldas Novas, com documentos oficiais e datas de atualização dos registros.", "/contas-do-municipio/caldas-novas", await searchParams, {org:Object.keys(municipalOrgs),tema:["area-azul"],fonte:/^\d{1,6}$/,de:/^\d{4}-\d{2}-\d{2}$/,ate:/^\d{4}-\d{2}-\d{2}$/}, ["pagina"]);
+}
 
 function money(value: string) {
   if (!/^\d{1,12}([.,]\d{1,2})?$/.test(value)) return null;

@@ -1,7 +1,10 @@
+import { pageMetadata } from "@/lib/seo-metadata";
 import Link from "next/link";
 import {db} from "@/lib/db";
 import {formatBRL} from "@/lib/format";
 import {PageHeader} from "@/components/shell/shell-context";
+export const metadata = pageMetadata("Fontes de relações financeiras eleitorais · Politica007", "Confira os registros e fontes que sustentam uma relação entre doadores, candidaturas e fornecedores de campanhas.", "/relacao");
+
 export const dynamic="force-dynamic";
 export default async function RelationPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
  const params=await searchParams,source=params.de||"",target=params.para||"",kind=params.tipo||"",year=Number(params.ano)||0,page=Math.max(1,Math.min(10000,Number(params.pagina)||1));

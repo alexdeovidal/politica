@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import {getTseUpdateStatus} from "@/lib/tse-update-status";
 import Link from "next/link";
 import {SignalMethodology} from "@/components/platform/signal-methodology";
@@ -6,6 +7,10 @@ import { entityHref, formatBRL, formatCpfCnpj } from "@/lib/format";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Ciclos de recursos eleitorais · Politica007", "Examine ciclos identificados em registros de doações eleitorais, com metodologia, períodos e fontes. Um sinal não comprova irregularidade.", "/sinais/doacao-circular", await searchParams, {severity:["high","medium","low"],sort:["amount","path_length"]});
+}
 
 export const dynamic = "force-dynamic";
 

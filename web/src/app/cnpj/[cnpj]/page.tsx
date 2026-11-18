@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic";
 
 const getCachedEntityProfile = cache((digits: string, year?: number) => getEntityProfile(digits, { year }));
 
-export async function generateMetadata({params,searchParams}:PageProps<"/cnpj/[cnpj]">){const {cnpj}=await params;const sp=await searchParams;const profile=getCachedEntityProfile(digitsOnly(cnpj),undefined);return shareMetadata(profile?.displayName||"Empresa",`/cnpj/${cnpj}`,undefined,typeof sp.ano==="string"?{ano:sp.ano}:{});}
+export async function generateMetadata({params,searchParams}:PageProps<"/cnpj/[cnpj]">){
+  const {cnpj}=await params;const digits=digitsOnly(cnpj);if(digits.length!==14)notFound();
+  const personId=candidatePersonId(digits);if(personId!==null)redirect(`/politico/${personId}`);
+  const sp=await searchParams;const profile=getCachedEntityProfile(digits,undefined);
+  const name=profile?.displayName||"Empresa";
+  return shareMetadata(name,`/cnpj/${digits}`,`Consulte os registros públicos, relações empresariais e participações em contas de campanha associados a ${name}.`,typeof sp.ano==="string"&&/^20\d{2}$/.test(sp.ano)?{ano:sp.ano}:{});
+}
 
 export default async function CnpjPage({ params, searchParams }: PageProps<"/cnpj/[cnpj]">) {
   const { cnpj } = await params;

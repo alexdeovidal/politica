@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import { Suspense } from "react";
 import { databaseFingerprint, databaseFingerprintsMatch, databasePath } from "@/lib/db";
 import { cached, cacheResult } from "@/lib/platform/store";
@@ -15,6 +16,10 @@ import { ExpenseCategorySelect } from "@/components/ui/expense-category-select";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CategoryExpenseRow } from "@/components/category-expense-row";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Despesas eleitorais fora do padrão · Politica007", "Explore comparações de despesas de campanha por categoria e período. Consulte os registros oficiais e os limites da análise estatística.", "/sinais/despesa-desproporcional", await searchParams, {ano:/^(?:19\d{2}|20\d{2}|2100)$/,categoria:EXPENSE_CATEGORIES});
+}
 
 export const dynamic = "force-dynamic";
 

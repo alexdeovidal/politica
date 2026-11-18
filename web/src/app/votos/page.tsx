@@ -1,5 +1,8 @@
+import { pageMetadata } from "@/lib/seo-metadata";
 import { PageHeader } from "@/components/shell/shell-context";
 import { ElectionVoteExplorer } from "@/components/election-vote-explorer";
+
+export const metadata = pageMetadata("Histórico eleitoral e votos por local · Politica007", "Consulte resultados eleitorais por ano, cargo, estado, município, zona e seção, com dados publicados pelo TSE.", "/votos");
 
 export default async function ElectionVotesPage({ searchParams }: PageProps<"/votos">) {
   const search = await searchParams;

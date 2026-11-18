@@ -140,11 +140,15 @@ function PrintBar({ votes, max }: { votes: number; max: number }) {
 
 export async function generateMetadata({ params }: PageProps<"/politico/[id]/relatorio-trajetoria">): Promise<Metadata> {
   const { id } = await params;
-  const header = getPersonHeader(Number(id));
+  const personId = Number(id);
+  if (!Number.isSafeInteger(personId) || personId < 1) notFound();
+  const header = getPersonHeader(personId);
+  if (!header) notFound();
   const name = header?.person.canonicalName || "candidato";
   return {
     title: `Relatório de trajetória eleitoral — ${name} | Politica007`,
     description: `Relatório completo de votos e distribuição territorial de ${name}.`,
+    alternates: { canonical: `/politico/${personId}/relatorio-trajetoria` },
   };
 }
 

@@ -1,6 +1,9 @@
+import { pageMetadata } from "@/lib/seo-metadata";
 import { Suspense } from "react";
 import { GraphCanvas } from "@/components/graph-canvas";
 import { PageHeader } from "@/components/shell/shell-context";
+
+export const metadata = pageMetadata("Rede de pessoas, empresas e recursos eleitorais · Politica007", "Explore visualmente relações entre pessoas, empresas, doações e despesas eleitorais, com acesso às fontes de cada registro.", "/grafo");
 
 export const dynamic = "force-dynamic";
 

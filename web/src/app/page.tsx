@@ -5,6 +5,25 @@ import { TopSuppliers } from "@/components/top-suppliers";
 import { HomeMetrics, HomeYearSelect } from "@/components/home-overview";
 import { PageHeader } from "@/components/shell/shell-context";
 import { ContributionCard } from "@/components/contribution-card";
+import { jsonLd, pageMetadata, PUBLIC_SITE_URL } from "@/lib/seo-metadata";
+
+export const metadata = pageMetadata(
+  "Politica007 — portal independente de dados públicos",
+  "Portal independente para consultar dados públicos eleitorais, candidaturas, empresas e contas de campanha, com fontes identificadas. Não é um serviço oficial do TSE.",
+  "/",
+);
+
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": `${PUBLIC_SITE_URL}/#organization`, name: "Politica007", url: PUBLIC_SITE_URL },
+    {
+      "@type": "WebSite", "@id": `${PUBLIC_SITE_URL}/#website`, name: "Politica007", url: PUBLIC_SITE_URL,
+      description: "Portal independente de consulta de dados públicos eleitorais, com fontes identificadas.",
+      inLanguage: "pt-BR", publisher: { "@id": `${PUBLIC_SITE_URL}/#organization` },
+    },
+  ],
+};
 
 // The homepage contains no server-fetched data; live metrics load on the client.
 // Keep the HTML fully static so a revalidation render never stalls the portal.
@@ -13,6 +32,7 @@ export const revalidate = false;
 export default function Home() {
   return (
     <div className="flex flex-col gap-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(websiteSchema) }} />
       <PageHeader
         group="Politica007"
         current="Visão geral"

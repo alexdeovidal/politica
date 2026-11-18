@@ -1,3 +1,4 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import { Suspense } from "react";
 import Link from "next/link";
 import { runCachedDatabaseWorker } from "@/lib/database-worker";
@@ -8,6 +9,10 @@ import { YearSelect } from "@/components/ui/year-select";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchAvatar } from "@/components/search-avatar";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Patrimônio declarado por candidatos · Politica007", "Consulte bens e evolução patrimonial declarados em eleições, com os períodos e as fontes oficiais para conferência.", "/ranking", await searchParams, {ano:/^(?:19\d{2}|20\d{2}|2100)$/,tipo:["crescimento"]});
+}
 
 export const dynamic = "force-dynamic";
 

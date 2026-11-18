@@ -1,9 +1,14 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import Link from "next/link";
 import { Suspense } from "react";
 import { databasePath } from "@/lib/db";
 import { runDatabaseWorker } from "@/lib/database-worker";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Publicações públicas e temas · Politica007", "Consulte publicações públicas associadas a registros eleitorais e explore temas, períodos e links para as fontes originais.", "/redes", await searchParams, {tema:["saude","educacao","seguranca","economia","ambiente"],pessoa:/^[1-9]\d{0,6}$/,de:/^\d{4}-\d{2}-\d{2}$/,ate:/^\d{4}-\d{2}-\d{2}$/});
+}
 
 export const dynamic = "force-dynamic";
 

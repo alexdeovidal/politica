@@ -7,14 +7,37 @@ import {NewsArticleImage} from "@/components/news-article-image";
 import {NewsStoryCover,OPENING_NEWS_SLUG} from "@/components/news-story-cover";
 import {getNewsArticle} from "@/lib/platform/news";
 import {shareMetadata} from "@/lib/platform/share";
+import {jsonLd,PUBLIC_SITE_URL} from "@/lib/seo-metadata";
 
 type Params={params:Promise<{day:string;slug:string}>};
-export async function generateMetadata({params}:Params){const {day,slug}=await params;const article=await getNewsArticle(day,slug);return article?shareMetadata(article.title,`/news/${day}/${slug}`,article.summary):{title:"Notícia não encontrada · Politica007"};}
+function assertPublishedDay(day:string){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))notFound();
+  const timestamp=Date.parse(`${day}T12:00:00Z`);
+  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()).map(part=>[part.type,part.value]));
+  const today=`${parts.year}-${parts.month}-${parts.day}`;
+  if(!Number.isFinite(timestamp)||new Date(timestamp).toISOString().slice(0,10)!==day||day>today)notFound();
+}
+export async function generateMetadata({params}:Params){
+  const {day,slug}=await params;assertPublishedDay(day);const article=await getNewsArticle(day,slug);if(!article)notFound();
+  const metadata=shareMetadata(article.title,`/news/${day}/${slug}`,article.summary);
+  return {...metadata,openGraph:{...metadata.openGraph,type:"article" as const,publishedTime:article.publishedAt,authors:[PUBLIC_SITE_URL]}};
+}
 
 export default async function NewsArticlePage({params}:Params){
-  const {day,slug}=await params;const article=await getNewsArticle(day,slug);if(!article)notFound();
+  const {day,slug}=await params;assertPublishedDay(day);const article=await getNewsArticle(day,slug);if(!article)notFound();
   const published=new Date(article.publishedAt).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"long",timeStyle:"short"});
+  const articleUrl=`${PUBLIC_SITE_URL}/news/${day}/${slug}`;
+  const articleSchema={
+    "@context":"https://schema.org","@type":"NewsArticle","@id":`${articleUrl}#article`,
+    url:articleUrl,mainEntityOfPage:articleUrl,headline:article.title,description:article.summary,
+    datePublished:article.publishedAt,inLanguage:"pt-BR",articleSection:article.category,
+    author:{"@type":"Organization",name:"Politica007",url:PUBLIC_SITE_URL},
+    publisher:{"@type":"Organization","@id":`${PUBLIC_SITE_URL}/#organization`,name:"Politica007",url:PUBLIC_SITE_URL},
+    image:[`${PUBLIC_SITE_URL}/api/share?${new URLSearchParams({path:`/news/${day}/${slug}`})}`],
+    citation:article.sources.map(source=>source.url),
+  };
   return <main className="news-article-page">
+    <script type="application/ld+json" dangerouslySetInnerHTML={{__html:jsonLd(articleSchema)}}/>
     <PageHeader group="Notícias" current={article.personName}/>
     <Link className="news-back" href={`/news/${day}`}><ArrowLeft size={15}/> Voltar à edição de {new Date(`${day}T12:00:00-03:00`).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo",day:"numeric",month:"long"})}</Link>
     <article className="news-article">

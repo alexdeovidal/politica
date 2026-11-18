@@ -2,8 +2,15 @@ import { notFound, redirect } from "next/navigation";
 import { candidatePersonId, getEntityProfile, getExpenseYears } from "@/lib/queries";
 import { EntityProfileView } from "@/components/entity-profile-view";
 import { digitsOnly } from "@/lib/normalize";
+import { pageMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({params}:PageProps<"/cpf/[cpf]">){
+  const digits=digitsOnly((await params).cpf);if(digits.length!==11)notFound();
+  const personId=candidatePersonId(digits);if(personId!==null)redirect(`/politico/${personId}`);
+  return pageMetadata("Pessoa física — registros públicos · Politica007","Consulte registros públicos de doações e despesas eleitorais associados a esta pessoa, com as respectivas fontes para conferência.",`/cpf/${digits}`);
+}
 
 export default async function CpfPage({ params, searchParams }: PageProps<"/cpf/[cpf]">) {
   const { cpf } = await params;

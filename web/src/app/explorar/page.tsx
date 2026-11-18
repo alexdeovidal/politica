@@ -1,9 +1,14 @@
+import { listingMetadata } from "@/lib/seo-metadata";
 import { createHash } from "node:crypto";
 import { Suspense } from "react";
 import Link from "next/link";
 import { runCachedDatabaseWorker } from "@/lib/database-worker";
 import type { ExploreFilters as Filters } from "@/lib/platform/discovery";
 import { PageHeader } from "@/components/shell/shell-context";
+
+export async function generateMetadata({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  return listingMetadata("Candidaturas por cidade e eleição · Politica007", "Encontre candidaturas por nome, município, estado, cargo e ano. Consulte a trajetória eleitoral e os registros oficiais disponíveis.", "/explorar", await searchParams, {ano:/^(?:19\d{2}|20\d{2}|2100)$/,uf:/^[A-Z]{2}$/,cargo:/^[\p{L} _-]{1,60}$/u,cidade:/^[\p{L} .\x27-]{1,80}$/u});
+}
 
 export const dynamic = "force-dynamic";
 
