@@ -88,3 +88,20 @@
   .contractGrid { grid-template-columns: 1fr; }
   .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.trailSteps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.trailSteps button { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:10px 9px; border:1px solid var(--border-1); border-radius:9px; font-size:12px; font-weight:650; text-align:left; cursor:pointer; }
+.trailSteps button svg { flex-shrink:0; }
+.trailSteps button[aria-current="step"], .trailSteps button:hover { border-color:var(--green); color:var(--green); background:color-mix(in srgb,var(--green) 11%,var(--surface)); }
+.trailGap { font-size:18px; color:var(--muted); line-height:1; }
+.trailBlue { --green: var(--blue); }
+.trailSteps .trailBlue { color:var(--blue); border-color:color-mix(in srgb,var(--blue) 45%,var(--border-1)); }
+.trailContext { margin:12px 0; font-size:13px; color:var(--muted); }
+.trailList { display:grid; gap:6px; }
+.trailList button { width:100%; display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--border-1); border-radius:9px; text-align:left; cursor:pointer; }
+.trailList button[aria-pressed="true"], .trailList button:hover { border-color:var(--green); background:color-mix(in srgb,var(--green) 9%,var(--surface)); }
+.trailList strong { font-size:14px; overflow-wrap:anywhere; }
+.trailList small { display:block; font-size:11px; color:var(--muted); }
+.trailList b { color:var(--green); font-size:13px; white-space:nowrap; }
+@media(max-width:880px) { .trailSteps { grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); } }
+@media(max-width:450px) { .trailSteps { grid-template-columns:repeat(2,minmax(0,1fr)); } }

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowRight, Building2, ChartPie, CircleDollarSign, Files, Landmark, Network, SearchCheck } from "lucide-react";
+import { ArrowDownRight, ArrowRight, Building2, ChartPie, CircleDollarSign, Files, Landmark, Network, SearchCheck, Route } from "lucide-react";
 import { formatBRL } from "@/lib/format";
-import type { ContractGroup, FiscalSnapshot, FiscalValue } from "@/lib/municipal-accounts";
+import type { ContractGroup, FiscalSnapshot, FiscalValue, FlowFunding, FlowRevenue } from "@/lib/municipal-accounts";
 import styles from "./painel.module.css";
+import { MoneyTrail } from "./money-trail";
 
-type Mode = "budget" | "network" | "map";
+type Mode = "trail" | "budget" | "network" | "map";
 type Tile = { name: string; amount: number };
 type Area = { top: number; left: number; width: number; height: number };
 const shortMoney = (cents: number) => new Intl.NumberFormat("pt-BR", {
@@ -44,11 +45,12 @@ function RankedValues({ values, total, selected, onSelect }: {
   </li>)}</ul>;
 }
 
-export function MunicipalDashboard({ reports, groups, labels, path, resultCount, scope, filterParams }: {
+export function MunicipalDashboard({ reports, groups, labels, path, resultCount, scope, filterParams, flowRevenue, funding, flowFilters, initialTrailStep }: {
   reports: FiscalSnapshot[]; groups: ContractGroup[]; labels: Record<string, string>;
   path: string; resultCount: number; scope: string; filterParams: Record<string, string>;
+  flowRevenue: FlowRevenue[]; funding: FlowFunding[]; flowFilters: Record<string, string>; initialTrailStep: 0 | 4;
 }) {
-  const [mode, setMode] = useState<Mode>(reports.length ? "budget" : "network");
+  const [mode, setMode] = useState<Mode>("trail");
   const [year, setYear] = useState(reports[0]?.year);
   const [selectedValue, setSelectedValue] = useState<{ name: string; amount: number | null; group: string; total: number }>();
   const [selectedOrg, setOrg] = useState("");
@@ -75,6 +77,7 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
   const fiscalDescription = report ? `Acumulado até o ${report.period}º bimestre de ${report.year} · RREO · sem operações intraorçamentárias` : "";
   const focus = selectedValue ?? (report && { name: "Despesas liquidadas", amount: report.settled, group: "Execução orçamentária", total: report.settled });
   const tabs = [
+    { id: "trail", label: "Caminho do dinheiro", Icon: Route },
     { id: "budget", label: "Orçamento", Icon: Landmark },
     { id: "network", label: "Rede de contratos", Icon: Network },
     { id: "map", label: "Mapa de proporções", Icon: ChartPie },
@@ -123,7 +126,9 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
         </button>)}
       </nav>
 
-      {mode === "network" ? <div className={styles.content}>
+      {mode === "trail" ? <MoneyTrail key={`${initialTrailStep}-${flowFilters.fonte}`} initialStep={initialTrailStep}
+        report={report} revenue={flowRevenue.find(row=>row.year===report?.year && row.period===report.period)}
+        funding={funding} companies={groups} path={path} filters={flowFilters} scope={scope} resultCount={resultCount} /> : mode === "network" ? <div className={styles.content}>
         <div className={styles.sectionHead}>
           <div><h2>Quem contrata e quem fornece</h2><p>{scope} · {number.format(resultCount)} registros. A rede considera contratos iniciais com valor positivo.</p></div>
           <span className={styles.source}>Fonte · PNCP</span>

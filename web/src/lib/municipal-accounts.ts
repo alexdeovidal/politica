@@ -34,8 +34,27 @@ function read<T>(query: (db: Database.Database) => T): T | null {
 
 export const municipalPageSize = 20;
 export type MunicipalFilters = {
-  q: string; org: string; unit: string; from: string; to: string; min: number | null; max: number | null; page: number;
+  q: string; org: string; unit: string; from: string; to: string; min: number | null; max: number | null; page: number; funding?: number; cnpj?: string;
 };
+
+export type FlowRevenue = { year: number; period: number; url: string; items: { name: string; group: string; amount: number }[] };
+export type FlowFunding = { id: number; name: string; count: number };
+
+export function municipalFlowRevenue() {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='municipal_flow_revenue'").get()) return [];
+    return (db.prepare("SELECT payload FROM municipal_flow_revenue ORDER BY year DESC").all() as {payload:string}[])
+      .map(row => JSON.parse(row.payload) as FlowRevenue);
+  }) ?? [];
+}
+
+export function municipalContractFunding(tender: string) {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='municipal_flow_funding'").get()) return null;
+    const row = db.prepare("SELECT checked,payload FROM municipal_flow_funding WHERE tender=?").get(tender) as {checked:string;payload:string} | undefined;
+    return row ? { checked: row.checked, sources: JSON.parse(row.payload) as {id:number;name:string}[] } : null;
+  });
+}
 
 export type FiscalValue = { name: string; amount: number | null };
 export type FiscalSnapshot = {
@@ -58,6 +77,7 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
   return read(db => {
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='contract'").get()) return null;
     const terms: string[] = [], params: (string | number)[] = [];
+    const hasFunding = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='municipal_flow_source'").get());
     if (filters.q) {
       const q = filters.q.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
       terms.push("instr(search_text, ?) > 0");
@@ -65,10 +85,17 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
     }
     if (filters.org) { terms.push("org = ?"); params.push(filters.org); }
     if (filters.unit) { terms.push("unit = ?"); params.push(filters.unit); }
+    if (filters.cnpj) { terms.push("supplier_cnpj = ?"); params.push(filters.cnpj); }
     if (filters.from) { terms.push("published >= ?"); params.push(filters.from); }
     if (filters.to) { terms.push("published <= ?"); params.push(filters.to); }
     if (filters.min !== null) { terms.push("amount_cents >= ?"); params.push(filters.min); }
     if (filters.max !== null) { terms.push("amount_cents <= ?"); params.push(filters.max); }
+    if (filters.funding) {
+      if (hasFunding) {
+        terms.push("EXISTS (SELECT 1 FROM municipal_flow_source s WHERE s.source_id=? AND s.tender=contract.tender)");
+        params.push(filters.funding);
+      } else terms.push("0");
+    }
     const where = terms.length ? "WHERE " + terms.join(" AND ") : "";
     const total = (db.prepare(`SELECT count(*) AS n FROM contract ${where}`).get(...params) as { n: number }).n;
     const totalPages = Math.max(1, Math.ceil(total / municipalPageSize));
@@ -85,7 +112,13 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
     `).all(...params) as ContractGroup[];
     const coverage = db.prepare("SELECT org, count(*) AS months, min(month) AS start, max(month) AS end, max(checked) AS last FROM sync_window GROUP BY org")
       .all() as { org: string; months: number; start: string; end: string; last: string }[];
-    return { rows, total, page, totalPages, coverage, groups };
+    const funding = hasFunding ? db.prepare(`
+      WITH scoped AS (SELECT id,tender FROM contract ${where})
+      SELECT s.source_id AS id,max(s.name) AS name,count(*) AS count
+      FROM scoped c JOIN municipal_flow_source s ON s.tender=c.tender
+      GROUP BY s.source_id ORDER BY count DESC,id
+    `).all(...params) as FlowFunding[] : [];
+    return { rows, total, page, totalPages, coverage, groups, funding };
   });
 }
 

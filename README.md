@@ -460,3 +460,9 @@ resposta válida por contrato. A triagem usa o valor inicial nominal declarado
 e soma acréscimos e supressões identificados separadamente. Termos com
 finalidade ambígua ou mista ficam para conferência. A confirmação dos limites
 do art. 125 exige a base inicial atualizada, o regime e o objeto documentados.
+
+O Caminho do dinheiro usa os últimos 12 meses do RREO Anexo 03 para detalhar
+impostos e repasses, os anexos 01 e 02 para os acumulados do exercício e as
+fontes orçamentárias declaradas no PNCP para filtrar contratos e fornecedores
+pelo identificador da contratação. Essas fontes não estabelecem que uma
+arrecadação específica financiou um pagamento.

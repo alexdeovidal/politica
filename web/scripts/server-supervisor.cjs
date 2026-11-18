@@ -111,7 +111,7 @@ if (require.main === module) {
   let stopping = false;
   const syncMunicipality = (only) => {
     if (process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
-    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs', 'sync-caldas-suppliers.mjs', 'sync-caldas-political-links.mjs', 'sync-caldas-amendments.mjs']) {
+    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs', 'sync-caldas-suppliers.mjs', 'sync-caldas-political-links.mjs', 'sync-caldas-amendments.mjs', 'sync-caldas-funding.mjs']) {
       if ((only && script !== only) || collectors.has(script)) continue;
       const collector = spawn(process.execPath, [path.join(__dirname, script)], { stdio: 'inherit' });
       collectors.set(script, collector);

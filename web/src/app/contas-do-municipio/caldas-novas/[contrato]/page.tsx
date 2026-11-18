@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink, FileCheck2 } from "lucide-react";
 import { PageHeader } from "@/components/shell/shell-context";
 import { formatBRL } from "@/lib/format";
-import { getMunicipalContract, municipalOrgs, municipalPath } from "@/lib/municipal-accounts";
+import { getMunicipalContract, municipalContractFunding, municipalOrgs, municipalPath } from "@/lib/municipal-accounts";
 import styles from "../painel.module.css";
 import { ContractAmendments } from "../amendments";
 import { SupplierInvestigation } from "../supplier-investigation";
@@ -18,6 +18,7 @@ export default async function MunicipalContractPage({ params }: PageProps<"/cont
   const row = getMunicipalContract(contrato.replace(/-(\d{4})$/, "/$1"));
   if (row === undefined) notFound();
   const tender = row?.tender?.match(/^(\d{14})-1-(\d+)\/(\d{4})$/);
+  const funding = tender && row?.tender ? municipalContractFunding(row.tender) : null;
   const amount = row?.amount_cents == null ? null : formatBRL(row.amount_cents);
 
   return <div className={styles.dashboard}>
@@ -51,6 +52,15 @@ export default async function MunicipalContractPage({ params }: PageProps<"/cont
           </a>}
         </section>
       </div>
+
+      <section className="card p-5">
+        <h2 className="text-lg font-semibold">Origem declarada do recurso</h2>
+        {funding?.sources.length ? <ul className="my-2 flex flex-wrap gap-2 text-sm">{funding.sources.map(source =>
+          <li key={source.id} className="rounded border border-[var(--border-1)] px-3 py-1">{source.name}</li>)}</ul> :
+          <p className="my-2 text-sm">{funding ? "O PNCP retornou a contratação sem fonte orçamentária cadastrada." : "Fonte orçamentária ainda não disponível nesta ficha."}</p>}
+        <p className="text-sm text-[var(--muted)]">A fonte declarada pertence à contratação. A identificação do imposto específico e do pagamento exige conciliação com a execução orçamentária.</p>
+        {tender && <a className="source-link mt-2 inline-block" href={`https://pncp.gov.br/app/editais/${tender[1]}/${tender[3]}/${Number(tender[2])}`}>Consultar contratação no PNCP</a>}
+      </section>
 
       <section className="card p-5">
         <h2 className="text-lg font-semibold">Da assinatura ao pagamento</h2>

@@ -3,7 +3,7 @@ import Form from "next/form";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { formatBRL } from "@/lib/format";
-import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, municipalOrgs, municipalPath, repeatedContractSignals } from "@/lib/municipal-accounts";
+import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, municipalFlowRevenue, municipalOrgs, municipalPath, repeatedContractSignals } from "@/lib/municipal-accounts";
 import { MunicipalDashboard } from "./painel";
 import { SearchCheck } from "lucide-react";
 import styles from "./painel.module.css";
@@ -27,18 +27,21 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   const org = Object.hasOwn(municipalOrgs, input("org")) ? input("org") : "";
   const q = input("q"), from = date("de"), to = date("ate");
   const unit = input("unidade");
+  const source = /^\d{1,6}$/.test(input("fonte")) ? Number(input("fonte")) : undefined;
+  const cnpj = /^\d{14}$/.test(input("cnpj")) ? input("cnpj") : "";
   const minInput = input("min"), maxInput = input("max");
   const min = money(minInput), max = money(maxInput);
   const page = /^\d{1,5}$/.test(input("pagina")) ? Math.max(1, Number(input("pagina"))) : 1;
   const invalid = Boolean((from && to && from > to) || (minInput && min === null) ||
     (maxInput && max === null) || (min !== null && max !== null && min > max));
-  const result = invalid ? null : listMunicipalContracts({ q, org, unit, from, to, min, max, page });
+  const result = invalid ? null : listMunicipalContracts({ q, org, unit, from, to, min, max, page, funding: source, cnpj });
   const fiscal = municipalFiscalReports();
   const signals = result ? concentrationSignals() : [];
+  const flowFilters = { q, org, unidade: unit, de: from, ate: to, min: minInput, max: maxInput, fonte: source ? String(source) : "", cnpj };
   const repeats = result ? repeatedContractSignals() : [];
   const hrefFor = (p: number) => {
     const next = new URLSearchParams();
-    for (const [key, value] of Object.entries({ q, org, unidade: unit, de: from, ate: to, min: minInput, max: maxInput })) {
+    for (const [key, value] of Object.entries(flowFilters)) {
       if (value) next.set(key, value);
     }
     if (p > 1) next.set("pagina", String(p));
@@ -48,7 +51,9 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   return <div className="flex flex-col gap-6">
     <PageHeader group="Contas do Município" current="Caldas Novas" />
     <MunicipalDashboard reports={fiscal} groups={result?.groups ?? []} labels={municipalOrgs} path={municipalPath}
-      resultCount={result?.total ?? 0} scope={q || org || unit || from || to || min !== null || max !== null ? "Filtros da busca" : "Todo o acervo coletado"}
+      resultCount={result?.total ?? 0} scope={Object.values(flowFilters).some(Boolean) ? "Filtros da busca" : "Todo o acervo coletado"}
+      flowRevenue={municipalFlowRevenue()} funding={result?.funding ?? []} flowFilters={flowFilters}
+      initialTrailStep={input("etapa") === "fornecedores" ? 4 : 0}
       filterParams={{ de: from, ate: to, min: minInput, max: maxInput }} />
 
     {result && <section id="sinais" className="card scroll-mt-20 p-4 sm:p-6">
@@ -93,7 +98,13 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
 
     <section id="buscar-contratos" className="card scroll-mt-20 p-4 sm:p-6">
       <h2 className="section-title">Buscar contratos</h2>
+      {(source || cnpj) && <p className="mt-2 text-sm">
+        {source ? `Fonte orçamentária: ${result?.funding.find(row => row.id === source)?.name ?? source}` : ""}
+        {source && cnpj ? " · " : ""}{cnpj ? `CNPJ do fornecedor: ${cnpj}` : ""}
+      </p>}
       <Form action={municipalPath} className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {source && <input type="hidden" name="fonte" value={source} />}
+        {cnpj && <input type="hidden" name="cnpj" value={cnpj} />}
         {unit && <label className="flex flex-col gap-2 text-sm sm:col-span-2">Unidade compradora
           <input className="input" name="unidade" defaultValue={unit} maxLength={160} />
         </label>}
