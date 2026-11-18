@@ -115,7 +115,7 @@ if (require.main === module) {
     collector.once('close', () => { collector = undefined; });
   };
   const firstSync = setTimeout(syncMunicipality, 10_000).unref();
-  const syncInterval = setInterval(syncMunicipality, 6 * 3600_000).unref();
+  const syncInterval = setInterval(syncMunicipality, 30 * 60_000).unref();
   const stop = () => {
     clearTimeout(firstSync);
     clearInterval(syncInterval);

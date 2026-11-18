@@ -23,6 +23,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS sync_window (
     org TEXT NOT NULL, month TEXT NOT NULL, checked TEXT NOT NULL, PRIMARY KEY(org, month)
   );
+  CREATE TABLE IF NOT EXISTS sync_pause (id INTEGER PRIMARY KEY CHECK(id = 1), until_ms INTEGER NOT NULL);
 `);
 
 const normalize = value => value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -82,6 +83,15 @@ async function collect(org, start, end) {
     const response = await fetch("https://pncp.gov.br/api/consulta/v1/contratos?" + query, {
       signal: AbortSignal.timeout(20_000),
     });
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const requested = /^\d+$/.test(retryAfter ?? "")
+        ? Date.now() + Number(retryAfter) * 1000 : (Date.parse(retryAfter ?? "") || 0);
+      const until = Math.max(Date.now() + 30 * 60_000, requested);
+      db.prepare("INSERT OR REPLACE INTO sync_pause VALUES (1, ?)").run(until);
+      await response.body?.cancel();
+      throw Object.assign(new Error("PNCP limitou as requisições. A coleta será retomada depois da pausa."), { rateLimited: true });
+    }
     if (response.status === 204 && page === 1) return rows;
     if (!response.ok) throw new Error(`PNCP HTTP ${response.status}`);
     const result = await response.json();
@@ -95,7 +105,7 @@ async function collect(org, start, end) {
       rows.push(row);
     }
     if (page >= result.totalPaginas) return rows;
-    await pause(400);
+    await pause(1500);
   }
   throw new Error("Limite de páginas excedido");
 }
@@ -103,22 +113,26 @@ async function collect(org, start, end) {
 try {
   const months = [];
   for (let month = "2025-01-01"; month <= today; month = nextMonth(month)) months.unshift(month);
-  let failed = 0, synced = 0;
-  for (const [index, month] of months.entries()) {
+  const paused = (db.prepare("SELECT until_ms FROM sync_pause WHERE id = 1").get()?.until_ms ?? 0) > clock;
+  let failed = 0, synced = 0, attempted = 0;
+  windows: for (const [index, month] of months.entries()) {
     const lastDay = new Date(Date.parse(nextMonth(month)) - 86400000).toISOString().slice(0, 10);
     const end = lastDay < today ? lastDay : today;
     const refreshHours = index < 2 ? 5 : 24 * 7;
     for (const org of orgs) {
+      if (paused || attempted >= 12) break windows;
       const previous = status.get(org, month);
       if (previous && clock - Date.parse(previous.checked) < refreshHours * 3600000) continue;
+      attempted++;
       try {
         save(org, month, await collect(org, month, end));
         synced++;
       } catch (error) {
         failed++;
         console.warn(`[caldas-novas] ${org} ${month}: ${error.message}`);
+        if (error.rateLimited) break windows;
       }
-      await pause(400);
+      await pause(1500);
     }
   }
   console.log(`[caldas-novas] períodos atualizados: ${synced}; falhas: ${failed}`);

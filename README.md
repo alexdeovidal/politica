@@ -418,7 +418,8 @@ condenação; os detalhes e decisões devem ser lidos no registro oficial.
 A rota `/contas-do-municipio/caldas-novas` lê exclusivamente o SQLite persistente
 `caldas-novas.db`, ao lado de `ELOSYS_DB_PATH` (ou em `MUNICIPAL_DB_PATH`). O
 supervisor executa `node scripts/sync-caldas-novas.mjs` em um processo separado na
-inicialização e a cada seis horas. A coleta é mensal desde janeiro de 2025 para os
+inicialização e a cada 30 minutos, com até 12 janelas por execução e pausa
+persistida quando o PNCP limita as consultas. A coleta é mensal desde janeiro de 2025 para os
 CNPJs da Prefeitura, do DEMAE e do Caldas Prev. Janelas históricas são revistas
 semanalmente. Cada mês só é substituído após baixar todas as páginas com sucesso.
 A tela mostra apenas os períodos já consultados. `MUNICIPAL_SYNC_DISABLED=1`
