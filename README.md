@@ -424,3 +424,9 @@ CNPJs da Prefeitura, do DEMAE e do Caldas Prev. Janelas históricas são revista
 semanalmente. Cada mês só é substituído após baixar todas as páginas com sucesso.
 A tela mostra apenas os períodos já consultados. `MUNICIPAL_SYNC_DISABLED=1`
 desliga a coleta automática para ambientes de teste.
+
+O mesmo supervisor coleta os anexos 01 e 02 do RREO para o painel fiscal.
+Os valores excluem operações intraorçamentárias e usam o último bimestre
+com os dois anexos e com as funções conciliadas ao total liquidado. O relatório
+fiscal e os vínculos entre órgão, unidade e fornecedor do PNCP são apresentados
+em visualizações próprias.

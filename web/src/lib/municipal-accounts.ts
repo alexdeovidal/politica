@@ -34,11 +34,29 @@ function read<T>(query: (db: Database.Database) => T): T | null {
 
 export const municipalPageSize = 20;
 export type MunicipalFilters = {
-  q: string; org: string; from: string; to: string; min: number | null; max: number | null; page: number;
+  q: string; org: string; unit: string; from: string; to: string; min: number | null; max: number | null; page: number;
 };
+
+export type FiscalValue = { name: string; amount: number | null };
+export type FiscalSnapshot = {
+  year: number; period: number; revenue: number; committed: number; settled: number; paid: number;
+  origins: FiscalValue[]; areas: FiscalValue[]; balanceUrl: string; executionUrl: string; collected: string;
+};
+export type ContractGroup = {
+  org: string; unit: string; name: string; cnpj: string | null; amount: number; count: number;
+};
+
+export function municipalFiscalReports() {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_snapshot'").get()) return [];
+    const rows = db.prepare("SELECT payload FROM fiscal_snapshot ORDER BY year DESC").all() as { payload: string }[];
+    return rows.map(row => JSON.parse(row.payload) as FiscalSnapshot);
+  }) ?? [];
+}
 
 export function listMunicipalContracts(filters: MunicipalFilters) {
   return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='contract'").get()) return null;
     const terms: string[] = [], params: (string | number)[] = [];
     if (filters.q) {
       const q = filters.q.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -46,6 +64,7 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
       params.push(q);
     }
     if (filters.org) { terms.push("org = ?"); params.push(filters.org); }
+    if (filters.unit) { terms.push("unit = ?"); params.push(filters.unit); }
     if (filters.from) { terms.push("published >= ?"); params.push(filters.from); }
     if (filters.to) { terms.push("published <= ?"); params.push(filters.to); }
     if (filters.min !== null) { terms.push("amount_cents >= ?"); params.push(filters.min); }
@@ -56,14 +75,25 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
     const page = Math.min(filters.page, totalPages);
     const rows = db.prepare(`SELECT * FROM contract ${where} ORDER BY published DESC, id DESC LIMIT ? OFFSET ?`)
       .all(...params, municipalPageSize, (page - 1) * municipalPageSize) as MunicipalContract[];
+    const groups = db.prepare(`
+      SELECT org, coalesce(unit, '') AS unit, supplier_cnpj AS cnpj,
+             coalesce(max(supplier), 'Fornecedor sem nome empresarial exibido') AS name,
+             sum(amount_cents) AS amount, count(*) AS count
+      FROM contract ${where ? where + " AND" : "WHERE"} initial = 1 AND amount_cents > 0
+      GROUP BY org, coalesce(unit, ''), supplier_cnpj
+      ORDER BY amount DESC, org, unit, cnpj
+    `).all(...params) as ContractGroup[];
     const coverage = db.prepare("SELECT org, count(*) AS months, min(month) AS start, max(month) AS end, max(checked) AS last FROM sync_window GROUP BY org")
       .all() as { org: string; months: number; start: string; end: string; last: string }[];
-    return { rows, total, page, totalPages, coverage };
+    return { rows, total, page, totalPages, coverage, groups };
   });
 }
 
 export function getMunicipalContract(id: string) {
-  return read(db => db.prepare("SELECT * FROM contract WHERE id = ?").get(id) as MunicipalContract | undefined);
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='contract'").get()) return null;
+    return db.prepare("SELECT * FROM contract WHERE id = ?").get(id) as MunicipalContract | undefined;
+  });
 }
 
 export function concentrationSignals() {
@@ -83,4 +113,26 @@ export function concentrationSignals() {
     WHERE t.contracts >= 5 AND t.suppliers >= 3 AND s.amount >= 0.5 * t.total
     ORDER BY s.year DESC, share DESC, s.amount DESC
   `).all() as { org: string; year: string; cnpj: string; supplier: string | null; amount: number; contracts: number; total: number; sample: number; suppliers: number; share: number }[]) ?? [];
+}
+
+export function repeatedContractSignals() {
+  return read(db => db.prepare(`
+    WITH ordered AS (
+      SELECT id, org, unit, supplier, supplier_cnpj, title, amount_cents, published, number,
+        lag(id) OVER context AS previousId,
+        lag(published) OVER context AS previousDate,
+        lag(number) OVER context AS previousNumber
+      FROM contract
+      WHERE initial = 1 AND amount_cents > 0 AND supplier_cnpj IS NOT NULL AND length(trim(title)) >= 25
+      WINDOW context AS (
+        PARTITION BY org, unit, supplier_cnpj, lower(trim(title)), amount_cents
+        ORDER BY published, id
+      )
+    )
+    SELECT * FROM ordered WHERE previousId IS NOT NULL AND number IS NOT NULL AND previousNumber IS NOT NULL
+      AND number <> previousNumber AND julianday(published) - julianday(previousDate) <= 30
+    ORDER BY published DESC, id DESC LIMIT 20
+  `).all() as (Pick<MunicipalContract, "id" | "org" | "unit" | "supplier" | "supplier_cnpj" | "title" | "published" | "number"> & {
+    amount_cents: number; previousId: string; previousDate: string; previousNumber: string;
+  })[]) ?? [];
 }

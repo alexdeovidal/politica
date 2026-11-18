@@ -3,7 +3,10 @@ import Form from "next/form";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
 import { formatBRL } from "@/lib/format";
-import { concentrationSignals, listMunicipalContracts, municipalOrgs, municipalPath } from "@/lib/municipal-accounts";
+import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, municipalOrgs, municipalPath, repeatedContractSignals } from "@/lib/municipal-accounts";
+import { MunicipalDashboard } from "./painel";
+import { SearchCheck } from "lucide-react";
+import styles from "./painel.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contas do Município · Caldas Novas | Politica007" };
@@ -21,16 +24,19 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   const date = (key: string) => /^\d{4}-\d{2}-\d{2}$/.test(input(key)) ? input(key) : "";
   const org = Object.hasOwn(municipalOrgs, input("org")) ? input("org") : "";
   const q = input("q"), from = date("de"), to = date("ate");
+  const unit = input("unidade");
   const minInput = input("min"), maxInput = input("max");
   const min = money(minInput), max = money(maxInput);
   const page = /^\d{1,5}$/.test(input("pagina")) ? Math.max(1, Number(input("pagina"))) : 1;
   const invalid = Boolean((from && to && from > to) || (minInput && min === null) ||
     (maxInput && max === null) || (min !== null && max !== null && min > max));
-  const result = invalid ? null : listMunicipalContracts({ q, org, from, to, min, max, page });
+  const result = invalid ? null : listMunicipalContracts({ q, org, unit, from, to, min, max, page });
+  const fiscal = municipalFiscalReports();
   const signals = result ? concentrationSignals() : [];
+  const repeats = result ? repeatedContractSignals() : [];
   const hrefFor = (p: number) => {
     const next = new URLSearchParams();
-    for (const [key, value] of Object.entries({ q, org, de: from, ate: to, min: minInput, max: maxInput })) {
+    for (const [key, value] of Object.entries({ q, org, unidade: unit, de: from, ate: to, min: minInput, max: maxInput })) {
       if (value) next.set(key, value);
     }
     if (p > 1) next.set("pagina", String(p));
@@ -39,17 +45,54 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
 
   return <div className="flex flex-col gap-6">
     <PageHeader group="Contas do Município" current="Caldas Novas" />
-    <header>
-      <p className="mono-label">Goiás · IBGE 5204508</p>
-      <h1 className="mt-2 text-3xl font-semibold">Contas de Caldas Novas</h1>
-      <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-        Pesquise contratos e instrumentos publicados no PNCP a partir de 2025. Abra a ficha para consultar a fonte e os dados disponíveis de cada registro.
-      </p>
-    </header>
+    <MunicipalDashboard reports={fiscal} groups={result?.groups ?? []} labels={municipalOrgs} path={municipalPath}
+      resultCount={result?.total ?? 0} scope={q || org || unit || from || to || min !== null || max !== null ? "Filtros da busca" : "Todo o acervo coletado"}
+      filterParams={{ de: from, ate: to, min: minInput, max: maxInput }} />
 
-    <section className="card p-4 sm:p-6">
+    {result && <section id="sinais" className="card scroll-mt-20 p-4 sm:p-6">
+      <div className={styles.sectionHead}>
+        <div><h2 className="flex items-center gap-2"><SearchCheck size={21} /> Sinais para investigar</h2>
+          <p>Triagem automática do acervo municipal coletado. Examine os documentos e o contexto antes de concluir sobre uma irregularidade.</p>
+        </div>
+      </div>
+      <div className={styles.split}>
+        <div>
+          <h3>Concentração de contratos</h3>
+          <p className="my-2 text-xs text-[var(--muted)]">Um fornecedor soma pelo menos 50% do valor dos contratos iniciais positivos do mesmo órgão e ano. A amostra exige ao menos cinco contratos e três CNPJs.</p>
+          {signals.length === 0 ? <p className="text-sm">Nenhum caso atingiu a regra no acervo atual.</p> : <ul className="grid gap-3">
+            {signals.map(s => <li key={`${s.org}-${s.year}-${s.cnpj}`} className="rounded-lg border border-[var(--border-1)] p-3 text-sm">
+              <strong>{s.supplier ?? s.cnpj}</strong>
+              <p className="mt-1 text-[var(--muted)]">{municipalOrgs[s.org]} · {s.year} · {s.contracts} de {s.sample} contratos</p>
+              <p className="my-2">{percent.format(s.share)} do valor da amostra. {formatBRL(s.amount)} de {formatBRL(s.total)}.</p>
+              <Link className="source-link" prefetch={false} href={`${municipalPath}?q=${s.cnpj}&org=${s.org}&de=${s.year}-01-01&ate=${s.year}-12-31#buscar-contratos`}>Ver registros do fornecedor</Link>
+            </li>)}
+          </ul>}
+        </div>
+        <div>
+          <h3>Contratos com objeto e valor iguais</h3>
+          <p className="my-2 text-xs text-[var(--muted)]">Contratos iniciais de números diferentes para o mesmo órgão, unidade e CNPJ, com descrição e valor iguais e publicação em até 30 dias. Confira se os itens, períodos ou entregas são distintos.</p>
+          {repeats.length === 0 ? <p className="text-sm">Nenhum par atingiu a regra no acervo atual.</p> : <ul className="grid gap-3">
+            {repeats.map(row => <li key={row.id} className="rounded-lg border border-[var(--border-1)] p-3 text-sm">
+              <strong>{row.supplier ?? row.supplier_cnpj}</strong> · {formatBRL(row.amount_cents)} por contrato
+              <p className="my-2 text-[var(--muted)] line-clamp-2">{row.title}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {[{ id: row.previousId, number: row.previousNumber, day: row.previousDate }, { id: row.id, number: row.number, day: row.published }].map(item =>
+                  <Link className="source-link" key={item.id} prefetch={false} href={`${municipalPath}/${item.id.replace("/", "-")}`}>
+                    {item.number} · {displayDate(item.day)}
+                  </Link>)}
+              </div>
+            </li>)}
+          </ul>}
+        </div>
+      </div>
+    </section>}
+
+    <section id="buscar-contratos" className="card scroll-mt-20 p-4 sm:p-6">
       <h2 className="section-title">Buscar contratos</h2>
       <Form action={municipalPath} className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {unit && <label className="flex flex-col gap-2 text-sm sm:col-span-2">Unidade compradora
+          <input className="input" name="unidade" defaultValue={unit} maxLength={160} />
+        </label>}
         <label className="flex flex-col gap-2 text-sm sm:col-span-2">Objeto, fornecedor, CNPJ ou processo
           <input className="input" name="q" defaultValue={q} maxLength={160} placeholder="Ex.: merenda escolar" />
         </label>
@@ -90,17 +133,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
         <PaginationLinks page={result.page} totalPages={result.totalPages} makeHref={hrefFor} prefetch={false} />
       </section>
 
-      <details className="card p-4">
-        <summary className="cursor-pointer font-semibold">Sinais para conferir · concentração em fornecedores</summary>
-        <p className="my-3 text-sm">Sinalizamos fornecedores empresariais com pelo menos metade do valor dos contratos iniciais de valor positivo coletados para o mesmo órgão e ano de publicação. A regra exige ao menos cinco contratos e três CNPJs distintos. Cada sinal se refere à amostra disponível e precisa de revisão documental.</p>
-        {signals.length === 0 ? <p className="text-sm">Nenhum caso atingiu a regra na amostra disponível.</p> : <ul className="grid gap-3">
-          {signals.map(s => <li key={`${s.org}-${s.year}-${s.cnpj}`} className="border-t border-current/15 pt-3 text-sm">
-            <strong>{s.supplier ?? s.cnpj}</strong> · {municipalOrgs[s.org]} · {s.year}<br />
-            {percent.format(s.share)} do valor analisado ({formatBRL(s.amount)} de {formatBRL(s.total)}). {s.contracts} de {s.sample} contratos na amostra, com {s.suppliers} CNPJs distintos.
-            <Link className="source-link mt-1 block" prefetch={false} href={`${municipalPath}?q=${s.cnpj}&org=${s.org}&de=${s.year}-01-01&ate=${s.year}-12-31`}>Buscar contratos deste fornecedor</Link>
-          </li>)}
-        </ul>}
-      </details>
+
     </>}
 
     <section className="card p-4 text-sm">

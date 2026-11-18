@@ -107,19 +107,23 @@ function createSupervisor({ port = Number(process.env.PORT) || 3000, host = '0.0
 module.exports = { createSupervisor };
 if (require.main === module) {
   const service = createSupervisor();
-  let collector;
+  const collectors = new Map();
   const syncMunicipality = () => {
-    if (collector || process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
-    collector = spawn(process.execPath, [path.join(__dirname, 'sync-caldas-novas.mjs')], { stdio: 'inherit' });
-    collector.once('error', error => console.error('[caldas-novas] collector error:', error.message));
-    collector.once('close', () => { collector = undefined; });
+    if (process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
+    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs']) {
+      if (collectors.has(script)) continue;
+      const collector = spawn(process.execPath, [path.join(__dirname, script)], { stdio: 'inherit' });
+      collectors.set(script, collector);
+      collector.once('error', error => console.error(`[${script}] collector error:`, error.message));
+      collector.once('close', () => collectors.delete(script));
+    }
   };
   const firstSync = setTimeout(syncMunicipality, 10_000).unref();
   const syncInterval = setInterval(syncMunicipality, 30 * 60_000).unref();
   const stop = () => {
     clearTimeout(firstSync);
     clearInterval(syncInterval);
-    collector?.kill('SIGTERM');
+    for (const collector of collectors.values()) collector.kill('SIGTERM');
     void service.close();
   };
   process.once('SIGTERM', stop);
