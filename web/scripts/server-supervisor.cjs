@@ -110,7 +110,7 @@ if (require.main === module) {
   const collectors = new Map();
   const syncMunicipality = () => {
     if (process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
-    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs']) {
+    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs', 'sync-caldas-suppliers.mjs']) {
       if (collectors.has(script)) continue;
       const collector = spawn(process.execPath, [path.join(__dirname, script)], { stdio: 'inherit' });
       collectors.set(script, collector);

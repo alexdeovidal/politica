@@ -7,6 +7,7 @@ import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, m
 import { MunicipalDashboard } from "./painel";
 import { SearchCheck } from "lucide-react";
 import styles from "./painel.module.css";
+import { SupplierInvestigationSignals } from "./supplier-investigation";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contas do Município · Caldas Novas | Politica007" };
@@ -85,6 +86,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
           </ul>}
         </div>
       </div>
+      <SupplierInvestigationSignals />
     </section>}
 
     <section id="buscar-contratos" className="card scroll-mt-20 p-4 sm:p-6">

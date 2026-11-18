@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shell/shell-context";
 import { formatBRL } from "@/lib/format";
 import { getMunicipalContract, municipalOrgs, municipalPath } from "@/lib/municipal-accounts";
 import styles from "../painel.module.css";
+import { SupplierInvestigation } from "../supplier-investigation";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ficha de contrato · Contas de Caldas Novas | Politica007" };
@@ -62,6 +63,8 @@ export default async function MunicipalContractPage({ params }: PageProps<"/cont
         <a className="source-link mt-2 inline-flex items-center gap-2"
           href="https://acessoainformacao.caldasnovas.go.gov.br/cidadao/transparencia/sgdespesas">Consultar despesas na Prefeitura <ExternalLink size={13} /></a>
       </section>
+
+      <SupplierInvestigation contract={row} />
 
       <section className="card p-5">
         <h2 className="text-lg font-semibold">Identificação e fonte</h2>

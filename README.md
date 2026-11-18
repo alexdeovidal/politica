@@ -430,3 +430,20 @@ Os valores excluem operações intraorçamentárias e usam o último bimestre
 com os dois anexos e com as funções conciliadas ao total liquidado. O relatório
 fiscal e os vínculos entre órgão, unidade e fornecedor do PNCP são apresentados
 em visualizações próprias.
+
+O coletor de fornecedores consulta até 12 CNPJs do PNCP por execução, com
+reconsulta semanal de cadastros já obtidos e pausa quando a BrasilAPI limita o
+acesso. Ele guarda a primeira versão e cada versão diferente, sem armazenar
+CPF de sócios. Datas de observação não são datas de registro de alteração.
+
+Para publicar parentesco documental, a revisão responsável deve confirmar o
+sócio na data relevante, a identidade das duas pessoas, o tipo de parentesco e
+a participação do agente público no órgão ou no processo. Use documentos
+oficiais públicos. Registre um resumo sem documentos pessoais, com referência
+à página ou seção que sustenta o vínculo. O importador local recebe um array
+JSON com `contractId`, `cnpj`, `partner`, `official`, `office`,
+`relationship`, `sourceUrl`, `documentDate` e `evidence`. Os valores
+permitidos de `relationship` constam em `web/scripts/import-caldas-kinship.mjs`.
+Execute `node scripts/import-caldas-kinship.mjs /caminho/revisado.json` no
+ambiente autorizado, usando o mesmo banco municipal da aplicação. A importação
+publica os registros revisados nas fichas correspondentes.

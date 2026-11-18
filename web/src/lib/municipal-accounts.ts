@@ -136,3 +136,65 @@ export function repeatedContractSignals() {
     amount_cents: number; previousId: string; previousDate: string; previousNumber: string;
   })[]) ?? [];
 }
+
+type Partner = { key: string; name: string; role: string | null; entry: string | null; corporate: string | null };
+type Registration = {
+  name: string; tradeName: string | null; nature: string | null; city: string | null; state: string | null;
+  status: string | null; statusDate: string | null; capital: number | null; partners: Partner[];
+};
+type RegistrationVersion = { observed: string; registration: Registration };
+export type KinshipEvidence = {
+  contract_id: string; partner: string; official: string; office: string;
+  relationship: string; source_url: string; document_date: string; evidence: string;
+};
+
+export const kinshipLabels: Record<string, string> = {
+  conjuge: "Cônjuge", companheiro: "Companheiro(a)",
+  "pai-mae-filho": "Pais ou filhos · 1º grau em linha reta",
+  "avo-neto": "Avós ou netos · 2º grau em linha reta",
+  irmao: "Irmãos · 2º grau colateral",
+  "bisavo-bisneto": "Bisavós ou bisnetos · 3º grau em linha reta",
+  "tio-sobrinho": "Tios ou sobrinhos · 3º grau colateral",
+  primo: "Primos · 4º grau colateral",
+  "afinidade-1": "Afinidade · 1º grau", "afinidade-2": "Afinidade · 2º grau", "afinidade-3": "Afinidade · 3º grau",
+};
+
+export function supplierProfile(cnpj: string, contractId: string) {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supplier_snapshot'").get()) return null;
+    const rows = db.prepare("SELECT observed, payload FROM supplier_snapshot WHERE cnpj=? ORDER BY id DESC LIMIT 21")
+      .all(cnpj) as { observed: string; payload: string }[];
+    const versions: RegistrationVersion[] = rows.map(row => ({ observed: row.observed, registration: JSON.parse(row.payload) }));
+    const check = db.prepare("SELECT successful FROM supplier_check WHERE cnpj=?").get(cnpj) as { successful: string | null } | undefined;
+    const kinship = db.prepare("SELECT * FROM supplier_kinship WHERE contract_id=? AND cnpj=? ORDER BY document_date DESC")
+      .all(contractId, cnpj) as KinshipEvidence[];
+    return { versions, checked: check?.successful, kinship };
+  });
+}
+
+export function supplierInvestigationSignals() {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supplier_snapshot'").get()) return null;
+    const versions = db.prepare(`
+      WITH recent AS (
+        SELECT cnpj, observed, payload, lag(observed) OVER snapshot AS prior,
+          lag(payload) OVER snapshot AS before
+        FROM supplier_snapshot WINDOW snapshot AS (PARTITION BY cnpj ORDER BY id)
+      ), changes AS (
+        SELECT cnpj, max(observed) AS observed FROM recent
+        WHERE prior IS NOT NULL AND json_extract(payload,'$.partners') <> json_extract(before,'$.partners')
+        GROUP BY cnpj
+        ORDER BY observed DESC LIMIT 12
+      )
+      SELECT r.cnpj, r.observed, c.supplier, c.id AS contractId
+      FROM changes r JOIN contract c ON c.id=(
+        SELECT t.id FROM contract t WHERE t.supplier_cnpj=r.cnpj
+        ORDER BY t.published DESC,t.id DESC LIMIT 1
+      )
+      ORDER BY r.observed DESC
+    `).all() as { cnpj: string; observed: string; supplier: string | null; contractId: string }[];
+    const kinship = db.prepare(`SELECT k.* FROM supplier_kinship k JOIN contract c ON c.id=k.contract_id AND c.supplier_cnpj=k.cnpj
+      ORDER BY k.document_date DESC LIMIT 20`).all() as KinshipEvidence[];
+    return { versions, kinship };
+  });
+}
