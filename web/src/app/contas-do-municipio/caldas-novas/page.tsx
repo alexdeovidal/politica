@@ -7,6 +7,7 @@ import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, m
 import { MunicipalDashboard } from "./painel";
 import { SearchCheck } from "lucide-react";
 import styles from "./painel.module.css";
+import { AmendmentSignals } from "./amendments";
 import { SupplierInvestigationSignals } from "./supplier-investigation";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
           </ul>}
         </div>
       </div>
+      <AmendmentSignals />
       <SupplierInvestigationSignals />
     </section>}
 

@@ -242,3 +242,41 @@ export function supplierCampaignSignals() {
     `).all() as { cnpj: string; supplier: string | null; contractId: string; records: number }[];
   }) ?? [];
 }
+
+export type AmendmentAudit = {
+  base: number | null; increases: number; decreases: number; increasesPct: number | null; decreasesPct: number | null;
+  reform: boolean; severity: "review" | "reform" | "none"; above25: boolean; above50: boolean; aboveDecrease: boolean;
+  pending: number; checked: string; source: string;
+  terms: {
+    seq: number; name: string; number: string; signed: string; published: string; description: string; legal: string;
+    changed: number | null; global: number | null; days: number | null; labels: string[];
+    direction: "increase" | "decrease" | null; pending: boolean;
+  }[];
+};
+
+export function municipalAmendments(id: string) {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='municipal_amendment'").get()) return null;
+    const row = db.prepare("SELECT payload FROM municipal_amendment WHERE contract_id=?").get(id) as {payload:string} | undefined;
+    return row ? JSON.parse(row.payload) as AmendmentAudit : null;
+  });
+}
+
+export function municipalAmendmentSignals() {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='municipal_amendment'").get()) return null;
+    const checked = (db.prepare("SELECT count(*) AS n FROM municipal_amendment a JOIN contract c ON c.id=a.contract_id WHERE c.initial=1").get() as {n:number}).n;
+    const total = (db.prepare("SELECT count(*) AS n FROM contract WHERE initial=1").get() as {n:number}).n;
+    const rows = db.prepare(`
+      SELECT c.id,c.title,c.supplier,a.severity,a.pending,
+        json_extract(a.payload,'$.increasesPct') AS increasesPct,
+        json_extract(a.payload,'$.decreasesPct') AS decreasesPct,
+        json_array_length(a.payload,'$.terms') AS terms
+      FROM municipal_amendment a JOIN contract c ON c.id=a.contract_id
+      WHERE c.initial=1 AND (a.severity<>'none' OR a.pending>0 OR
+        (json_array_length(a.payload,'$.terms')>0 AND json_extract(a.payload,'$.base') IS NULL))
+      ORDER BY CASE a.severity WHEN 'review' THEN 0 WHEN 'reform' THEN 1 ELSE 2 END,c.published DESC,c.id DESC LIMIT 12
+    `).all() as {id:string;title:string;supplier:string|null;severity:string;pending:number;increasesPct:number|null;decreasesPct:number|null;terms:number}[];
+    return { checked,total,rows };
+  });
+}

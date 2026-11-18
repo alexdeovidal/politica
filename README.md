@@ -454,3 +454,9 @@ atividade da Câmara dos Deputados. O CNPJ completo sustenta vínculos comerciai
 da empresa. Nome de sócio, inclusive quando coincide a parte visível do CPF,
 gera possível correspondência. O cadastro federal informa lotação e nomeação;
 a folha municipal e o histórico de remuneração não fazem parte desta coleta.
+
+O coletor de aditivos consulta os termos oficiais do PNCP e guarda a última
+resposta válida por contrato. A triagem usa o valor inicial nominal declarado
+e soma acréscimos e supressões identificados separadamente. Termos com
+finalidade ambígua ou mista ficam para conferência. A confirmação dos limites
+do art. 125 exige a base inicial atualizada, o regime e o objeto documentados.
