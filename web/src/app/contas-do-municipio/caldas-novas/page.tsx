@@ -7,6 +7,7 @@ import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, m
 import { MunicipalDashboard } from "./painel";
 import { SearchCheck } from "lucide-react";
 import styles from "./painel.module.css";
+import { PaidStreetParking } from "./paid-street-parking";
 import { AmendmentSignals } from "./amendments";
 import { SupplierInvestigationSignals } from "./supplier-investigation";
 
@@ -27,6 +28,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   const org = Object.hasOwn(municipalOrgs, input("org")) ? input("org") : "";
   const q = input("q"), from = date("de"), to = date("ate");
   const unit = input("unidade");
+  const theme = input("tema") === "area-azul" ? "area-azul" : "";
   const source = /^\d{1,6}$/.test(input("fonte")) ? Number(input("fonte")) : undefined;
   const cnpj = /^\d{14}$/.test(input("cnpj")) ? input("cnpj") : "";
   const minInput = input("min"), maxInput = input("max");
@@ -34,10 +36,10 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   const page = /^\d{1,5}$/.test(input("pagina")) ? Math.max(1, Number(input("pagina"))) : 1;
   const invalid = Boolean((from && to && from > to) || (minInput && min === null) ||
     (maxInput && max === null) || (min !== null && max !== null && min > max));
-  const result = invalid ? null : listMunicipalContracts({ q, org, unit, from, to, min, max, page, funding: source, cnpj });
+  const result = invalid ? null : listMunicipalContracts({ q, org, unit, from, to, min, max, page, funding: source, cnpj, areaAzul: Boolean(theme) });
   const fiscal = municipalFiscalReports();
   const signals = result ? concentrationSignals() : [];
-  const flowFilters = { q, org, unidade: unit, de: from, ate: to, min: minInput, max: maxInput, fonte: source ? String(source) : "", cnpj };
+  const flowFilters = { q, org, unidade: unit, de: from, ate: to, min: minInput, max: maxInput, fonte: source ? String(source) : "", cnpj, tema: theme };
   const repeats = result ? repeatedContractSignals() : [];
   const hrefFor = (p: number) => {
     const next = new URLSearchParams();
@@ -55,6 +57,8 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
       flowRevenue={municipalFlowRevenue()} funding={result?.funding ?? []} flowFilters={flowFilters}
       initialTrailStep={input("etapa") === "fornecedores" ? 4 : 0}
       filterParams={{ de: from, ate: to, min: minInput, max: maxInput }} />
+
+    <PaidStreetParking />
 
     {result && <section id="sinais" className="card scroll-mt-20 p-4 sm:p-6">
       <div className={styles.sectionHead}>
@@ -115,6 +119,12 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
           <select className="input" name="org" defaultValue={org}>
             <option value="">Todos os órgãos do piloto</option>
             {Object.entries(municipalOrgs).map(([key, name]) => <option value={key} key={key}>{name}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm sm:col-span-2">Tema
+          <select className="input" name="tema" defaultValue={theme}>
+            <option value="">Todos os temas</option>
+            <option value="area-azul">Área Azul · estacionamento rotativo</option>
           </select>
         </label>
         <label className="flex flex-col gap-2 text-sm">Publicado desde<input className="input" type="date" name="de" defaultValue={from} /></label>

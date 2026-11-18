@@ -83,7 +83,10 @@ export function MoneyTrail({ report, revenue, funding, companies, path, filters,
       </button>)}
     </nav>
 
-    <div className={styles.trailContext}>{captions[step]}</div>
+    <div className={styles.trailContext}>
+      {captions[step]}
+      {step === 0 && <div className="mt-2"><a className="source-link" href="#area-azul">Ver também Área Azul · estacionamento rotativo</a></div>}
+    </div>
     <div className={`${styles.fiscalLayout} ${step===4 ? styles.trailBlue : ""}`}>
       <div>
         {visible.length ? <ul className={styles.trailList}>{visible.slice(0,limit).map(row=><li key={row.id}>

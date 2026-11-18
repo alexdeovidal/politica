@@ -34,7 +34,7 @@ function read<T>(query: (db: Database.Database) => T): T | null {
 
 export const municipalPageSize = 20;
 export type MunicipalFilters = {
-  q: string; org: string; unit: string; from: string; to: string; min: number | null; max: number | null; page: number; funding?: number; cnpj?: string;
+  q: string; org: string; unit: string; from: string; to: string; min: number | null; max: number | null; page: number; funding?: number; cnpj?: string; areaAzul?: boolean;
 };
 
 export type FlowRevenue = { year: number; period: number; url: string; items: { name: string; group: string; amount: number }[] };
@@ -82,6 +82,9 @@ export function listMunicipalContracts(filters: MunicipalFilters) {
       const q = filters.q.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
       terms.push("instr(search_text, ?) > 0");
       params.push(q);
+    }
+    if (filters.areaAzul) {
+      terms.push("(instr(search_text, 'estacionamento rotativo') > 0 OR instr(search_text, 'area azul') > 0 OR instr(search_text, 'zona azul') > 0)");
     }
     if (filters.org) { terms.push("org = ?"); params.push(filters.org); }
     if (filters.unit) { terms.push("unit = ?"); params.push(filters.unit); }
