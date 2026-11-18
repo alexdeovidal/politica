@@ -412,3 +412,14 @@ condenação; os detalhes e decisões devem ser lidos no registro oficial.
   A base de 2024 é reconciliada por título eleitoral — ver [`ADs/identidade.md`](ADs/identidade.md).
 - O resultado é **indício, não prova**. O sistema gera sinais de alerta, não
   conclusões. Nada aqui deve virar acusação pública sem apuração formal.
+
+### Contas do Município · Caldas Novas
+
+A rota `/contas-do-municipio/caldas-novas` lê exclusivamente o SQLite persistente
+`caldas-novas.db`, ao lado de `ELOSYS_DB_PATH` (ou em `MUNICIPAL_DB_PATH`). O
+supervisor executa `node scripts/sync-caldas-novas.mjs` em um processo separado na
+inicialização e a cada seis horas. A coleta é mensal desde janeiro de 2025 para os
+CNPJs da Prefeitura, do DEMAE e do Caldas Prev. Janelas históricas são revistas
+semanalmente. Cada mês só é substituído após baixar todas as páginas com sucesso.
+A tela mostra apenas os períodos já consultados. `MUNICIPAL_SYNC_DISABLED=1`
+desliga a coleta automática para ambientes de teste.

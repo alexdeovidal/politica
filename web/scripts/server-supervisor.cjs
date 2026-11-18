@@ -107,5 +107,21 @@ function createSupervisor({ port = Number(process.env.PORT) || 3000, host = '0.0
 module.exports = { createSupervisor };
 if (require.main === module) {
   const service = createSupervisor();
-  process.once('SIGTERM', service.close); process.once('SIGINT', service.close);
+  let collector;
+  const syncMunicipality = () => {
+    if (collector || process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
+    collector = spawn(process.execPath, [path.join(__dirname, 'sync-caldas-novas.mjs')], { stdio: 'inherit' });
+    collector.once('error', error => console.error('[caldas-novas] collector error:', error.message));
+    collector.once('close', () => { collector = undefined; });
+  };
+  const firstSync = setTimeout(syncMunicipality, 10_000).unref();
+  const syncInterval = setInterval(syncMunicipality, 6 * 3600_000).unref();
+  const stop = () => {
+    clearTimeout(firstSync);
+    clearInterval(syncInterval);
+    collector?.kill('SIGTERM');
+    void service.close();
+  };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
 }
