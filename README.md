@@ -447,3 +447,10 @@ permitidos de `relationship` constam em `web/scripts/import-caldas-kinship.mjs`.
 Execute `node scripts/import-caldas-kinship.mjs /caminho/revisado.json` no
 ambiente autorizado, usando o mesmo banco municipal da aplicação. A importação
 publica os registros revisados nas fichas correspondentes.
+
+O coletor de vínculos políticos cruza em lotes o quadro societário mais recente
+com candidaturas do TSE, despesas por documento e o cadastro de pessoal em
+atividade da Câmara dos Deputados. O CNPJ completo sustenta vínculos comerciais
+da empresa. Nome de sócio, inclusive quando coincide a parte visível do CPF,
+gera possível correspondência. O cadastro federal informa lotação e nomeação;
+a folha municipal e o histórico de remuneração não fazem parte desta coleta.

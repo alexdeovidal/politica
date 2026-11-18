@@ -198,3 +198,47 @@ export function supplierInvestigationSignals() {
     return { versions, kinship };
   });
 }
+
+export type CampaignSupplierExpense = {
+  id: number; year: number; description: string | null; contracted: number | null; paid: number | null;
+  day: string | null; personId: number | null; candidate: string | null; office: string | null; state: string | null; url: string;
+};
+export type SupplierPoliticalLinks = {
+  partners: {
+    name: string; key: string; matches: number;
+    staff: { role: string; unit: string | null; appointed: string | null }[];
+    candidates: {
+      id: number; confidence: "masked" | "name"; expenses: CampaignSupplierExpense[];
+      elections: { year: number; office: string | null; party: string | null; state: string | null; municipality: string | null; result: string | null; url: string }[];
+    }[];
+  }[];
+  companyExpenses: CampaignSupplierExpense[];
+  chamberChecked: string | null;
+  chamberUrl: string;
+};
+
+export function supplierPoliticalLinks(cnpj: string) {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supplier_political_links'").get()) return null;
+    const row = db.prepare(`
+      SELECT l.payload,l.checked FROM supplier_political_links l
+      WHERE l.cnpj=? AND l.snapshot_id=(SELECT max(id) FROM supplier_snapshot WHERE cnpj=l.cnpj)
+    `).get(cnpj) as { payload: string; checked: string } | undefined;
+    return row ? { ...(JSON.parse(row.payload) as SupplierPoliticalLinks), checked: row.checked } : null;
+  });
+}
+
+export function supplierCampaignSignals() {
+  return read(db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supplier_political_links'").get()) return [];
+    return db.prepare(`
+      SELECT l.cnpj,c.supplier,c.id AS contractId,json_array_length(l.payload,'$.companyExpenses') AS records
+      FROM supplier_political_links l JOIN contract c ON c.id=(
+        SELECT t.id FROM contract t WHERE t.supplier_cnpj=l.cnpj ORDER BY t.published DESC,t.id DESC LIMIT 1
+      )
+      WHERE l.snapshot_id=(SELECT max(id) FROM supplier_snapshot WHERE cnpj=l.cnpj)
+        AND json_array_length(l.payload,'$.companyExpenses') > 0
+      ORDER BY c.published DESC,c.id DESC LIMIT 12
+    `).all() as { cnpj: string; supplier: string | null; contractId: string; records: number }[];
+  }) ?? [];
+}

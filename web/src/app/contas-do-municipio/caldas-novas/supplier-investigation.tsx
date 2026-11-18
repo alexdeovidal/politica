@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { SupplierPoliticalInvestigation } from "./political-links";
 import { formatBRL } from "@/lib/format";
-import { kinshipLabels, municipalPath, supplierInvestigationSignals, supplierProfile, type KinshipEvidence, type MunicipalContract } from "@/lib/municipal-accounts";
+import { kinshipLabels, municipalPath, supplierCampaignSignals, supplierInvestigationSignals, supplierProfile, type KinshipEvidence, type MunicipalContract } from "@/lib/municipal-accounts";
 
 const date = (value: string | null | undefined) => value ? value.slice(0, 10).split("-").reverse().join("/") : "Não informada";
 const contractHref = (id: string) => `${municipalPath}/${id.replace("/", "-")}#quadro-societario`;
@@ -16,6 +17,7 @@ function Kinship({ row }: { row: KinshipEvidence }) {
 
 export function SupplierInvestigationSignals() {
   const signals = supplierInvestigationSignals();
+  const campaign = supplierCampaignSignals();
   return <div className="mt-4 grid gap-4 sm:grid-cols-2 text-sm">
     <section className="rounded-lg border border-[var(--border-1)] p-4">
       <h3 className="font-semibold">Alterações no quadro societário</h3>
@@ -26,6 +28,16 @@ export function SupplierInvestigationSignals() {
           <p>Alteração observada em {date(row.observed)}</p>
         </li>)}
       </ul> : <p>Nenhuma mudança de quadro registrada nas versões comparáveis até agora.</p>}
+    </section>
+    <section className="rounded-lg border border-[var(--border-1)] p-4 sm:col-span-2">
+      <h3 className="font-semibold">Fornecedores municipais nas contas de campanha</h3>
+      <p className="my-2 text-[var(--muted)]">O mesmo CNPJ aparece em contratos municipais e nas despesas declaradas ao TSE. Abra a ficha para verificar campanha, serviço, ano e pagamento registrado. A relação comercial é um ponto de partida para conferência.</p>
+      {campaign.length ? <ul className="grid gap-2 sm:grid-cols-2">{campaign.map(row => <li key={row.cnpj}>
+        <Link prefetch={false} className="source-link" href={`${municipalPath}/${row.contractId.replace("/", "-")}#ligacoes-politicas`}>
+          {row.supplier ?? row.cnpj}
+        </Link>
+        <p>{row.cnpj} · {row.records === 8 ? "8 registros recentes exibidos" : `${row.records} registro(s) exibido(s)`}</p>
+      </li>)}</ul> : <p>Nenhuma coincidência por CNPJ nos fornecedores cruzados até agora.</p>}
     </section>
     <section className="rounded-lg border border-[var(--border-1)] p-4">
       <h3 className="font-semibold">Parentesco documentado</h3>
@@ -99,6 +111,7 @@ export function SupplierInvestigation({ contract }: { contract: MunicipalContrac
     <h3 className="mt-5 font-semibold">Parentesco relacionado ao contrato</h3>
     {profile?.kinship.length ? <div className="my-2 text-sm">{profile.kinship.map((row, index) => <Kinship key={index} row={row} />)}</div> :
       <p className="my-2 text-sm">Nenhum vínculo documental publicado para este contrato. A cobertura depende dos documentos disponíveis para revisão.</p>}
-    <a className="source-link text-sm" href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm#art14">Consultar o art. 14 da Lei de Licitações</a>
+    <SupplierPoliticalInvestigation cnpj={cnpj} />
+    <a className="source-link mt-4 inline-block text-sm" href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm#art14">Consultar o art. 14 da Lei de Licitações</a>
   </section>;
 }

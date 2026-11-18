@@ -108,19 +108,26 @@ module.exports = { createSupervisor };
 if (require.main === module) {
   const service = createSupervisor();
   const collectors = new Map();
-  const syncMunicipality = () => {
+  let stopping = false;
+  const syncMunicipality = (only) => {
     if (process.env.MUNICIPAL_SYNC_DISABLED === '1') return;
-    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs', 'sync-caldas-suppliers.mjs']) {
-      if (collectors.has(script)) continue;
+    for (const script of ['sync-caldas-novas.mjs', 'sync-caldas-fiscal.mjs', 'sync-caldas-suppliers.mjs', 'sync-caldas-political-links.mjs']) {
+      if ((only && script !== only) || collectors.has(script)) continue;
       const collector = spawn(process.execPath, [path.join(__dirname, script)], { stdio: 'inherit' });
       collectors.set(script, collector);
       collector.once('error', error => console.error(`[${script}] collector error:`, error.message));
-      collector.once('close', () => collectors.delete(script));
+      collector.once('close', () => {
+        collectors.delete(script);
+        if (!stopping && script === 'sync-caldas-suppliers.mjs' && !collectors.has('sync-caldas-political-links.mjs')) {
+          syncMunicipality('sync-caldas-political-links.mjs');
+        }
+      });
     }
   };
   const firstSync = setTimeout(syncMunicipality, 10_000).unref();
   const syncInterval = setInterval(syncMunicipality, 30 * 60_000).unref();
   const stop = () => {
+    stopping = true;
     clearTimeout(firstSync);
     clearInterval(syncInterval);
     for (const collector of collectors.values()) collector.kill('SIGTERM');
