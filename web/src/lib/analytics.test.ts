@@ -25,13 +25,15 @@ test("sensitive routes are grouped without retaining identifiers, query strings 
     ["/news/2026-11-18", "/news/arquivo"],
     ["/contas-do-municipio/caldas-novas/12345678000199", "/contas-do-municipio/caldas-novas/contrato"],
     ["/explorar?nome=Maria%20Silva&cpf=12345678900", "/explorar"],
+    ["/contas-do-estado?nome=Maria%20Silva", "/contas-do-estado"],
+    ["/contas-do-estado/goias?fornecedor=12345678000199#documento", "/contas-do-estado/goias"],
   ];
   for (const [input, expected] of cases) {
     const page = getAnalyticsPage(input);
     assert.equal(page?.path, expected);
     assert.doesNotMatch(JSON.stringify(page), /Maria|Silva|12345|2026|[?#]/i);
   }
-  for (const input of ["/busca/maria-silva", "/cpf/12345/detalhe", "//evil.example/cpf/12345", "https://evil.example/", "/__proto__"]) {
+  for (const input of ["/busca/maria-silva", "/cpf/12345/detalhe", "/contas-do-estado/sao-paulo", "//evil.example/cpf/12345", "https://evil.example/", "/__proto__"]) {
     assert.equal(getAnalyticsPage(input), null, input);
   }
 });

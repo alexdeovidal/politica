@@ -1,3 +1,5 @@
+import { activeStates } from "@/lib/state-accounts/registry";
+
 /** Only these section names, never the visitor's input, may leave the portal. */
 export const ANALYTICS_ORIGIN = "https://politica007.com.br";
 export const ANALYTICS_DATA_LAYER = "politica007AnalyticsLayer";
@@ -16,6 +18,8 @@ const sections: Record<string, string> = {
   "/grafo": "Relações entre pessoas e empresas",
   "/ranking": "Patrimônio declarado",
   "/contas-do-municipio/caldas-novas": "Contas do Município",
+  "/contas-do-estado": "Contas dos estados",
+  ...Object.fromEntries(activeStates().map(state => [`/contas-do-estado/${state.slug}`, `Contas do Estado · ${state.name}`])),
   "/emendas": "Emendas parlamentares",
   "/conexoes": "Conexões",
   "/redes": "Publicações e temas",

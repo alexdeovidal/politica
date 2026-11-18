@@ -75,6 +75,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Sea
       <p>A data de coleta de uma fonte não significa que todos os seus registros foram alterados nessa data. Cada informação exibe a coleta correspondente. Ausência de registro não equivale à ausência de atividade.</p>
 
       <section>
+        <h2>Contas do Estado · Goiás</h2>
+        <p>O módulo estadual reúne documentos de publicidade, registros relacionados a cirurgias eletivas e demonstrativos fiscais. Cada recorte identifica o período, o órgão, a etapa financeira e a fonte consultada. A cobertura disponível varia por órgão e documento.</p>
+        <p>Pagamentos, transferências, contratos e anúncios de investimento aparecem identificados. A despesa liquidada por função no RREO tem um universo diferente dos pagamentos selecionados por tema; Saúde não equivale exclusivamente a cirurgias eletivas, e Comunicações não reúne toda a publicidade estadual.</p>
+        <Link className="source-link" prefetch={false} href="/contas-do-estado/goias#fontes">Conferir fontes, períodos e cobertura de Goiás</Link>
+      </section>
+
+      <section>
         <h2>Conferência dos registros coletados</h2>
         {audit ? <>
           <p>Última conferência: {new Date(audit.checkedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (Brasília). Verifica metadados de origem, documentos de campanha, totais por eleição e valores inválidos de votação na base coletada. Não certifica cada linha dos arquivos originais nem informações ainda não coletadas.</p>

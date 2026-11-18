@@ -44,7 +44,42 @@ Portal: [politica007.com.br](https://politica007.com.br/).
 
 A cobertura depende dos conjuntos públicos coletados. Processos são da Justiça Eleitoral; não representam todos os tribunais. A ausência de informação não deve ser apresentada como zero ou ausência de atividade. Consulte [Fontes e atualização](https://politica007.com.br/fontes/) para datas reais, limitações e falhas de cada fonte.
 
-### Operação e atualização
+### Contas dos estados — Goiás
+
+O módulo `/contas-do-estado` tem um cadastro nacional das 27 UFs. Goiás é a primeira
+integração publicada em `/contas-do-estado/goias`; os demais estados aparecem como
+planejados, sem páginas de dados ou valores fictícios. O leitor de dados, as rotas,
+os períodos disponíveis, os filtros e os links de SEO usam a configuração de cada
+estado.
+
+O painel oferece comparação de publicidade com desembolsos identificados para
+cirurgias eletivas, detalhamento por órgão/agência/veículo/campanha, informações
+de produção cirúrgica, comparação do orçamento por função e catálogo de fontes.
+As tabelas têm pesquisa, paginação, exportação CSV e endereço compartilhável que
+preserva os filtros. Cada registro guarda sua fonte, linha, etapa financeira e
+critério de classificação.
+
+A base inicial consulta pagamentos da Secretaria da Economia de 2025 e de
+janeiro a outubro de 2026, planilhas oficiais de SECOM e DETRAN, publicidade de
+SANEAGO e outras empresas, repasses e indicadores da SES e o RREO/Siconfi. Os
+períodos disponíveis variam por fonte e estão expostos no painel. **A cobertura
+temática é parcial:** uma varredura de pagamentos não certifica toda a
+publicidade estadual nem o custo integral das cirurgias nos hospitais.
+
+Ordens de pagamento, notas de agências, despesas de empresas, repasses PCE e
+produção SUS permanecem em bases distintas. Notas e repasses já conciliados não
+são adicionados outra vez ao Tesouro. Contratos de gestão de hospitais e objetos
+mistos não viram integralmente gastos de cirurgias. O RREO permite comparar
+liquidado, empenhado e dotação por função; não informa pago por função. Ausência
+de dado permanece indisponível, e zero só aparece quando registrado na fonte.
+
+O snapshot revisado fica em `web/data/state-accounts/goias/`, acompanha o código
+e funciona sem novas credenciais ou migração do banco eleitoral. **A atualização
+estadual desta versão é por coleta, revisão e nova publicação; não existe uma
+rotina automática estadual configurada.** Veja os procedimentos, testes e
+limites em [`web/scripts/state-accounts/README.md`](web/scripts/state-accounts/README.md).
+
+### Operação dos coletores eleitorais e municipais
 
 As rotinas gerais do Coolify verificam bases atuais do TSE, fontes históricas, propostas atuais e PNCP a cada quatro horas. A votação por seção de 2026 tem um comando dedicado (`scripts/refresh-tse.sh sections-2026`) para monitorar somente os arquivos presidencial (BR) e local (GO); configure essa tarefa no Coolify para rodar a cada cinco minutos. Quando o TSE alterar um arquivo, o monitor importa os dados no banco local e publica o manifesto. A disponibilidade continua dependendo da publicação do arquivo oficial e do tempo necessário para baixá-lo e processá-lo. Há auditoria diária e coleta diária de propostas históricas.
 

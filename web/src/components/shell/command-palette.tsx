@@ -15,6 +15,8 @@ const SHORTCUTS = [
   { href: "/grafo", label: "Relações entre pessoas e empresas" },
   { href: "/conexoes", label: "Como se conectam?" },
   { href: "/comparar", label: "Comparar candidaturas" },
+  { href: "/contas-do-estado/goias", label: "Contas do Estado · Goiás · publicidade e cirurgias eletivas" },
+  { href: "/contas-do-estado", label: "Contas dos estados · cobertura disponível" },
   { href: "/fontes", label: "Fontes e atualização" },
   { href: "/acompanhar", label: "Minhas consultas" },
   { href: "/sinais/doacao-circular", label: "Ciclos de recursos eleitorais" },
