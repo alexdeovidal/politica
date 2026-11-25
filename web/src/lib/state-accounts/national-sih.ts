@@ -1,6 +1,7 @@
 import "server-only";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { refreshedSnapshot } from "./refresh-store";
 import { STATES } from "./registry";
 import type { BrazilianUf } from "./types";
 
@@ -8,10 +9,9 @@ type Source = { url: string; sha256: string; months: number[] };
 type Month = { month: string; quantity: number; approvedCents: number; rows: number };
 type Snapshot = { schemaVersion: number; group: string; collectedAt: string; sources: Record<string, Source>;
   byUf: Record<BrazilianUf, Month[]> };
-let cache: Snapshot | undefined;
-function getSnapshot() {
-  if (cache) return cache;
-  const data = JSON.parse(readFileSync(path.join(process.cwd(), "data/state-accounts/national-sih.json"), "utf8")) as Snapshot;
+let readSnapshot: (() => Snapshot | null) | undefined;
+export function validateSih(raw: unknown): Snapshot {
+  const data = raw as Snapshot;
   const fail = () => { throw new Error("Snapshot nacional do SIH/SUS inválido"); };
   if (data.schemaVersion !== 1 || data.group !== "04" || !Number.isFinite(Date.parse(data.collectedAt))) fail();
   for (const [year, source] of Object.entries(data.sources)) {
@@ -31,11 +31,19 @@ function getSnapshot() {
         || ![row.quantity, row.approvedCents, row.rows].every(Number.isSafeInteger) || row.quantity < 0 || row.rows < 1) fail();
     }
   }
-  cache = data;
   return data;
 }
 export function getSihProduction(uf: BrazilianUf) {
-  const { group, collectedAt, sources, byUf } = getSnapshot();
+  if (!readSnapshot) {
+    const original = validateSih(JSON.parse(readFileSync(path.join(process.cwd(), "data/state-accounts/national-sih.json"), "utf8")));
+    readSnapshot = refreshedSnapshot("national-sih.json", original, raw => {
+      const update = validateSih(raw);
+      for (const state of STATES) if (original.byUf[state.uf].some(previous => !update.byUf[state.uf].some(row => row.month === previous.month)))
+        throw new Error("Atualização reduziria a cobertura publicada do SIH");
+      return update;
+    });
+  }
+  const { group, collectedAt, sources, byUf } = readSnapshot()!;
   return { group, collectedAt, sources, months: byUf[uf] };
 }
 export type SihProduction = ReturnType<typeof getSihProduction>;

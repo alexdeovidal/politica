@@ -349,9 +349,16 @@ function HealthView({ data, slug, filters, rows, detail, onDetailChange, evidenc
 }
 
 function BudgetView({ data, year, options, onChange }: { data: DashboardSnapshot; year: number; options: BudgetOptions; onChange: (options: BudgetOptions) => void }) {
-  const report = data.fiscal.find(r => r.year === year);
+  const [fiscalYear, setFiscalYear] = useState<number | null>(null);
+  const effectiveYear = fiscalYear ?? year;
+  const report = data.fiscal.find(r => r.year === effectiveYear);
   const [all, setAll] = useState(false);
-  if (!report) return <section className={styles.panel}><h3>Orçamento por área</h3><p className={styles.empty}>Ainda não há relatório fiscal integrado para {year}. Escolha outro ano para consultar as funções orçamentárias.</p></section>;
+  const yearSelector = <div className={styles.compareFilters}><label>Exercício do orçamento<select value={effectiveYear}
+    onChange={event => setFiscalYear(Number(event.target.value))}>
+    {!report && <option value={effectiveYear}>{effectiveYear} · sem dados</option>}
+    {[...data.fiscal].sort((a, b) => b.year - a.year).map(r => <option key={r.year} value={r.year}>{r.year}</option>)}
+  </select></label></div>;
+  if (!report) return <section className={styles.panel}><h3>Orçamento por área</h3>{yearSelector}<p className={styles.empty}>Ainda não há relatório fiscal integrado para {effectiveYear}.</p></section>;
   const measure = options.measure;
   const left = report.functions.some(row => row.code === options.left) ? options.left : report.functions[0]?.code ?? "";
   const right = report.functions.some(row => row.code === options.right) ? options.right : report.functions[1]?.code ?? "";
@@ -363,12 +370,13 @@ function BudgetView({ data, year, options, onChange }: { data: DashboardSnapshot
   const comparativeRatio = left === right ? null : getComparisonRatio(value(a), value(b));
   const reconciled = Number.isSafeInteger(total) && ranked.reduce((sum, row) => sum + (row[measure] ?? 0), 0) === total;
   return <><SectionTitle index="04" title="Compare as áreas do orçamento" text="Uma visão fiscal consolidada, além dos recortes de publicidade e cirurgias." />
+    {yearSelector}
     <div className={styles.note}><Landmark size={18} /><p><strong>Período oficial: {date(report.periodStart)} a {date(report.periodEnd)}.</strong> {label} por função, sem despesas intraorçamentárias. O RREO não publica pagamento por função nesta base; por isso esta visão oferece liquidado, empenhado e dotação, com os nomes corretos.</p></div>
     <div className={styles.compareFilters}><label>Medida<select value={measure} onChange={e => onChange({ left, right, measure: e.target.value as BudgetMeasure })}><option value="settledCents">Liquidado · obrigação reconhecida</option><option value="committedCents">Empenhado · compromisso assumido</option><option value="updatedBudgetCents">Dotação atualizada · autorização</option></select></label>
       <label>Área A<select value={left} onChange={e => onChange({ left: e.target.value, right, measure })}>{report.functions.map(r => <option key={r.code} value={r.code} disabled={r[measure] === null}>{r.name}{r[measure] === null ? " · sem dado nesta medida" : ""}</option>)}</select></label>
       <label>Área B<select value={right} onChange={e => onChange({ left, right: e.target.value, measure })}>{report.functions.map(r => <option key={r.code} value={r.code} disabled={r[measure] === null}>{r.name}{r[measure] === null ? " · sem dado nesta medida" : ""}</option>)}</select></label></div>
-    <div className={styles.comparison}><article className={`${styles.compareCard} ${styles.adCard}`}><div className={styles.metricLabel}>{a?.name.toUpperCase()}</div><Money cents={value(a)} large /><p>{value(a) === null ? "Sem dado nesta medida" : formatBRL(value(a)!)}</p><footer>{label} · {year}</footer></article>
-      <article className={`${styles.compareCard} ${styles.healthCard}`}><div className={styles.metricLabel}>{b?.name.toUpperCase()}</div><Money cents={value(b)} large /><p>{value(b) === null ? "Sem dado nesta medida" : formatBRL(value(b)!)}</p><footer>{label} · {year}</footer></article></div>
+    <div className={styles.comparison}><article className={`${styles.compareCard} ${styles.adCard}`}><div className={styles.metricLabel}>{a?.name.toUpperCase()}</div><Money cents={value(a)} large /><p>{value(a) === null ? "Sem dado nesta medida" : formatBRL(value(a)!)}</p><footer>{label} · {effectiveYear}</footer></article>
+      <article className={`${styles.compareCard} ${styles.healthCard}`}><div className={styles.metricLabel}>{b?.name.toUpperCase()}</div><Money cents={value(b)} large /><p>{value(b) === null ? "Sem dado nesta medida" : formatBRL(value(b)!)}</p><footer>{label} · {effectiveYear}</footer></article></div>
     <div className={styles.comparisonReading}><div><span>PROPORÇÃO A / B</span><strong>{comparativeRatio === null ? "—" : `${ratio(comparativeRatio)}×`}</strong></div><p>{left === right ? "Selecione duas áreas diferentes para comparar." : "Mesma classificação orçamentária, mesma etapa financeira, mesmo período e mesma fonte. Saúde inclui toda a função orçamentária; não representa apenas cirurgias. A função Comunicações também não equivale à publicidade de todos os órgãos."}</p></div>
     <section className={styles.panel}><div className={styles.chartTitle}><div><h3>O orçamento em proporção</h3><p>{label}: {formatBRL(total)} · {ranked.length} funções com valor informado</p></div>{reconciled && <span className={styles.verified}><Check size={15} />Soma conciliada</span>}</div>
       <div className={styles.horizontalRanks}>{ranked.slice(0, all ? ranked.length : 10).map((r, i) => <div key={r.code}><span>{String(i + 1).padStart(2, "0")}</span><div><strong>{r.name}</strong><i style={{ width: `${Math.max(0, r[measure]!) / max * 100}%` }} /></div><p>{compact(r[measure]!)}<small>{total > 0 ? percent(r[measure]! / total) : "—"} do total</small></p></div>)}</div>

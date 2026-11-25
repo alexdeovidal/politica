@@ -164,8 +164,8 @@ por processo; uma nova versão exige build e implantação.
 
 A implantação segue o repositório `alexdeovidal/politica`, branch `main`, base
 `/web`, no Coolify. Esta integração não muda o banco eleitoral, o domínio nem as
-rotinas municipais existentes. Não há agendamento automático estadual nesta
-versão; a atualização depende de coleta, revisão, testes e nova publicação.
+rotinas municipais existentes. A coleta fiscal e a produção hospitalar podem ser atualizadas por tarefas
+periódicas fora da aplicação; os registros temáticos ainda passam por revisão.
 
 ## Integrar outra UF
 
@@ -208,3 +208,24 @@ aprovados do grupo SIGTAP 04 por UF do atendimento e mês da base. As datas
 disponíveis e o hash dos ZIPs ficam no arquivo final. O indicador não
 distingue eletivas de urgências e não equivale a pacientes únicos, pagamentos
 ou repasses dos governos estaduais. Os CSVs originais ficam fora do Git.
+
+
+## Rotina em produção
+
+Em Coolify, a aplicação usa o volume persistente já existente em `/data`.
+A rotina grava apenas no subdiretório `/data/state-accounts-refresh`.
+O RREO deve ser consultado diariamente; o SIH/SUS, semanalmente, para evitar
+downloads grandes sem mudança. Configure as tarefas no diretório da aplicação:
+
+```bash
+python3 scripts/state-accounts/refresh-public-data.py fiscal
+python3 scripts/state-accounts/refresh-public-data.py sih
+```
+
+Os dados são versionados por período de fonte, não pela hora da execução. O
+coletor preserva períodos anteriores, aborta regressões e só substitui um
+arquivo depois de validar com o mesmo código que atende o site. Apps e API leem
+os arquivos validados sem novo deploy; na falta deles usam a cópia da imagem.
+Não há atualização em tempo real, nem reclassificação automática de novos
+pagamentos de publicidade ou repasses de Goiás. A rotina SIH cobre os arquivos
+oficiais configurados de 2025 e 2026; revise o catálogo ao entrar um novo ano.

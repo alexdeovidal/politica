@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isISODate, sumCents } from "./comparison";
 import { getStateBySlug, hasFiscalCoverage } from "./registry";
+import { refreshedSnapshot } from "./refresh-store";
 import type { FiscalSnapshot } from "./dashboard-model";
 
 export const fiscalMeasures = ["committedCents", "settledCents", "updatedBudgetCents"] as const;
@@ -14,14 +15,11 @@ type FiscalReport = FiscalSnapshot & {
     functionReportTotal: number; functionReportSourceRow: number; breakdownDifferenceCents: number }>;
 };
 export type NationalFiscal = { schemaVersion: 1; uf: string; name: string; collectedAt: string; snapshots: FiscalReport[] };
-const cache = new Map<string, NationalFiscal>();
+type State = NonNullable<ReturnType<typeof getStateBySlug>>;
+const cache = new Map<string, () => NationalFiscal | null>();
 
-export function getNationalFiscal(slug: string): NationalFiscal | null {
-  const state = getStateBySlug(slug, false);
-  if (!state || !hasFiscalCoverage(state.slug)) return null;
-  const old = cache.get(slug);
-  if (old) return old;
-  const data = JSON.parse(readFileSync(path.join(process.cwd(), "data/state-accounts", state.slug, "fiscal.json"), "utf8")) as NationalFiscal;
+export function validateNationalFiscal(raw: unknown, state: State): NationalFiscal {
+  const data = raw as NationalFiscal;
   const assert: (condition: unknown) => asserts condition = condition => {
     if (!condition) throw new Error("Snapshot fiscal inválido para " + state.uf);
   };
@@ -58,6 +56,24 @@ export function getNationalFiscal(slug: string): NationalFiscal | null {
         && line.breakdownDifferenceCents === line.sumOfFunctions - line.functionReportTotal);
     }
   }
-  cache.set(slug, data);
   return data;
+}
+
+
+export function getNationalFiscal(slug: string): NationalFiscal | null {
+  const state = getStateBySlug(slug, false);
+  if (!state || (slug !== "goias" && !hasFiscalCoverage(slug))) return null;
+  let current = cache.get(slug);
+  if (!current) {
+    const fallback = slug === "goias" ? null : validateNationalFiscal(
+      JSON.parse(readFileSync(path.join(process.cwd(), "data/state-accounts", slug, "fiscal.json"), "utf8")), state);
+    current = refreshedSnapshot(slug + ".json", fallback, raw => {
+      const newData = validateNationalFiscal(raw, state);
+      if (fallback && fallback.snapshots.some(old => !newData.snapshots.some(report => report.year === old.year && report.period >= old.period)))
+        throw new Error("Atualização reduziria a cobertura fiscal publicada");
+      return newData;
+    });
+    cache.set(slug, current);
+  }
+  return current();
 }

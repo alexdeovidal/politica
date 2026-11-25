@@ -57,6 +57,7 @@ def summarize(job):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('cache', type=Path)
+    parser.add_argument('--output', type=Path)
     parser.add_argument('--workers', type=int, default=3)
     args = parser.parse_args()
     web = Path(__file__).resolve().parents[3]
@@ -64,8 +65,11 @@ def main():
     sources = {}
     for year, resource in RESOURCE.items():
         archive = args.cache / f'{year}.zip'
+        digest_builder = hashlib.sha256()
         with archive.open('rb') as raw:
-            digest = hashlib.file_digest(raw, 'sha256').hexdigest()
+            for chunk in iter(lambda: raw.read(1024 * 1024), b''):
+                digest_builder.update(chunk)
+        digest = digest_builder.hexdigest()
         with zipfile.ZipFile(archive) as bundle:
             months = set()
             for m in bundle.infolist():
@@ -94,7 +98,7 @@ def main():
         raise ValueError('UF sem linhas no conjunto de produção nacional')
     out = {'schemaVersion': 1, 'group': '04', 'collectedAt': datetime.now(timezone.utc).isoformat(),
         'sources': sources, 'byUf': {uf: sorted(items, key=lambda row: row['month']) for uf, items in sorted(result.items())}}
-    target = web / 'data/state-accounts/national-sih.json'
+    target = args.output or web / 'data/state-accounts/national-sih.json'
     tmp = target.with_suffix('.tmp')
     tmp.write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')) + '\n')
     tmp.replace(target)

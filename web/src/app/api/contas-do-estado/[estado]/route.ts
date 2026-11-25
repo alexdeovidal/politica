@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ esta
   if (!state) return Response.json({ error: "Estado sem integração disponível." }, { status: 404 });
   const p = new URL(request.url).searchParams;
   try {
-    if (!state.active) {
+    if (!state.active || ["fiscal", "fiscal-csv"].includes(p.get("format") ?? "")) {
       const data = getNationalFiscal(state.slug);
       if (!data) return Response.json({ error: "Estado sem integração disponível." }, { status: 404 });
       const format = p.get("format") ?? "fiscal";

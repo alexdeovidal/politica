@@ -8,7 +8,8 @@ import { getSihProduction } from "@/lib/state-accounts/national-sih";
 import { NationalFiscalPanel } from "./national-fiscal-panel";
 import { StateDashboard } from "./state-dashboard";
 
-export const dynamic = "force-static";
+// Load the validated snapshots from the persistent volume when serving the page.
+export const revalidate = 60;
 export const dynamicParams = false;
 export function generateStaticParams() { return publishedStates().map(state => ({ estado: state.slug })); }
 export async function generateMetadata({ params }: { params: Promise<{ estado: string }> }) {
@@ -31,7 +32,14 @@ export default async function StateAccounts({ params }: { params: Promise<{ esta
     if (!fiscal) notFound();
     return <><PageHeader group="Contas do Estado" current={state.name} /><NationalFiscalPanel data={fiscal} slug={state.slug} sih={getSihProduction(state.uf)} /></>;
   }
-  const data = getStateDashboard(state.slug);
+  const audited = getStateDashboard(state.slug);
+  const fresh = getNationalFiscal(state.slug);
+  // Refresh budget data without reclassifying payments or relabeling the thematic collection date.
+  const fiscal = new Map(audited.fiscal.map(report => [report.year, report]));
+  for (const report of fresh?.snapshots ?? []) {
+    if ((fiscal.get(report.year)?.period ?? 0) <= report.period) fiscal.set(report.year, report);
+  }
+  const data = { ...audited, fiscal: [...fiscal.values()] };
   return <div className="flex flex-col gap-5">
     <PageHeader group="Contas do Estado" current={state.name} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({ "@context": "https://schema.org", "@type": "Dataset",

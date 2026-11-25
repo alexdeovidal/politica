@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "esbuild scripts/query-worker.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=scripts/query-worker.cjs && next build --webpack",
+    "build": "esbuild scripts/query-worker.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=scripts/query-worker.cjs && esbuild scripts/validate-state-refresh.ts --bundle --platform=node --format=cjs --alias:server-only=./scripts/server-only-noop.cjs --outfile=scripts/validate-state-refresh.cjs && next build --webpack",
     "start": "node scripts/server-supervisor.cjs",
     "lint": "eslint"
   },
