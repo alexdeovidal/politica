@@ -217,9 +217,18 @@ async function checkApi() {
   const module = { exports: {} };
   new Function("module", "exports", "require", output)(module, module.exports, id => id === "server-only" ? {} : require(id));
   const get = (slug, query) => module.exports.GET(new Request(`https://example.test/api/contas-do-estado/${slug}?${query}`), { params: Promise.resolve({ estado: slug }) });
-  for (const slug of ["sao-paulo", "not-a-state", "../goias"]) assert.equal((await get(slug, "")).status, 404);
+  for (const slug of ["not-a-state", "../goias"]) assert.equal((await get(slug, "")).status, 404);
   for (const query of ["year=2099", "year=2026&fromMonth=1&toMonth=12", "year=2025&fromMonth=0", "year=2025&fromMonth=4&toMonth=3", "year=2025&page=1.5", "ledger=invalid", "category=invalid"])
     assert.equal((await get("goias", query)).status, 400, query);
+  for (const [slug, uf] of [["sao-paulo", "SP"], ["distrito-federal", "DF"]]) {
+    const fiscal = await get(slug, "format=fiscal");
+    assert.equal(fiscal.status, 200); assert.equal((await fiscal.json()).uf, uf);
+    const csv = await get(slug, "format=fiscal-csv&year=2025");
+    assert.equal(csv.status, 200); assert.match(csv.headers.get("content-type"), /^text\/csv/);
+    assert.match(await csv.text(), /apurado|funcao/);
+    assert.equal((await get(slug, "format=fiscal-csv&year=2099")).status, 400);
+    assert.equal((await get(slug, "format=csv&ledger=treasury")).status, 400);
+  }
   const manifest = await get("goias", "format=manifest");
   assert.equal(manifest.status, 200); assert.equal((await manifest.json()).version, summary.version);
   const response = await get("goias", "year=2026&fromMonth=5&toMonth=5&agency=2601&category=legal-publicity");

@@ -1,23 +1,36 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shell/shell-context";
 import { pageMetadata, jsonLd } from "@/lib/seo-metadata";
-import { getStateBySlug, activeStates } from "@/lib/state-accounts/registry";
+import { publishedStates } from "@/lib/state-accounts/registry";
 import { getStateDashboard } from "@/lib/state-accounts/data";
+import { getNationalFiscal } from "@/lib/state-accounts/national-fiscal";
+import { getSihProduction } from "@/lib/state-accounts/national-sih";
+import { NationalFiscalPanel } from "./national-fiscal-panel";
 import { StateDashboard } from "./state-dashboard";
 
 export const dynamic = "force-static";
 export const dynamicParams = false;
-export function generateStaticParams() { return activeStates().map(state => ({ estado: state.slug })); }
+export function generateStaticParams() { return publishedStates().map(state => ({ estado: state.slug })); }
 export async function generateMetadata({ params }: { params: Promise<{ estado: string }> }) {
-  const state = getStateBySlug((await params).estado);
+  const { estado } = await params;
+  const state = publishedStates().find(s => s.slug === estado);
   if (!state) notFound();
+  if (!state.active) return pageMetadata("Orçamento de " + state.name + " · Siconfi | Política007",
+    "Confira execução por função no Siconfi e a produção cirúrgica hospitalar do SUS, com períodos e fontes oficiais.",
+    "/contas-do-estado/" + state.slug);
   return pageMetadata(`Contas de ${state.name} · Publicidade e cirurgias | Política007`,
     `Compare despesas de ${state.name}, consulte pagamentos de publicidade e repasses identificados para cirurgias eletivas, com fontes oficiais e cobertura explícita.`,
     `/contas-do-estado/${state.slug}`);
 }
 export default async function StateAccounts({ params }: { params: Promise<{ estado: string }> }) {
-  const state = getStateBySlug((await params).estado);
+  const { estado } = await params;
+  const state = publishedStates().find(s => s.slug === estado);
   if (!state) notFound();
+  if (!state.active) {
+    const fiscal = getNationalFiscal(state.slug);
+    if (!fiscal) notFound();
+    return <><PageHeader group="Contas do Estado" current={state.name} /><NationalFiscalPanel data={fiscal} slug={state.slug} sih={getSihProduction(state.uf)} /></>;
+  }
   const data = getStateDashboard(state.slug);
   return <div className="flex flex-col gap-5">
     <PageHeader group="Contas do Estado" current={state.name} />

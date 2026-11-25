@@ -1,7 +1,8 @@
 import { getStateBySlug } from "@/lib/state-accounts/registry";
 import { evidenceCsv, getStateDashboard, queryStateRecords } from "@/lib/state-accounts/data";
 import { getSnapshotYearMonths } from "@/lib/state-accounts/availability";
-import { categoryLabels, sumCents } from "@/lib/state-accounts/comparison";
+import { getNationalFiscal } from "@/lib/state-accounts/national-fiscal";
+import { categoryLabels, safeCsvCell, sumCents } from "@/lib/state-accounts/comparison";
 import type { EvidenceQuery, LedgerId } from "@/lib/state-accounts/dashboard-model";
 
 export const runtime = "nodejs";
@@ -9,10 +10,26 @@ const headers = { "Cache-Control": "public, max-age=300, s-maxage=1800", "X-Cont
 
 export async function GET(request: Request, { params }: { params: Promise<{ estado: string }> }) {
   const { estado } = await params;
-  const state = getStateBySlug(estado);
+  const state = getStateBySlug(estado, false);
   if (!state) return Response.json({ error: "Estado sem integração disponível." }, { status: 404 });
   const p = new URL(request.url).searchParams;
   try {
+    if (!state.active) {
+      const data = getNationalFiscal(state.slug);
+      if (!data) return Response.json({ error: "Estado sem integração disponível." }, { status: 404 });
+      const format = p.get("format") ?? "fiscal";
+      if (format === "manifest" || format === "fiscal") return Response.json(data, { headers });
+      if (format !== "fiscal-csv") return Response.json({ error: "Somente a base fiscal está integrada nesta UF." }, { status: 400 });
+      const year = Number(p.get("year"));
+      const report = data.snapshots.find(item => item.year === year);
+      if (!report) return Response.json({ error: "Informe um exercício disponível." }, { status: 400 });
+      const head = ["uf", "ano", "bimestre", "codigo_funcao", "funcao", "dotacao_centavos", "empenhado_centavos", "liquidado_centavos", "fonte"];
+      const rows = report.functions.map(row => [data.uf, report.year, report.period, row.code, row.name,
+        row.updatedBudgetCents, row.committedCents, row.settledCents, report.functionSource.url]);
+      const csv = [head, ...rows].map(row => row.map(safeCsvCell).join(";")).join("\r\n") + "\r\n";
+      return new Response("\uFEFF" + csv, { headers: { ...headers, "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="politica007-' + state.slug + '-fiscal-' + year + '.csv"' } });
+    }
     const snapshot = getStateDashboard(estado);
     if (p.get("format") === "manifest") return Response.json(snapshot, { headers });
     const ledger = p.get("ledger") ?? "treasury";

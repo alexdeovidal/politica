@@ -23,7 +23,7 @@ function record(id, amountCents, category = "publicity", extra = {}) {
     dedupKey: id, coverage: "partial", scope: "state-disbursement", financialNature: "direct-payment", ...extra };
 }
 
-test("national registry is unique and only Goiás can resolve to a published route", () => {
+test("national registry is unique and only Goiás can resolve to a thematic data route", () => {
   assert.equal(STATES.length, 27);
   for (const key of ["uf", "slug", "ibgeCode"]) assert.equal(new Set(STATES.map(row => row[key])).size, 27);
   assert.deepEqual(STATES.filter(row => row.active).map(row => row.uf), ["GO"]);

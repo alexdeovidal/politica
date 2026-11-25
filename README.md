@@ -44,13 +44,12 @@ Portal: [politica007.com.br](https://politica007.com.br/).
 
 A cobertura depende dos conjuntos públicos coletados. Processos são da Justiça Eleitoral; não representam todos os tribunais. A ausência de informação não deve ser apresentada como zero ou ausência de atividade. Consulte [Fontes e atualização](https://politica007.com.br/fontes/) para datas reais, limitações e falhas de cada fonte.
 
-### Contas dos estados — Goiás
+### Contas dos estados
 
-O módulo `/contas-do-estado` tem um cadastro nacional das 27 UFs. Goiás é a primeira
-integração publicada em `/contas-do-estado/goias`; os demais estados aparecem como
-planejados, sem páginas de dados ou valores fictícios. O leitor de dados, as rotas,
-os períodos disponíveis, os filtros e os links de SEO usam a configuração de cada
-estado.
+O módulo conta com painéis fiscais de todas as 27 UFs a partir de relatórios
+oficiais do Siconfi. Goiás também oferece a integração temática com fontes
+estaduais. As outras 26 UFs não exibem cifras de publicidade ou de cirurgias
+sem que suas ordens de pagamento e documentos sejam integrados e verificados.
 
 O painel oferece comparação de publicidade com desembolsos identificados para
 cirurgias eletivas, detalhamento por órgão/agência/veículo/campanha, informações

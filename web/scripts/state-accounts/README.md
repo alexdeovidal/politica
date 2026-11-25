@@ -183,3 +183,28 @@ versão; a atualização depende de coleta, revisão, testes e nova publicação
 O novo estado não precisa de uma cópia do componente de Goiás. Particularidades
 das fontes continuam nos adaptadores e no manifesto; acrescentar uma UF ao
 cadastro sem integrar evidências não a torna disponível.
+
+## Expansão fiscal nacional
+
+Os painéis fiscais das 26 UFs restantes usam os Anexos 01 e 02 do Siconfi.
+Para cada UF, execute o coletor fiscal-uf.py com --uf, --output em uma pasta
+do cache nomeada pela sigla, e --years 2025 2026. A coleta seleciona o
+bimestre encerrado mais recente com os dois anexos. Para reproduzir resultados,
+use --offline com o mesmo cache e a mesma data de referência (--as-of).
+Execute build-national-fiscal.py com o diretório pai dessas pastas para gerar os
+snapshots publicados. Reproduza o manifesto e os hashes antes de publicar.
+
+O Anexo 01 contém os totais consolidados. O Anexo 02 contém as funções.
+A publicação mostra os valores declarados em seus respectivos anexos, sem
+compensações ou estimativas, e sinaliza divergências de conferência. Não trate
+uma diferença como indício de ilícito nem como prova de erro da fonte: revise os
+relatórios originais e suas notas. Nenhum cálculo usa a função Comunicações
+como publicidade, nem a função Saúde como desembolso por cirurgias.
+Os painéis fiscais não publicam os registros temáticos de Goiás em outras UFs.
+
+A produção cirúrgica nacional é um indicador separado: sih-national.py lê
+os ZIPs de CSV anuais oficiais do SIH/SUS e agrega quantidades e valores
+aprovados do grupo SIGTAP 04 por UF do atendimento e mês da base. As datas
+disponíveis e o hash dos ZIPs ficam no arquivo final. O indicador não
+distingue eletivas de urgências e não equivale a pacientes únicos, pagamentos
+ou repasses dos governos estaduais. Os CSVs originais ficam fora do Git.

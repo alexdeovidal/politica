@@ -1,6 +1,6 @@
 import { databasePath } from "@/lib/db";
 import { runDatabaseWorker } from "@/lib/database-worker";
-import { activeStates } from "@/lib/state-accounts/registry";
+import { publishedStates } from "@/lib/state-accounts/registry";
 
 export const SITE_ORIGIN = "https://politica007.com.br";
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -17,7 +17,7 @@ let cacheBytes = 0;
 export const STATIC_SITEMAP_PATHS = [
   "/", "/news", "/apuracao", "/apuracao/historico", "/votos", "/grafo",
   "/ranking", "/contas-do-municipio/caldas-novas", "/contas-do-estado",
-  ...activeStates().map(state => `/contas-do-estado/${state.slug}`), "/emendas", "/conexoes",
+  ...publishedStates().map(state => `/contas-do-estado/${state.slug}`), "/emendas", "/conexoes",
   "/redes", "/explorar", "/fontes", "/privacidade", "/comparar", "/sinais/doacao-circular",
   "/sinais/despesa-desproporcional", "/sinais/socio-fornecedor", "/sinais/discurso",
 ] as const;

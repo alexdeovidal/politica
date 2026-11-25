@@ -1,4 +1,5 @@
 import type { StateDefinition } from "./types";
+import fiscalCoverage from "./fiscal-coverage.json";
 
 /** Registry is national; active means a published integration, never merely a known UF. */
 export const STATES: readonly StateDefinition[] = [
@@ -41,3 +42,7 @@ export function getStateByUf(uf: string): StateDefinition | null {
 }
 
 export const activeStates = () => STATES.filter(state => state.active);
+
+/** Fiscal publication does not imply validated thematic ledgers. */
+export const hasFiscalCoverage = (slug: string) => fiscalCoverage.includes(slug);
+export const publishedStates = () => STATES.filter(state => state.active || hasFiscalCoverage(state.slug));

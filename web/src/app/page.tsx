@@ -40,8 +40,8 @@ export default function Home() {
       />
 
       <Link href="/apuracao" prefetch={false} className="live-home-link"><span className="live-home-link__dot"/><span><strong>Apuração das Eleições 2026</strong><small>Resultados oficiais do TSE · Estados, cidades e modo TV</small></span><span>Acompanhar →</span></Link>
-      <Link href="/contas-do-estado/goias" prefetch={false} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-1)] bg-[var(--surface)] px-5 py-4 text-[var(--fg-1)]">
-        <span className="flex min-w-0 flex-col gap-1"><strong className="text-sm font-semibold">Contas de Goiás</strong><span className="text-xs leading-relaxed text-[var(--muted)]">Publicidade, cirurgias eletivas e orçamento estadual, com fontes para conferir.</span></span>
+      <Link href="/contas-do-estado" prefetch={false} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-1)] bg-[var(--surface)] px-5 py-4 text-[var(--fg-1)]">
+        <span className="flex min-w-0 flex-col gap-1"><strong className="text-sm font-semibold">Contas dos estados</strong><span className="text-xs leading-relaxed text-[var(--muted)]">Consulte a execução orçamentária por UF e a cobertura disponível em cada painel.</span></span>
         <span className="text-xs font-medium">Explorar comparações →</span>
       </Link>
       <div className="platform-toolbar"><Link href="/explorar" prefetch={false} className="btn">Minha cidade e candidaturas</Link><Link href="/grafo" prefetch={false} className="btn">Rede de pessoas e empresas</Link><Link href="/emendas" prefetch={false} className="btn">Destino dos recursos públicos</Link><Link href="/comparar" prefetch={false} className="btn">Comparar candidaturas</Link></div>
