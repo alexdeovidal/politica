@@ -48,6 +48,8 @@ def run(root,limit,seconds,city_code):
             state={c:(due,r) for c,due,r in db.execute('SELECT code,due,retry FROM queue')}
             stamp=int(time.time())
             due=[c for c in cities if city_code or state.get(c['code'],(0,0))[0]<=stamp]
+            # Stable sort preserves the order across states within each class.
+            due.sort(key=lambda c: (root/(c['code']+'-fiscal.json')).is_file())
             deadline=time.monotonic()+seconds
             counts={'published':0,'updated':0,'unchanged':0,'deferred':0}
             attempted=0
@@ -61,7 +63,7 @@ def run(root,limit,seconds,city_code):
                 cooldown=False
                 try:
                     prior=refresh.read(file)
-                    data=refresh.fiscal(city,prior)
+                    data=refresh.fiscal(city,prior,fast_start=prior is None and not city_code)
                     if data: refresh.replace(file,data)
                     status='updated' if data and prior else 'published' if data else 'unchanged'
                 except Exception as error:

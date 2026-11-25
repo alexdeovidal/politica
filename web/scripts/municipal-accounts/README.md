@@ -40,8 +40,11 @@ cd /app && /bin/python3 scripts/municipal-accounts/queue.py --limit 60 --seconds
 ```
 
 O coletor roda sequencialmente com pausa mínima de 1,1 s entre requisições,
-prioriza capitais no primeiro ciclo, retoma de SQLite no volume e volta a
-conferir municípios publicados em até sete dias, conforme a capacidade.
+prioriza cidades sem painel e começa pelas capitais. Na primeira publicação,
+valida os dois anexos mais recentes do exercício vigente. Se ainda não existirem,
+usa o exercício anterior; se nenhum for válido, não publica. Nas revisitas,
+completa o histórico e mantém o último bimestre válido por exercício. A fila
+retoma de SQLite no volume; a revisão semanal depende da capacidade das fontes.
 Falhas mantêm as versões anteriores, entram em espera crescente, e 429/503
 interrompem o ciclo. Agende em uma janela que não conflite com as coletas
 estaduais/municipais já existentes. O FINBRA público tem exportação em lote,

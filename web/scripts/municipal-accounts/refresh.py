@@ -65,10 +65,16 @@ def annex(city, year, period, number):
     return rows, {'url':url,'sha256':sha}
 
 
-def fiscal(city, prior):
+def fiscal(city, prior, *, fast_start=False):
     records = {r['year']:r for r in (prior or {}).get('reports',[])}
     changed = False
-    for year,last in ((TODAY.year - 1,6),(TODAY.year,(TODAY.month - 1)//2)):
+    current = (TODAY.year, (TODAY.month - 1)//2)
+    historical = (TODAY.year - 1, 6)
+    for year,last in (current, historical) if fast_start else (historical, current):
+        # The first national pass needs a valid current report, not two years.
+        # If the current year has not been filed, accept the prior-year report.
+        if fast_start and year == historical[0] and current[0] in records:
+            break
         for period in range(last,records.get(year,{}).get('period',1)-1,-1):
             a, source_a = annex(city,year,period,'01')
             if not a: continue
