@@ -2,5 +2,6 @@
   {"uf":"GO","state":"Goiás","code":"5204508","slug":"caldas-novas","name":"Caldas Novas","existing":true,"pncpOrg":null},
   {"uf":"GO","state":"Goiás","code":"5208707","slug":"goiania","name":"Goiânia","existing":false,"pncpOrg":"01612092000123"},
   {"uf":"GO","state":"Goiás","code":"5201405","slug":"aparecida-de-goiania","name":"Aparecida de Goiânia","existing":false,"pncpOrg":"01005727000124"},
-  {"uf":"GO","state":"Goiás","code":"5201108","slug":"anapolis","name":"Anápolis","existing":false,"pncpOrg":"01067479000146"}
+  {"uf":"GO","state":"Goiás","code":"5201108","slug":"anapolis","name":"Anápolis","existing":false,"pncpOrg":"01067479000146"},
+  {"uf":"GO","state":"Goiás","code":"5218805","slug":"rio-verde","name":"Rio Verde","existing":false,"pncpOrg":"02056729000105"}
 ]
