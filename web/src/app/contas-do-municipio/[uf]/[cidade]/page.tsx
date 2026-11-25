@@ -3,19 +3,20 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shell/shell-context";
 import { pageMetadata } from "@/lib/seo-metadata";
 import { formatBRL } from "@/lib/format";
-import { findMunicipality, municipalities, municipalHref } from "@/lib/municipal-registry";
+import { findPublishedMunicipality } from "@/lib/municipal-catalog-server";
+import { municipalities, municipalHref } from "@/lib/municipal-registry";
 import { getMunicipalFiscal, getMunicipalProcurement } from "@/lib/municipal-live";
 import { sumCents } from "@/lib/state-accounts/comparison";
 
 export const revalidate = 120;
-export const dynamicParams = false;
+export const dynamicParams = true;
 export function generateStaticParams() {
   return municipalities.filter(c=>!c.existing).map(c=>({uf:c.uf.toLowerCase(),cidade:c.slug}));
 }
 type RouteProps={params:Promise<{uf:string;cidade:string}>};
 async function getCity({params}:RouteProps) {
   const {uf,cidade}=await params;
-  const city=findMunicipality(uf,cidade);
+  const city=findPublishedMunicipality(uf,cidade);
   if(!city) notFound();
   return city;
 }
@@ -71,11 +72,11 @@ export default async function MunicipalPublicPage(props:RouteProps) {
           {contracts.records.map(r=><li key={r.id} className="py-3 text-sm"><a className="source-link" href={r.url}>{r.title}</a>
           <p className="mt-1 text-[var(--muted)]">{date(r.published)} · {r.amount===null?"Valor não informado":`${formatBRL(r.amount)} · valor informado no PNCP`}</p></li>)}
         </ul> : <p>Nenhum registro retornou para este órgão e esta janela.</p>}
-      </> : <p className="mt-2 text-sm">A primeira coleta de contratos ainda não está disponível.</p>}
+      </> : <p className="mt-2 text-sm">{city.pncpOrg ? "A primeira coleta de contratos ainda não está disponível." : "O órgão municipal ainda não foi validado para consulta ao PNCP. A ausência desta base não indica que não houve contratos."}</p>}
     </section>
     <section id="fontes" className="card p-5 sm:p-7">
       <h2 className="text-xl font-semibold">Fontes e cobertura</h2>
-      <p className="mt-2 text-sm text-[var(--muted)]">O RREO depende da publicação bimestral pelo município. Os contratos vêm de um recorte do PNCP e não representam pagamentos. Em caso de falha, o painel mantém a última coleta validada.</p>
+      <p className="mt-2 text-sm text-[var(--muted)]">O RREO depende da publicação bimestral pelo município. O PNCP aparece quando o órgão contratante e seu CNPJ são confirmados. Em caso de falha, o painel mantém a última coleta validada.</p>
       <p className="mt-3 flex gap-4"><a className="source-link" href="https://apidatalake.tesouro.gov.br/docs/siconfi/">Tesouro Nacional</a><a className="source-link" href="https://pncp.gov.br/">Portal Nacional de Contratações Públicas</a></p>
     </section>
   </div>;

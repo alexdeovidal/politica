@@ -25,3 +25,24 @@ colecione os dois arquivos em diretório isolado, teste as páginas, adicione
 o snapshot inicial e publique. Antes de aumentar substancialmente o número
 de cidades, separar processamento por janela de atualização ou fila limitada;
 a coleta atual é serial e respeita no mínimo 1,1 segundo entre requisições.
+
+## Expansão nacional
+
+O catálogo IBGE inclui 5.569 municípios com prefeitura; Brasília e Fernando de
+Noronha são exceções territoriais, não municípios. O seletor distingue
+cadastro de cobertura publicada. A fila usa códigos do catálogo e libera cada
+cidade somente depois de validar e gravar o RREO. Cidades sem atualização
+seguem disponíveis com a última versão válida. Contratos são uma integração
+independente e não são inferidos por município.
+
+```sh
+cd /app && /bin/python3 scripts/municipal-accounts/queue.py --limit 60 --seconds 780
+```
+
+O coletor roda sequencialmente com pausa mínima de 1,1 s entre requisições,
+prioriza capitais no primeiro ciclo, retoma de SQLite no volume e volta a
+conferir municípios publicados em até sete dias, conforme a capacidade.
+Falhas mantêm as versões anteriores, entram em espera crescente, e 429/503
+interrompem o ciclo. Agende em uma janela que não conflite com as coletas
+estaduais/municipais já existentes. O FINBRA público tem exportação em lote,
+mas durante a checagem exigiu hCaptcha; esta fila não contorna o controle.

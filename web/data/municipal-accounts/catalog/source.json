@@ -1,0 +1,10 @@
+{
+  "url": "https://servicodados.ibge.gov.br/api/v1/localidades/municipios?view=nivelado",
+  "sha256": "28df854e73f8664a78049fed4bd0ca281047cb69dff73ae7e3660812938feb98",
+  "totalTerritorial": 5571,
+  "totalMunicipal": 5569,
+  "exceptions": {
+    "5300108": "Distrito Federal, sem prefeitura municipal",
+    "2605459": "Distrito estadual de Pernambuco, sem prefeitura municipal"
+  }
+}

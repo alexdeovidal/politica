@@ -1,6 +1,7 @@
 import { databasePath } from "@/lib/db";
 import { runDatabaseWorker } from "@/lib/database-worker";
-import { municipalities, municipalHref } from "@/lib/municipal-registry";
+import { municipalHref } from "@/lib/municipal-registry";
+import { publishedMunicipalities } from "@/lib/municipal-catalog-server";
 import { publishedStates } from "@/lib/state-accounts/registry";
 
 export const SITE_ORIGIN = "https://politica007.com.br";
@@ -17,7 +18,7 @@ let cacheBytes = 0;
 
 export const STATIC_SITEMAP_PATHS = [
   "/", "/news", "/apuracao", "/apuracao/historico", "/votos", "/grafo",
-  "/ranking", "/contas-do-municipio", ...municipalities.map(municipalHref), "/contas-do-estado",
+  "/ranking", "/contas-do-municipio", "/contas-do-estado",
   ...publishedStates().map(state => `/contas-do-estado/${state.slug}`), "/emendas", "/conexoes",
   "/redes", "/explorar", "/fontes", "/privacidade", "/comparar", "/sinais/doacao-circular",
   "/sinais/despesa-desproporcional", "/sinais/socio-fornecedor", "/sinais/discurso",
@@ -72,7 +73,7 @@ export function getSitemapIndex(signal?: AbortSignal) {
 }
 
 export async function getSitemapFile(file: string, signal?: AbortSignal): Promise<string | null> {
-  if (file === "pages.xml") return sitemapUrlset(STATIC_SITEMAP_PATHS.map(path => ({ path })));
+  if (file === "pages.xml") return sitemapUrlset([...STATIC_SITEMAP_PATHS,...publishedMunicipalities().map(municipalHref)].map(path => ({ path })));
   const politicians = /^politicians-(0|[1-9]\d{0,6})\.xml$/.exec(file);
   const news = /^news-(20\d{2}|2100)\.xml$/.exec(file);
   if (!politicians && !news) return null;
