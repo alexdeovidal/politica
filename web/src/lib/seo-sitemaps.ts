@@ -1,5 +1,6 @@
 import { databasePath } from "@/lib/db";
 import { runDatabaseWorker } from "@/lib/database-worker";
+import { municipalities, municipalHref } from "@/lib/municipal-registry";
 import { publishedStates } from "@/lib/state-accounts/registry";
 
 export const SITE_ORIGIN = "https://politica007.com.br";
@@ -16,7 +17,7 @@ let cacheBytes = 0;
 
 export const STATIC_SITEMAP_PATHS = [
   "/", "/news", "/apuracao", "/apuracao/historico", "/votos", "/grafo",
-  "/ranking", "/contas-do-municipio/caldas-novas", "/contas-do-estado",
+  "/ranking", "/contas-do-municipio", ...municipalities.map(municipalHref), "/contas-do-estado",
   ...publishedStates().map(state => `/contas-do-estado/${state.slug}`), "/emendas", "/conexoes",
   "/redes", "/explorar", "/fontes", "/privacidade", "/comparar", "/sinais/doacao-circular",
   "/sinais/despesa-desproporcional", "/sinais/socio-fornecedor", "/sinais/discurso",

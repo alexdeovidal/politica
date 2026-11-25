@@ -15,6 +15,7 @@ const SHORTCUTS = [
   { href: "/grafo", label: "Relações entre pessoas e empresas" },
   { href: "/conexoes", label: "Como se conectam?" },
   { href: "/comparar", label: "Comparar candidaturas" },
+  { href: "/contas-do-municipio", label: "Contas do Município · escolher estado e cidade" },
   { href: "/contas-do-estado/goias", label: "Contas do Estado · Goiás · publicidade e cirurgias eletivas" },
   { href: "/contas-do-estado", label: "Contas dos estados · cobertura disponível" },
   { href: "/fontes", label: "Fontes e atualização" },

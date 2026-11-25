@@ -102,7 +102,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
     { href: "#pesquisar", label: "Pesquisar dados públicos", icon: Search, action: "search", description: "Pesquise candidatos, empresas e pessoas físicas por nome, CPF ou CNPJ, incluindo doadores e fornecedores de campanhas." },
     { href: "/grafo", label: "Relações entre pessoas e empresas", icon: Network, description: "Explore relações encontradas nos registros públicos, como doações, despesas contratadas e vínculos empresariais." },
     { href: "/ranking", label: "Patrimônio declarado", icon: FileText, description: "Consulte bens declarados por candidatos nas eleições disponíveis na base." },
-    { href: "/contas-do-municipio/caldas-novas", label: "Contas do Município", icon: FileText, description: "Pesquise contratos públicos e sinais para conferir em Caldas Novas." },
+    { href: "/contas-do-municipio", label: "Contas do Município", icon: FileText, description: "Escolha o estado e a cidade para consultar as contas municipais e suas fontes." },
     { href: "/contas-do-estado", label: "Contas do Estado", icon: Building2, description: "Escolha um dos 26 estados ou o Distrito Federal para consultar contas públicas, fontes e cobertura." },
     { href: "/emendas", label: "Emendas parlamentares", icon: HandCoins, description: "Consulte emendas atribuídas a parlamentares e os valores registrados nas fontes públicas." },
   ];
