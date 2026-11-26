@@ -17,6 +17,14 @@ const goMde = {
   daycareCents: 1726359120,
   preschoolCents: 0,
 };
+// SIOPE/FNDE product 73, 2025/6, municipal code 520450, subfunction 365,
+// VAL_DESP_LIQU for NUM_ORDE 11 (creche), 12 (pré-escola) and 13 (total).
+const caldasSiope = {
+  source: "https://www.fnde.gov.br/plataforma-antonieta-de-barros/dados/produtos-de-dados/visualizar/73",
+  daycareCents: 736484800,
+  preschoolCents: 3875072091,
+  totalCents: 4611556891,
+};
 
 export function EducationDetail({ entity }: { entity: Entity }) {
   const row = (name: string) => entity.educationSubfunctions?.[name];
@@ -38,7 +46,16 @@ export function EducationDetail({ entity }: { entity: Entity }) {
       <p className="mt-1">Creche: <strong>{reais(goMde.daycareCents)}</strong> · Pré-escola: <strong>{reais(goMde.preschoolCents)}</strong>, liquidado no recorte de ações típicas de manutenção e desenvolvimento do ensino, custeadas por impostos e Fundeb.</p>
       <p className="mt-1 text-[var(--muted)]">O zero é reportado nesse recorte. Não some esses valores aos do Anexo 02: são demonstrativos com classificações diferentes.</p>
       <a className="source-link mt-2" href={goMde.source}>Goiás · RREO Anexo 08, quadro de MDE de 2025</a>
-    </div> : <p className="mt-3 text-sm text-[var(--muted)]">Não encontrei um Anexo 08 anual validado para Caldas Novas nesta consulta. O valor de Educação Infantil não foi repartido entre creche e pré-escola.</p>}
+    </div> : entity.code === "5204508" ? <div className="mt-3 rounded-lg border border-[var(--border-1)] p-3 text-sm">
+      <strong>Creche e pré-escola · demonstrativo do SIOPE/FNDE</strong>
+      <dl className="my-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div><dt>Creche</dt><dd className="font-semibold tabular-nums">{reais(caldasSiope.daycareCents)}</dd></div>
+        <div><dt>Pré-escola</dt><dd className="font-semibold tabular-nums">{reais(caldasSiope.preschoolCents)}</dd></div>
+        <div><dt>Total no SIOPE</dt><dd className="font-semibold tabular-nums">{reais(caldasSiope.totalCents)}</dd></div>
+      </dl>
+      <p className="mt-1 text-[var(--muted)]">Despesas liquidadas, acumuladas até o 6º bimestre de 2025. Esse detalhamento é do Demonstrativo da Função Educação do SIOPE, não do Anexo 08. O total difere do valor registrado no RREO Anexo 02 do Tesouro. A diferença não foi conciliada: não some os demonstrativos nem use este detalhamento como divisão do total do RREO.</p>
+      <a className="source-link mt-2" href={caldasSiope.source}>FNDE · Despesa com Função Educação (SIOPE)</a>
+    </div> : null}
     {school && <div className="mt-3 rounded-lg border border-[var(--border-1)] p-3 text-sm">
       <strong>Matrículas da rede · Censo Escolar 2025</strong>
       <ul className="my-2 grid gap-1">{indicators.map(item => <li key={item.key}>
