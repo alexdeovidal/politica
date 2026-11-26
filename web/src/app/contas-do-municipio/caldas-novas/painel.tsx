@@ -45,10 +45,11 @@ function RankedValues({ values, total, selected, onSelect }: {
   </li>)}</ul>;
 }
 
-export function MunicipalDashboard({ reports, groups, labels, path, resultCount, scope, filterParams, flowRevenue, funding, flowFilters, initialTrailStep }: {
+export function MunicipalDashboard({ reports, groups, labels, path, resultCount, scope, filterParams, flowRevenue, funding, flowFilters, initialTrailStep, municipality }: {
   reports: FiscalSnapshot[]; groups: ContractGroup[]; labels: Record<string, string>;
   path: string; resultCount: number; scope: string; filterParams: Record<string, string>;
   flowRevenue: FlowRevenue[]; funding: FlowFunding[]; flowFilters: Record<string, string>; initialTrailStep: 0 | 4;
+  municipality?: { name: string; state: string; code: string; directory: string; contractsReady: boolean; divergentYears: number[] };
 }) {
   const [mode, setMode] = useState<Mode>("trail");
   const [year, setYear] = useState(reports[0]?.year);
@@ -69,7 +70,8 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
   const activeUnit = selectedUnit !== undefined && units.has(selectedUnit) ? selectedUnit : rankedUnits[0]?.[0];
   const suppliers = groups.filter(row => row.org === activeOrg?.org && row.unit === activeUnit);
   const activeSupplier = selectedSupplier && suppliers.includes(selectedSupplier) ? selectedSupplier : suppliers[0];
-  const mapRows = report?.areas ?? [];
+  const mapRows = municipality ? (report?.areas ?? []).filter(row => (row.amount ?? 0) > 0) : report?.areas ?? [];
+  const mapTotal = municipality ? mapRows.reduce((sum, row) => sum + (row.amount ?? 0), 0) : report?.settled ?? 0;
   const leading = mapRows.slice(0, 7).filter((x): x is Tile => (x.amount ?? 0) > 0);
   const tail = mapRows.slice(7).reduce((sum, row) => sum + (row.amount ?? 0), 0);
   const mapTiles = leading.length ? tiles(tail > 0 ? [...leading, { name: "Demais funções", amount: tail }] : leading,
@@ -82,18 +84,21 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
     { id: "network", label: "Rede de contratos", Icon: Network },
     { id: "map", label: "Mapa de proporções", Icon: ChartPie },
   ] as const;
+  const availableTabs = municipality ? tabs.filter(tab => tab.id !== "network") : tabs;
   const chooseValue = (group: string, total: number) => (value: FiscalValue) => setSelectedValue({ ...value, group, total });
 
   return <section className={styles.dashboard} aria-label="Painel de finanças municipais">
     <header className={styles.hero}>
       <div>
-        <span className={styles.eyebrow}><Landmark size={16} /> Finanças municipais · Goiás</span>
-        <h1>Contas de Caldas Novas</h1>
-        <p>Explore quanto o município arrecadou, em quais áreas a despesa foi liquidada e quem aparece nos contratos públicos.</p>
+        <span className={styles.eyebrow}><Landmark size={16} /> Finanças municipais · {municipality?.state ?? "Goiás"}</span>
+        <h1>Contas de {municipality?.name ?? "Caldas Novas"}</h1>
+        <p>Explore quanto o município arrecadou, em quais áreas a despesa foi liquidada e {municipality ? "quais contratos estão disponíveis para consulta." : "quem aparece nos contratos públicos."}</p>
+        {municipality && <p className="mt-2 text-xs">Código IBGE {municipality.code}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
-        {resultCount > 0 && <a className="btn btn--primary" href="#sinais"><SearchCheck size={16} /> Sinais para investigar</a>}
-        <a className="btn" href="#buscar-contratos"><Files size={16} /> Consultar contratos</a>
+        {municipality && <Link href={municipality.directory} className="btn" prefetch={false}>Escolher outra cidade</Link>}
+        {!municipality && resultCount > 0 && <a className="btn btn--primary" href="#sinais"><SearchCheck size={16} /> Sinais para investigar</a>}
+        <a className="btn" href="#buscar-contratos"><Files size={16} /> {municipality && !municipality.contractsReady ? "Cobertura de contratos" : "Consultar contratos"}</a>
       </div>
     </header>
 
@@ -110,7 +115,9 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
         { label: "Receitas realizadas", value: report?.revenue, Icon: CircleDollarSign, source: "Tesouro Nacional" },
         { label: "Despesas liquidadas", value: report?.settled, Icon: Landmark, source: "Tesouro Nacional" },
         { label: "Despesas pagas no exercício", value: report?.paid, Icon: ArrowDownRight, source: "Tesouro Nacional" },
-        { label: "Valor dos contratos iniciais", value: contractCount ? contractTotal : undefined, Icon: Files, source: `PNCP · ${number.format(contractCount)} no recorte` },
+        municipality
+          ? { label: "Despesas empenhadas", value: report?.committed, Icon: Files, source: "Tesouro Nacional" }
+          : { label: "Valor dos contratos iniciais", value: contractCount ? contractTotal : undefined, Icon: Files, source: `PNCP · ${number.format(contractCount)} no recorte` },
       ].map(({ label, value, Icon, source }) => <div key={label} className={styles.metric}>
         <Icon size={18} aria-hidden /><span>{label}</span>
         <strong title={value === undefined ? undefined : formatBRL(value)}>{value === undefined ? "Sem dado" : shortMoney(value)}</strong>
@@ -118,17 +125,18 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
       </div>)}
     </div>
 
+    {report && municipality?.divergentYears.includes(report.year) && <p className="mb-4 rounded-lg border border-[var(--border-2)] p-3 text-sm">Os totais dos anexos ou a soma das funções divergem. Os valores originais foram preservados, sem ajustes nem estimativas.</p>}
     <div className={styles.workspace}>
       <nav className={styles.tabs} aria-label="Visualizações municipais">
-        {tabs.map(({ id, label, Icon }) => <button key={id} type="button" aria-pressed={mode === id}
+        {availableTabs.map(({ id, label, Icon }) => <button key={id} type="button" aria-pressed={mode === id}
           onClick={() => { setMode(id); setSelectedValue(undefined); }}>
           <Icon aria-hidden size={17} /> {label}
         </button>)}
       </nav>
 
-      {mode === "trail" ? <MoneyTrail key={`${initialTrailStep}-${flowFilters.fonte}`} initialStep={initialTrailStep}
+      {mode === "trail" ? <MoneyTrail key={`${initialTrailStep}-${flowFilters.fonte}`} initialStep={municipality ? 1 : initialTrailStep}
         report={report} revenue={flowRevenue.find(row=>row.year===report?.year && row.period===report.period)}
-        funding={funding} companies={groups} path={path} filters={flowFilters} scope={scope} resultCount={resultCount} /> : mode === "network" ? <div className={styles.content}>
+        funding={funding} companies={groups} path={path} filters={flowFilters} scope={scope} resultCount={resultCount} fiscalOnly={Boolean(municipality)} /> : mode === "network" ? <div className={styles.content}>
         <div className={styles.sectionHead}>
           <div><h2>Quem contrata e quem fornece</h2><p>{scope} · {number.format(resultCount)} registros. A rede considera contratos iniciais com valor positivo.</p></div>
           <span className={styles.source}>Fonte · PNCP</span>
@@ -168,7 +176,7 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
       </div> : <div className={styles.content}>
         <div className={styles.sectionHead}>
           <div><h2>{mode === "map" ? "Onde a despesa foi liquidada" : "De onde vêm as receitas e onde se gasta"}</h2>
-            <p>{mode === "map" ? "A área de cada bloco representa a participação no valor liquidado." : "As duas visões mostram classificações do orçamento municipal no mesmo bimestre."}</p></div>
+            <p>{mode === "map" ? (municipality ? "A área dos blocos é proporcional aos valores positivos publicados por função." : "A área de cada bloco representa a participação no valor liquidado.") : "As duas visões mostram classificações do orçamento municipal no mesmo bimestre."}</p></div>
           <span className={styles.source}>Fonte · Siconfi</span>
         </div>
         {!report ? <p className={styles.empty}>Balanço municipal aguardando a primeira coleta do Tesouro.</p> :
@@ -177,31 +185,32 @@ export function MunicipalDashboard({ reports, groups, labels, path, resultCount,
               <div><h3>Origens das receitas</h3><p className={styles.columnTotal}>{formatBRL(report.revenue)}</p>
                 <RankedValues values={report.origins} total={report.revenue} selected={selectedValue?.name}
                   onSelect={chooseValue("Receita realizada", report.revenue)} />
+                {municipality && !report.origins.length && <p className={styles.empty}>Este recorte tem o total realizado, mas não detalha as origens da receita.</p>}
               </div>
               <div><h3>Despesas por área</h3><p className={styles.columnTotal}>{formatBRL(report.settled)}</p>
                 <RankedValues values={report.areas} total={report.settled} selected={selectedValue?.name}
                   onSelect={chooseValue("Despesa liquidada", report.settled)} />
               </div>
-            </div> : <div className={styles.map} aria-label="Mapa proporcional das despesas liquidadas">
+            </div> : !mapTiles.length ? <p className={styles.empty}>Não há valores positivos por função para montar o mapa neste recorte.</p> : <div className={styles.map} aria-label="Mapa proporcional das despesas liquidadas">
               {mapTiles.map(tile => <button key={tile.name} type="button" aria-pressed={selectedValue?.name === tile.name}
                 aria-label={`${tile.name}, ${formatBRL(tile.amount)}`}
                 title={`${tile.name} · ${formatBRL(tile.amount)}`}
-                onClick={() => chooseValue("Despesa liquidada", report.settled)(tile)}
+                onClick={() => chooseValue(municipality ? "Valores positivos no mapa" : "Despesa liquidada", mapTotal)(tile)}
                 style={{ top: `${tile.top}%`, left: `${tile.left}%`, width: `${tile.width}%`, height: `${tile.height}%` }}>
-                {tile.width >= 13 && tile.height >= 10 && <span><b>{tile.name}</b><small>{share(tile.amount, report.settled)}</small></span>}
+                {tile.width >= 13 && tile.height >= 10 && <span><b>{tile.name}</b><small>{share(tile.amount, mapTotal)}</small></span>}
               </button>)}
             </div>}
             <aside className={styles.insight} aria-live="polite">
               <span className={styles.eyebrow}>{focus?.group}</span>
               <h3>{focus?.name}</h3>
               <strong className={styles.big}>{focus?.amount == null ? "Dado não disponível" : formatBRL(focus.amount)}</strong>
-              {selectedValue && selectedValue.amount !== null && <p>{share(selectedValue.amount, selectedValue.total)} do total correspondente no demonstrativo.</p>}
+              {selectedValue && selectedValue.amount !== null && <p>{share(selectedValue.amount, selectedValue.total)} {mode === "map" && municipality ? "dos valores positivos representados no mapa." : "do total correspondente no demonstrativo."}</p>}
               <dl className={styles.stages}>
                 <div><dt>Empenhado</dt><dd>{shortMoney(report.committed)}</dd></div>
                 <div><dt>Liquidado</dt><dd>{shortMoney(report.settled)}</dd></div>
                 <div><dt>Pago no exercício</dt><dd>{shortMoney(report.paid)}</dd></div>
               </dl>
-              <p>Totais municipais do exercício. Para seguir um fornecedor, consulte os vínculos publicados na rede do PNCP.</p>
+              <p>{municipality ? "Totais municipais acumulados até o bimestre indicado." : "Totais municipais do exercício. Para seguir um fornecedor, consulte os vínculos publicados na rede do PNCP."}</p>
               <div className={styles.sourceLinks}>
                 <a className="source-link" href={report.balanceUrl}>Balanço original</a>
                 <a className="source-link" href={report.executionUrl}>Despesas por função</a>

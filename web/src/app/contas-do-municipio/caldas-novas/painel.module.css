@@ -105,3 +105,5 @@
 .trailList b { color:var(--green); font-size:13px; white-space:nowrap; }
 @media(max-width:880px) { .trailSteps { grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); } }
 @media(max-width:450px) { .trailSteps { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+.shortTrail { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 550px; }

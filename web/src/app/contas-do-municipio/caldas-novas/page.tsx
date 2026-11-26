@@ -5,7 +5,8 @@ import { PaginationLinks } from "@/components/ui/pagination-links";
 import { formatBRL } from "@/lib/format";
 import { concentrationSignals, listMunicipalContracts, municipalFiscalReports, municipalFlowRevenue, municipalOrgs, municipalPath, repeatedContractSignals } from "@/lib/municipal-accounts";
 import { MunicipalDashboard } from "./painel";
-import { SearchCheck } from "lucide-react";
+import { ArrowLeft, SearchCheck } from "lucide-react";
+import { directoryHref } from "@/lib/municipal-directory";
 import styles from "./painel.module.css";
 import { PaidStreetParking } from "./paid-street-parking";
 import { AmendmentSignals } from "./amendments";
@@ -55,6 +56,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
 
   return <div className="flex flex-col gap-6">
     <PageHeader group="Contas do Município" current="Caldas Novas" />
+    <Link href={directoryHref("GO")} prefetch={false} className="source-link flex w-fit items-center gap-2"><ArrowLeft size={15} aria-hidden /> Escolher outra cidade</Link>
     <MunicipalDashboard reports={fiscal} groups={result?.groups ?? []} labels={municipalOrgs} path={municipalPath}
       resultCount={result?.total ?? 0} scope={Object.values(flowFilters).some(Boolean) ? "Filtros da busca" : "Todo o acervo coletado"}
       flowRevenue={municipalFlowRevenue()} funding={result?.funding ?? []} flowFilters={flowFilters}

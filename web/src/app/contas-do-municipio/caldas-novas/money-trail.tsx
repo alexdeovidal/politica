@@ -18,9 +18,9 @@ type Item = { id: string; label: string; sub: string; amount?: number | null; hr
 const short = new Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL", notation:"compact", maximumFractionDigits:1});
 const count = new Intl.NumberFormat("pt-BR");
 
-export function MoneyTrail({ report, revenue, funding, companies, path, filters, scope, resultCount, initialStep }: {
+export function MoneyTrail({ report, revenue, funding, companies, path, filters, scope, resultCount, initialStep, fiscalOnly = false }: {
   report?: FiscalSnapshot; revenue?: FlowRevenue; funding: FlowFunding[]; companies: ContractGroup[];
-  path: string; filters: Record<string,string>; scope:string; resultCount: number; initialStep: 0 | 4;
+  path: string; filters: Record<string,string>; scope:string; resultCount: number; initialStep: 0 | 1 | 4; fiscalOnly?: boolean;
 }) {
   const [step, setStep] = useState<number>(initialStep);
   const [selected, setSelected] = useState("");
@@ -73,13 +73,13 @@ export function MoneyTrail({ report, revenue, funding, companies, path, filters,
 
   return <div id="caminho-do-dinheiro" className={`${styles.content} scroll-mt-20`}>
     <div className={styles.sectionHead}>
-      <div><h2>Do imposto ao fornecedor</h2><p>Escolha uma etapa para ver os valores e abrir os documentos que sustentam cada ligação.</p></div>
+      <div><h2>{fiscalOnly ? "Da receita à despesa" : "Do imposto ao fornecedor"}</h2><p>{fiscalOnly ? "Acompanhe a receita realizada e as despesas liquidadas por função, com os demonstrativos oficiais." : "Escolha uma etapa para ver os valores e abrir os documentos que sustentam cada ligação."}</p></div>
     </div>
-    <nav className={styles.trailSteps} aria-label="Etapas do percurso do dinheiro">
-      {steps.map(({label,Icon},index)=><button key={label} type="button" aria-current={index===step?"step":undefined}
+    <nav className={fiscalOnly ? `${styles.trailSteps} ${styles.shortTrail}` : styles.trailSteps} aria-label="Etapas do percurso do dinheiro">
+      {steps.map(({label,Icon},index)=> (!fiscalOnly || index === 1 || index === 2) && <button key={label} type="button" aria-current={index===step?"step":undefined}
         className={index===4 ? styles.trailBlue : undefined} onClick={()=>selectStep(index)}>
         <Icon size={18} aria-hidden /> <span>{label}</span>
-        {index===2 ? <span className={styles.trailGap} title="Vínculo contábil depende de conciliação">···</span> : index<4 && <ArrowRight size={13} aria-hidden />}
+        {index===2 && !fiscalOnly ? <span className={styles.trailGap} title="Vínculo contábil depende de conciliação">···</span> : index<4 && (!fiscalOnly || index === 1) && <ArrowRight size={13} aria-hidden />}
       </button>)}
     </nav>
 
@@ -108,9 +108,10 @@ export function MoneyTrail({ report, revenue, funding, companies, path, filters,
           {step===3 && <a className="source-link" href="#buscar-contratos">Explorar todos os contratos do recorte</a>}
         </div>
         {step===3 && active ? <Link prefetch={false} className="btn mt-3" href={href({fonte: active.id, etapa:"fornecedores"},"caminho-do-dinheiro")}>Ver fornecedores desta fonte <ArrowRight size={15} /></Link> :
+          fiscalOnly && step===2 ? <a href="#buscar-contratos" className="btn mt-3">Consultar cobertura de contratos <ArrowRight size={15} /></a> :
           step<4 && <button type="button" className="btn mt-3" onClick={()=>selectStep(step+1)}>{step===2?"Abrir contratos para conferência":"Próxima etapa"} <ArrowRight size={15} /></button>}
       </aside>
     </div>
-    <p className="mt-4 text-xs text-[var(--muted)]">RREO para orçamento. PNCP para a contratação, a fonte declarada e o fornecedor. A pausa entre despesa e contrato indica que esses registros ainda precisam ser conciliados.</p>
+    <p className="mt-4 text-xs text-[var(--muted)]">{fiscalOnly ? "Os demonstrativos fiscais não vinculam automaticamente uma despesa a um contrato ou fornecedor." : "RREO para orçamento. PNCP para a contratação, a fonte declarada e o fornecedor. A pausa entre despesa e contrato indica que esses registros ainda precisam ser conciliados."}</p>
   </div>;
 }

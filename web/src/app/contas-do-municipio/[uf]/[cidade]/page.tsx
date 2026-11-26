@@ -1,4 +1,7 @@
-import Link from "next/link";
+import { Files } from "lucide-react";
+import { MunicipalDashboard } from "../../caldas-novas/painel";
+import styles from "../../caldas-novas/painel.module.css";
+import { directoryHref } from "@/lib/municipal-directory";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shell/shell-context";
 import { pageMetadata } from "@/lib/seo-metadata";
@@ -26,46 +29,30 @@ export async function generateMetadata(props:RouteProps) {
     `Receitas realizadas, execução de despesas e contratos recentes de ${city.name}, com fontes e recortes oficiais.`,municipalHref(city));
 }
 const date=(s:string)=>s.slice(0,10).split("-").reverse().join("/");
-const labels={revenue:"Receita realizada",committed:"Despesa empenhada",settled:"Despesa liquidada",paid:"Despesa paga"} as const;
 
 export default async function MunicipalPublicPage(props:RouteProps) {
   const city=await getCity(props);
   const fiscal=getMunicipalFiscal(city);
   const contracts=getMunicipalProcurement(city);
+  const reports = (fiscal?.reports ?? []).map(report => ({
+    year: report.year, period: report.period, ...report.totals, origins: [],
+    areas: report.areas.map(area => ({ name: area.name, amount: area.cents })).sort((a, b) => b.amount - a.amount),
+    balanceUrl: report.balance.url, executionUrl: report.functions.url, collected: fiscal?.collected ?? "",
+  })).sort((a, b) => b.year - a.year);
+  const divergentYears = (fiscal?.reports ?? []).filter(report => report.annex02Total !== report.totals.settled ||
+    sumCents(report.areas.map(area => area.cents)) !== report.annex02Total).map(report => report.year);
   return <div className="flex flex-col gap-6">
     <PageHeader group="Contas do Município" current={city.name} />
-    <header className="card p-6 sm:p-9">
-      <Link href="/contas-do-municipio" prefetch={false} className="source-link">Escolher outro estado ou cidade</Link>
-      <p className="mt-4 text-xs uppercase tracking-wide text-[var(--muted)]">{city.state} · IBGE {city.code}</p>
-      <h1 className="mt-2 text-3xl font-semibold sm:text-5xl">Contas de {city.name}</h1>
-      <p className="mt-3 max-w-2xl text-[var(--muted)]">Acompanhe o orçamento declarado ao Tesouro e contratos recentes do órgão municipal cadastrado no PNCP. Contrato, empenho, liquidação e pagamento são coisas diferentes.</p>
-      <nav aria-label="Seções do painel" className="mt-4 flex flex-wrap gap-4 text-sm underline"><a href="#orcamento">Orçamento</a><a href="#contratos">Contratos recentes</a><a href="#fontes">Fontes e cobertura</a></nav>
-    </header>
-    <section id="orcamento" className="grid gap-4">
-      <h2 className="text-xl font-semibold">Execução orçamentária</h2>
-      {fiscal ? <><p className="text-sm text-[var(--muted)]">RREO consolidado do município, sem despesas intraorçamentárias. Versão dos dados: {date(fiscal.collected)}.</p>
-        {fiscal.reports.map((r,i)=>{
-          const areaSum=sumCents(r.areas.map(a=>a.cents));
-          return <details key={r.year} open={i===0} className="card p-5 sm:p-7">
-            <summary className="cursor-pointer text-lg font-semibold">{r.year} · {r.period}º bimestre · até {date(r.end)}</summary>
-            <dl className="my-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {Object.entries(labels).map(([k,label])=><div key={k} className="rounded border border-[var(--border-1)] p-4">
-                <dt className="text-sm text-[var(--muted)]">{label}</dt><dd className="mt-2 break-words font-semibold">{formatBRL(r.totals[k as keyof typeof labels])}</dd>
-              </div>)}
-            </dl>
-            <h3 className="mb-2 font-semibold">Despesas liquidadas por função</h3>
-            {(r.annex02Total!==r.totals.settled || areaSum!==r.annex02Total) && <p className="mb-3 rounded border border-[var(--border-2)] p-3 text-sm">Os totais dos anexos ou a soma das funções divergem. Os registros oficiais foram preservados sem rateios nem estimativas.</p>}
-            <div className="overflow-x-auto" role="region" tabIndex={0} aria-label={`Funções em ${r.year}`}><table className="w-full text-sm">
-              <thead><tr><th scope="col" className="p-2 text-left">Função</th><th scope="col" className="p-2 text-right">Liquidado</th></tr></thead>
-              <tbody>{r.areas.map(a=><tr key={a.name} className="border-t border-[var(--border-1)]"><th className="p-2 text-left font-normal" scope="row">{a.name}</th><td className="whitespace-nowrap p-2 text-right tabular-nums">{formatBRL(a.cents)}</td></tr>)}</tbody>
-            </table></div>
-            <p className="mt-3 flex flex-wrap gap-4"><a className="source-link" href={r.balance.url}>RREO · totais</a><a className="source-link" href={r.functions.url}>RREO · funções</a></p>
-          </details>;
-        })}
-      </> : <p className="card p-5">Nenhuma versão fiscal validada disponível.</p>}
-    </section>
-    <section id="contratos" className="card p-5 sm:p-7">
-      <h2 className="text-xl font-semibold">Contratos recentes</h2>
+    <div id="orcamento" className="scroll-mt-20"><MunicipalDashboard reports={reports} groups={[]} labels={{}} path={municipalHref(city)}
+      resultCount={contracts?.total ?? 0} scope="Recorte publicado" filterParams={{}} flowRevenue={[]} funding={[]}
+      flowFilters={{}} initialTrailStep={0}
+      municipality={{ name: city.name, state: city.state, code: city.code, directory: directoryHref(city.uf),
+        contractsReady: Boolean(contracts), divergentYears }} /></div>
+    <section id="buscar-contratos" className="card scroll-mt-20 p-5 sm:p-7">
+      <div id="contratos" className={`${styles.sectionHead} scroll-mt-20`}>
+        <div><h2 className="flex items-center gap-2"><Files size={21} aria-hidden /> Contratos recentes</h2>
+          <p>Consulte os registros no Portal Nacional de Contratações Públicas.</p></div>
+      </div>
       {contracts ? <>
         <p className="mb-4 mt-2 text-sm text-[var(--muted)]">PNCP · órgão cadastrado com CNPJ {contracts.org} · publicações de {date(contracts.start)} a {date(contracts.end)}. Foram encontrados {contracts.total} registros. Esta lista mostra até 100 e não inclui automaticamente fundos, Câmara ou outros órgãos com CNPJ próprio.</p>
         {contracts.records.length>0 ? <ul className="divide-y divide-[var(--border-1)]">
@@ -74,10 +61,42 @@ export default async function MunicipalPublicPage(props:RouteProps) {
         </ul> : <p>Nenhum registro retornou para este órgão e esta janela.</p>}
       </> : <p className="mt-2 text-sm">{city.pncpOrg ? "A primeira coleta de contratos ainda não está disponível." : "O órgão municipal ainda não foi validado para consulta ao PNCP. A ausência desta base não indica que não houve contratos."}</p>}
     </section>
-    <section id="fontes" className="card p-5 sm:p-7">
+    {reports.length > 0 && <section aria-labelledby="tabelas-fiscais" className="card p-5 sm:p-7">
+      <div className={styles.sectionHead}>
+        <div><h2 id="tabelas-fiscais">Demonstrativos por exercício</h2><p>Veja os valores completos, sem arredondamento visual, e abra os anexos oficiais.</p></div>
+      </div>
+      <div className="grid gap-3">{reports.map(report => <details key={report.year} className="rounded-xl border border-[var(--border-1)] p-4">
+        <summary className="cursor-pointer font-semibold">{report.year} · {report.period}º bimestre</summary>
+        <div className="mt-3 overflow-x-auto" role="region" tabIndex={0} aria-label={`Demonstrativo de ${report.year}`}>
+          <table className="w-full text-sm">
+            <caption className="sr-only">Valores do RREO de {report.year}</caption>
+            <thead><tr><th className="p-2 text-left" scope="col">Indicador</th><th className="p-2 text-right" scope="col">Valor</th></tr></thead>
+            <tbody>{[
+              { name: "Receita realizada", amount: report.revenue },
+              { name: "Despesa empenhada", amount: report.committed },
+              { name: "Despesa liquidada", amount: report.settled },
+              { name: "Despesa paga", amount: report.paid },
+            ].map(row => <tr key={row.name} className="border-t border-[var(--border-1)]">
+              <th className="p-2 text-left font-normal" scope="row">{row.name}</th>
+              <td className="whitespace-nowrap p-2 text-right tabular-nums">{formatBRL(row.amount)}</td>
+            </tr>)}</tbody>
+            <tbody>
+              <tr><th className="p-2 text-left" colSpan={2} scope="rowgroup">Despesas liquidadas por função</th></tr>
+              {report.areas.map(row => <tr key={row.name} className="border-t border-[var(--border-1)]">
+                <th className="p-2 text-left font-normal" scope="row">{row.name}</th>
+                <td className="whitespace-nowrap p-2 text-right tabular-nums">{formatBRL(row.amount)}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+        {divergentYears.includes(report.year) && <p className="mt-2 text-sm text-[var(--muted)]">Os totais ou a soma das funções divergem entre os registros oficiais.</p>}
+        <p className={styles.sourceLinks}><a className="source-link" href={report.balanceUrl}>RREO · totais</a><a className="source-link" href={report.executionUrl}>RREO · funções</a></p>
+      </details>)}</div>
+    </section>}
+    <section id="fontes" className="card scroll-mt-20 p-5 sm:p-7">
       <h2 className="text-xl font-semibold">Fontes e cobertura</h2>
-      <p className="mt-2 text-sm text-[var(--muted)]">O RREO depende da publicação bimestral pelo município. O PNCP aparece quando o órgão contratante e seu CNPJ são confirmados. Em caso de falha, o painel mantém a última coleta validada.</p>
-      <p className="mt-3 flex gap-4"><a className="source-link" href="https://apidatalake.tesouro.gov.br/docs/siconfi/">Tesouro Nacional</a><a className="source-link" href="https://pncp.gov.br/">Portal Nacional de Contratações Públicas</a></p>
+      <p className="mt-2 text-sm text-[var(--muted)]">O RREO depende da publicação bimestral pelo município. O PNCP aparece quando o órgão contratante e seu CNPJ são confirmados. Em caso de falha, o painel mantém a última coleta validada.{fiscal && ` Última coleta fiscal: ${date(fiscal.collected)}.`}</p>
+      <p className="mt-3 flex flex-wrap gap-4"><a className="source-link" href="https://apidatalake.tesouro.gov.br/docs/siconfi/">Tesouro Nacional</a><a className="source-link" href="https://pncp.gov.br/">Portal Nacional de Contratações Públicas</a></p>
     </section>
   </div>;
 }
