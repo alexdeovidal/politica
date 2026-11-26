@@ -7,6 +7,7 @@ import { pageMetadata } from "@/lib/seo-metadata";
 import { allMunicipalities, municipalPublishedCodes } from "@/lib/municipal-catalog-server";
 import { directoryHref, directoryPath, directoryQuery, municipalDirectory } from "@/lib/municipal-directory";
 import { municipalHref } from "@/lib/municipal-registry";
+import { activeFiscalEntities, cityCostHref, rankingPath, resourceAmount } from "@/lib/per-capita";
 import { STATES } from "@/lib/state-accounts/registry";
 import { BrazilStateMap } from "@/components/geography/brazil-state-map";
 import dashboard from "./caldas-novas/painel.module.css";
@@ -28,6 +29,10 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
   const { uf, q, includePending, page: requestedPage } = directoryQuery(await searchParams, stateCodes);
   const { states, state, page, pages, first, last, total, rows } = municipalDirectory(cities, published, { uf, q, includePending, page: requestedPage });
   const ready = states.reduce((sum, item) => sum + item.ready, 0);
+  const fiscalCities = activeFiscalEntities().filter(entity => entity.scope === "city");
+  const fiscalCodes = new Set(fiscalCities.map(entity => entity.code));
+  const healthReady = fiscalCities.filter(entity => resourceAmount(entity, "Saúde") !== null).length;
+  const educationReady = fiscalCities.filter(entity => resourceAmount(entity, "Educação") !== null).length;
   const mapEntries = new Map(states.map(item => [item.uf, {
     href: directoryHref(item.uf), label: `${stateNames.get(item.uf) ?? item.uf} · ${format(item.ready)} de ${format(item.total)} publicados`, ready: item.ready > 0,
   }]));
@@ -43,7 +48,10 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
       <div className={styles.coverage}>
         <ChartNoAxesCombined size={19} aria-hidden />
         <strong data-published={ready} data-municipalities={cities.length}>{format(ready)} de {format(cities.length)}</strong>
-        <span>municípios com painel publicado</span>
+        <span>municípios com painel de contas publicado</span>
+        <span>Gasto por morador · dados municipais de 2025</span>
+        <Link className="source-link" prefetch={false} href={`${rankingPath}?area=Sa%C3%BAde#ranking`}>Saúde: {format(healthReady)} de {format(cities.length)}</Link>
+        <Link className="source-link" prefetch={false} href={`${rankingPath}?area=Educa%C3%A7%C3%A3o#ranking`}>Educação: {format(educationReady)} de {format(cities.length)}</Link>
       </div>
     </header>
 
@@ -85,7 +93,9 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
           </div>}
         </Form>
         <p className={styles.directoryNote}>
-          O <Link href={district}>Distrito Federal tem painel próprio</Link>. Fernando de Noronha é distrito estadual, sem prefeitura própria.
+          Os rankings de gasto por morador usam o demonstrativo anual do Tesouro e podem ter dados antes de o painel de contas da cidade ser publicado.
+          {" "}Para encontrar uma cidade ainda sem painel, selecione “Todas as cidades”.
+          {" "}O <Link href={district}>Distrito Federal tem painel próprio</Link>. Fernando de Noronha é distrito estadual, sem prefeitura própria.
         </p>
       </section>
     </div>
@@ -111,7 +121,9 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
                 <span className={styles.cityFoot}>Abrir painel <ArrowRight size={16} aria-hidden /></span>
               </Link> : <div className={styles.cityCard}>
                 <span className={styles.muted}>Ainda sem painel</span><strong>{city.name}</strong>
-                <span className={styles.cityFoot}>IBGE {city.code}</span>
+                {fiscalCodes.has(city.code)
+                  ? <Link href={cityCostHref(city.code)} prefetch={false} className="source-link">Ver gasto por morador em {city.name}</Link>
+                  : <span className={styles.cityFoot}>IBGE {city.code}</span>}
               </div>}
             </li>;
           })}
