@@ -38,12 +38,18 @@ def write_json(path, obj):
     tmp.write_text(json.dumps(obj,ensure_ascii=False,separators=(",",":"))+"\n")
     tmp.replace(path)
 
-def fetch(item, population, cache):
+def fetch(item, population, cache, simplified_only=False):
+    if not simplified_only:
+        status=fetch_report(item,population,cache,"RREO")
+        if status!="empty" or item[0]!="city":return status
+    return fetch_report(item,population,cache,"RREO Simplificado")
+
+def fetch_report(item, population, cache, report):
     global last,hold
     scope,code,uf,name,href=item
     path=cache/(code+".json")
     if path.is_file(): return "cached"
-    query=dict(an_exercicio=YEAR,nr_periodo=6,co_tipo_demonstrativo="RREO",no_anexo="RREO-Anexo 02",id_ente=code)
+    query=dict(an_exercicio=YEAR,nr_periodo=6,co_tipo_demonstrativo=report,no_anexo="RREO-Anexo 02",id_ente=code)
     url=RREO+"?"+urlencode(query)
     for attempt in range(3):
         try:
@@ -65,6 +71,8 @@ def fetch(item, population, cache):
                     raise ValueError("RREO com ente ou período diferente")
                 data={**data,"items":[r for r in vals if r["esfera"]=="M"]}
                 if not data["items"]:return "empty"
+            if any(r["demonstrativo"]!=report or r["periodicidade"]!="B" for r in data["items"]):
+                raise ValueError("Tipo ou periodicidade divergente no RREO")
             fn,total=extract(data,code,uf,scope)
             if total<=0:raise ValueError("Total inválido")
             row=dict(scope=scope,code=code,uf=uf,name=name,href=href,population=population,totalCents=total,functions=fn,
@@ -82,12 +90,18 @@ def fetch(item, population, cache):
     return "retry"
 
 def main():
+    global LIMIT
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("ods",type=Path);p.add_argument("cache",type=Path)
     p.add_argument("--output",type=Path);p.add_argument("--states-only",action="store_true")
     p.add_argument("--export-only",action="store_true");p.add_argument("--limit",type=int)
     p.add_argument("--live",action="store_true",help="Use the repository’s verified 2025 denominator; positional ods is ignored")
+    p.add_argument("--codes",type=Path,help="Only fetch the listed government codes, one per line")
+    p.add_argument("--simplified-only",action="store_true",help="Recover municipal codes already verified absent in standard RREO")
     a=p.parse_args()
+    only=set(a.codes.read_text().split()) if a.codes else None
+    if a.simplified_only and only is None:p.error("--simplified-only requires --codes")
+    if a.simplified_only:LIMIT=2.0
     gov=governments();a.cache.mkdir(parents=True,exist_ok=True)
     lockfile=(a.cache/"run.lock").open("a")
     try: fcntl.flock(lockfile,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -102,16 +116,16 @@ def main():
     def population(row):
         return seed["populationSet"].get(row[1],0) if seed else pop.get((row[0],row[3] if row[0]=="state" else row[1]),0)
     if not a.export_only:
-        tasks=sorted((g for g in gov if (not a.states_only or g[0]=="state") and population(g)>0),key=lambda g:(outcomes.get(g[1],{}).get("last",0),g[0]!="state",-population(g)))
-        tasks=[g for g in tasks if g[1] not in seeded and not (a.cache/(g[1]+".json")).exists() and (not a.live or time.time()-outcomes.get(g[1],{}).get("last",0)>86400)]
+        tasks=sorted((g for g in gov if (not a.states_only or g[0]=="state") and (only is None or g[1] in only) and (not a.simplified_only or g[0]=="city") and population(g)>0),key=lambda g:(outcomes.get(g[1],{}).get("last",0),g[0]!="state",-population(g)))
+        tasks=[g for g in tasks if g[1] not in seeded and not (a.cache/(g[1]+".json")).exists() and (not a.live or outcomes.get(g[1],{}).get("version")!=2 or time.time()-outcomes.get(g[1],{}).get("last",0)>86400)]
         if a.limit:tasks=tasks[:a.limit]
         with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-            fs={pool.submit(fetch,g,population(g),a.cache):g for g in tasks}
+            fs={pool.submit(fetch,g,population(g),a.cache,a.simplified_only):g for g in tasks}
             for f in concurrent.futures.as_completed(fs):
                 g=fs[f]
                 try: status=f.result()
                 except Exception as e: status="error:"+type(e).__name__
-                outcomes[g[1]]={"last":int(time.time()),"status":status}
+                outcomes[g[1]]={"last":int(time.time()),"status":status,"version":2}
                 print(g[1],status,flush=True)
             write_json(outcome_path,outcomes)
     if a.output:

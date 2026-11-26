@@ -1,5 +1,6 @@
 # Gasto por morador
 - Ano fechado de 2025: RREO Anexo 02 (6º bimestre), despesas liquidadas sem intraorçamentárias / população estimada IBGE de 01/07/2025.
+- Para municípios sem o RREO padrão, o coletor consulta o RREO Simplificado, mantendo Anexo 02, 6º bimestre, entidade, período e coluna idênticos.
 - As funções e todos os totais são independentes de SIOPE, com diferenças preservadas. Casos sem valor confiável ficam fora do ranking.
 - A parcela estadual de uma cidade é um rateio, não execução localizada. A composição municipal de idades de 2022 é ajustada à estimativa de 2025 sem mudar o total.
 - A simulação particular só calcula uma diferença líquida com despesa anual evitável, custos adicionais, alunos da mesma etapa e preço por aluno informados.

@@ -63,7 +63,7 @@ function getNationalSupplement() {
       const source=new URL(row.source);
       if(source.origin!=="https://apidatalake.tesouro.gov.br" || source.pathname!=="/ords/siconfi/tt/rreo" ||
         source.searchParams.get("id_ente")!==row.code || source.searchParams.get("an_exercicio")!=="2025" ||
-        source.searchParams.get("nr_periodo")!=="6" || source.searchParams.get("co_tipo_demonstrativo")!=="RREO" ||
+        source.searchParams.get("nr_periodo")!=="6" || !(["RREO","RREO Simplificado"].includes(source.searchParams.get("co_tipo_demonstrativo")??"")) ||
         source.searchParams.get("no_anexo")!=="RREO-Anexo 02" || !/^[0-9a-f]{64}$/.test(row.sourceSha256))
         throw new Error("Fonte complementar inválida");
       unique.add(row.code);

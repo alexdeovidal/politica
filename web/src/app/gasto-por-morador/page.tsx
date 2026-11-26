@@ -105,7 +105,7 @@ export default async function PublicSpending({ searchParams }: { searchParams: P
     <section id="fontes" className="card scroll-mt-24 p-5 sm:p-7">
       <h2 className="flex items-center gap-2 text-xl font-semibold"><MapPinned size={18} aria-hidden /> Como ler os números</h2>
       <ul className="mt-3 grid list-disc gap-2 pl-5 text-sm text-[var(--muted)]">
-        <li>Numerador: RREO Anexo 02 do 6º bimestre de 2025, despesa liquidada acumulada até 31/12, excluídas operações intraorçamentárias. Liquidado significa obrigação reconhecida, não pagamento já efetuado.</li>
+        <li>Numerador: RREO Anexo 02 do 6º bimestre de 2025, despesa liquidada acumulada até 31/12, excluídas operações intraorçamentárias. Para municípios, pode vir da versão simplificada do mesmo anexo e período. Liquidado significa obrigação reconhecida, não pagamento já efetuado.</li>
         <li>Denominador: população residente estimada pelo IBGE em 01/07/2025. As matrículas são o número de vínculos da rede mantenedora no Censo Escolar 2025, não a população que frequenta qualquer escola do território.</li>
         <li>O ranking usa a razão sem arredondamento. O total vem da própria fonte e não da soma das funções. Havendo divergência, os números oficiais ficam preservados.</li>
       </ul>
