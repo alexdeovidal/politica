@@ -31,7 +31,7 @@ export default async function StateAccounts({ params }: { params: Promise<{ esta
   if (!state.active) {
     const fiscal = getNationalFiscal(state.slug);
     if (!fiscal) notFound();
-    return <><PageHeader group="Contas do Estado" current={state.name} /><NationalFiscalPanel data={fiscal} slug={state.slug} sih={getSihProduction(state.uf)} /></>;
+    return <><PageHeader group="Contas do Estado" current={state.name} /><PilotCard code={String(state.ibgeCode)} /><NationalFiscalPanel data={fiscal} slug={state.slug} sih={getSihProduction(state.uf)} /></>;
   }
   const audited = getStateDashboard(state.slug);
   const fresh = getNationalFiscal(state.slug);
@@ -50,6 +50,6 @@ export default async function StateAccounts({ params }: { params: Promise<{ esta
       isBasedOn: data.sources.slice(0, 20).map(source => source.url), inLanguage: "pt-BR" }) }} />
     {state.uf === "GO" && <a className="source-link w-fit" href="#gasto-por-morador">Ver saúde e educação por morador · piloto 2025</a>}
     <StateDashboard data={data} slug={state.slug} />
-    {state.uf === "GO" && <PilotCard code="52" />}
+    <PilotCard code={String(state.ibgeCode)} />
   </div>;
 }

@@ -1,3 +1,5 @@
+import { PilotCard } from "../../../gasto-por-morador/pilot-card";
+import { StateAllocation } from "../../../gasto-por-morador/state-allocation";
 import { Files } from "lucide-react";
 import { MunicipalDashboard } from "../../caldas-novas/painel";
 import styles from "../../caldas-novas/painel.module.css";
@@ -48,6 +50,8 @@ export default async function MunicipalPublicPage(props:RouteProps) {
       flowFilters={{}} initialTrailStep={0}
       municipality={{ name: city.name, state: city.state, code: city.code, directory: directoryHref(city.uf),
         contractsReady: Boolean(contracts), divergentYears }} /></div>
+    <StateAllocation code={city.code} />
+    <PilotCard code={city.code} />
     <section id="buscar-contratos" className="card scroll-mt-20 p-5 sm:p-7">
       <div id="contratos" className={`${styles.sectionHead} scroll-mt-20`}>
         <div><h2 className="flex items-center gap-2"><Files size={21} aria-hidden /> Contratos recentes</h2>

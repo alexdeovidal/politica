@@ -1,3 +1,4 @@
+import { StateAllocation } from "../../gasto-por-morador/state-allocation";
 import Link from "next/link";
 import { PilotCard } from "../../gasto-por-morador/pilot-card";
 import Form from "next/form";
@@ -65,6 +66,7 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
       initialTrailStep={input("etapa") === "fornecedores" ? 4 : 0}
       filterParams={{ de: from, ate: to, min: minInput, max: maxInput }} />
 
+    <StateAllocation code={"5204508"} />
     <PilotCard code="5204508" />
 
     <PaidStreetParking />
