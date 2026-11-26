@@ -23,9 +23,10 @@ export default async function CitySpending({params}: Props) {
   const entity=fiscalEntity(codigo), hasTownPage=municipalPublishedCodes().has(codigo);
   return <div className={styles.dashboard}>
     <PageHeader group="Gasto por morador" current={city.name} />
-    <header className={styles.hero}><div><span className={styles.eyebrow}>Finanças públicas · 2025</span><h1>{city.name} · {city.uf}</h1><p>Despesa da prefeitura e estimativa da parcela estadual, apresentadas separadamente.</p></div>
+    <header className={styles.hero}><div><span className={styles.eyebrow}>Finanças públicas · 2025</span><h1>{city.name} · {city.uf}</h1><p>Despesa da prefeitura e estimativas das parcelas estadual e federal, apresentadas separadamente.</p></div>
       <nav className="flex flex-wrap gap-2"><Link className="btn btn--primary" href={`${rankingPath}?oe=${city.uf}&oc=${city.code}#comparar`}>Comparar município</Link>{hasTownPage && <Link className="btn" href={municipalHref(city)}>Ver contas municipais</Link>}</nav></header>
     <StateAllocation standalone code={codigo} />
+    <StateAllocation standalone code={codigo} federal />
     {entity ? <PilotCard code={codigo} /> : <section className="card p-5"><h2 className="text-xl font-semibold">Despesa da prefeitura</h2><p className="mt-2 text-sm text-[var(--muted)]">Demonstrativo municipal de 2025 ainda não validado nesta consulta. Não representa gasto zero.</p></section>}
   </div>;
 }

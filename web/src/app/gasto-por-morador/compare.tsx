@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { allMunicipalities } from "@/lib/municipal-catalog-server";
-import { ageLabels, cityCostHref, cityFor, fiscalEntity, number, rankingPath, reais, stateAllocation, stateFor } from "@/lib/per-capita";
+import { ageLabels, cityCostHref, cityFor, fiscalEntity, federalFiscal, number, rankingPath, reais, stateAllocation, stateFor } from "@/lib/per-capita";
+import { HealthSimulator, type HealthChoice } from "./health-simulator";
 import { STATES } from "@/lib/state-accounts/registry";
 
 type Params=Record<string,string|string[]|undefined>;
@@ -24,7 +25,14 @@ export function SpendingCompare({params,area}:{params:Params;area:string}) {
   const effective={...params, ...(valid(params,"oe") && params.uf1===undefined ? {uf1:valid(params,"oe"),cidade1:valid(params,"oc")} : {})};
   const a=pick(effective,"1"), b=pick(effective,"2");
   const compare=[a,b];
-  return <section className="card min-w-0 scroll-mt-24 p-5 sm:p-7" id="comparar" aria-labelledby="comparar-title">
+  const health:HealthChoice[]=[];
+  for(const s of compare){
+    if(s.city&&s.population) health.push({id:"M"+s.city.code,name:s.title,population:s.population,budget:s.municipal?.functions.Saúde??null,scope:"Prefeitura"});
+    if(s.state) health.push({id:"E"+s.uf,name:s.state.name,population:s.state.population,budget:s.state.functions.Saúde,scope:"Governo estadual"});
+  }
+  health.push({id:"BR",name:"Brasil",population:federalFiscal.population,budget:federalFiscal.functions.Saúde,scope:"União"});
+  const choices=[...new Map(health.map(c=>[c.id,c])).values()];
+  return <><section className="card min-w-0 scroll-mt-24 p-5 sm:p-7" id="comparar" aria-labelledby="comparar-title">
     <h2 className="text-2xl font-semibold" id="comparar-title">Compare estados e cidades</h2>
     <p className="my-2 text-sm text-[var(--muted)]">Escolha duas UFs e atualize a lista. Depois escolha os municípios, ou deixe “Estado inteiro”. Todos os valores são de 2025; o valor mensal é a média de 12 meses.</p>
     <form action={rankingPath+"#comparar"} className="mt-3 flex flex-wrap items-end gap-3">
@@ -46,6 +54,8 @@ export function SpendingCompare({params,area}:{params:Params;area:string}) {
         <thead><tr><th scope="col" className="p-2 text-left">Indicador · ano e média mensal</th>{compare.map((s,i)=><th key={i} scope="col" className="p-2 text-right"><Link className="source-link" href={s.city?cityCostHref(s.city.code):s.state?.href??rankingPath} prefetch={false}>{s.title}</Link></th>)}</tr></thead>
         <tbody>
           <tr className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left">População IBGE 2025</th>{compare.map((s,i)=><td key={i} className="p-2 text-right">{s.population?number.format(s.population):"Não informado"}</td>)}</tr>
+          <tr className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left">União · por morador <span className="block text-xs font-normal text-[var(--muted)]">Média nacional</span></th>{compare.map((s,i)=><td key={i} className="p-2 text-right">{s.population?pair(federalFiscal.totalCents/federalFiscal.population,federalFiscal.totalCents/federalFiscal.population/12):"Não informado"}</td>)}</tr>
+          <tr className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left">União · parcela estimada no local</th>{compare.map((s,i)=>{const amount=s.population===undefined?undefined:federalFiscal.totalCents/federalFiscal.population*s.population;return <td key={i} className="p-2 text-right">{pair(amount,amount===undefined?undefined:amount/12)}</td>;})}</tr>
           <tr className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left">Governo estadual · por morador</th>{compare.map((s,i)=><td key={i} className="p-2 text-right">{pair(s.state?s.state.totalCents/s.state.population:undefined,s.state?s.state.totalCents/s.state.population/12:undefined)}</td>)}</tr>
           <tr className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left">Governo estadual · total no local <span className="block text-xs font-normal text-[var(--muted)]">Estimativa se for município</span></th>{compare.map((s,i)=><td key={i} className="p-2 text-right">{s.city?pair(s.estimate?.annual,s.estimate?.monthly):pair(s.state?.totalCents,s.state?s.state.totalCents/12:undefined)}</td>)}</tr>
           {compare.some(s=>s.city) && ageLabels.map((label,i)=><tr key={label} className="border-t border-[var(--border-1)]"><th scope="row" className="p-2 text-left font-normal">{label} · rateio estadual</th>{compare.map((s,j)=><td key={j} className="p-2 text-right">{s.city?pair(s.estimate?.groups[i]?.annual,s.estimate?.groups[i]?.monthly):"Apenas municípios"}</td>)}</tr>)}
@@ -54,6 +64,6 @@ export function SpendingCompare({params,area}:{params:Params;area:string}) {
         </tbody>
       </table>
     </div>
-    <p className="mt-3 text-xs text-[var(--muted)]">Para cidades, a despesa estadual é estimada pela média estadual por habitante. As faixas seguem as proporções do Censo 2022, não despesas registradas por idade. A soma não inclui a prefeitura.</p>
-  </section>;
+    <p className="mt-3 text-xs text-[var(--muted)]">Para cidades, a despesa estadual é estimada pela média estadual por habitante. As faixas seguem as proporções do Censo 2022, não despesas registradas por idade. Não some as esferas: transferências podem aparecer em mais de um orçamento.</p>
+  </section><HealthSimulator choices={choices} key={choices.map(c=>c.id).join(",")} /></>;
 }

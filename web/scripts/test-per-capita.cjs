@@ -26,6 +26,12 @@ try{
  }
  assert.equal(calc.monthlyPer,Math.round(go.totalCents/go.population/12));
  assert.equal(lib.stateAllocation("5204508",df),null);
+ const federal=lib.federalFiscal, national=lib.federalAllocation("5204508");
+ assert.equal(federal.population,213421037);
+ assert.equal(federal.totalCents,370542038169976);
+ assert.equal(national.annualPer,1736202);assert.equal(national.monthlyPer,144684);
+ assert.equal(national.groups.reduce((v,g)=>v+g.annual,0),national.annual);
+ assert.equal(national.groups.reduce((v,g)=>v+g.monthly,0),national.monthly);
  assert.equal(lib.stateAllocation("5101837",lib.stateFor("MT")).groups.length,0);
  assert.equal(lib.ranked([go,df],"state","Saúde").length,2);
  assert.equal(lib.fiscalEntity("5204508").educationSubfunctions["Educação Infantil"],3873082587);

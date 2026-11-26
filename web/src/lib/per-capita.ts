@@ -6,6 +6,8 @@ import { allMunicipalities, municipalPublishedCodes, municipalStorage } from "./
 import { getMunicipalFiscal } from "./municipal-live";
 import { municipalHref } from "./municipal-registry";
 import { STATES } from "./state-accounts/registry";
+import federal from "./per-capita-federal-2025.json";
+export const federalFiscal=federal;
 
 export type Entity = {
   scope: "state" | "city"; code: string; uf: string; name: string; href: string; population: number;
@@ -124,9 +126,9 @@ function shares(total: bigint, weights: readonly number[]) {
 }
 const rounded=(numerator: bigint, divisor: bigint)=> (numerator+divisor/BigInt(2))/divisor;
 export const ageLabels=["Crianças e adolescentes (0 a 14)","Jovens (15 a 29)","Adultos e idosos (30 ou mais)"];
-export function stateAllocation(cityCode: string, state: Entity) {
+function governmentAllocation(cityCode: string, state: Pick<Entity,"population"|"totalCents">, uf?: string) {
   const city=cityFor(cityCode), pop=populationFor(cityCode);
-  if(!city || city.uf!==state.uf || !pop || state.population<=0 || state.totalCents<0) return null;
+  if(!city || (uf && city.uf!==uf) || !pop || state.population<=0 || state.totalCents<0) return null;
   const statePop=BigInt(state.population), cents=BigInt(state.totalCents), residents=BigInt(pop);
   const annual=rounded(cents*residents,statePop), monthly=rounded(cents*residents,statePop*BigInt(12));
   const annualPer=Number(rounded(cents,statePop)), monthlyPer=Number(rounded(cents,statePop*BigInt(12)));
@@ -136,3 +138,6 @@ export function stateAllocation(cityCode: string, state: Entity) {
   return { population:pop, annual:Number(annual),monthly:Number(monthly),annualPer,monthlyPer,
     groups:groups.map((count,i)=>({label:ageLabels[i],count,annual:annualGroups[i],monthly:monthlyGroups[i]})) };
 }
+
+export const stateAllocation=(code:string,state:Entity)=>governmentAllocation(code,state,state.uf);
+export const federalAllocation=(code:string)=>governmentAllocation(code,federalFiscal);

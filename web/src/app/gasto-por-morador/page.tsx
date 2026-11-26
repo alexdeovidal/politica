@@ -7,6 +7,7 @@ import { activeFiscalEntities, cityCostHref, educationPilot, fiscalPilot, number
 import { PilotCard } from "./pilot-card";
 import { STATES } from "@/lib/state-accounts/registry";
 import { allMunicipalities } from "@/lib/municipal-catalog-server";
+import { FederalSummary } from "./federal-summary";
 import { SpendingCompare } from "./compare";
 import { PrivateSchoolSimulator } from "./simulator";
 import municipal from "../contas-do-municipio/caldas-novas/painel.module.css";
@@ -38,7 +39,7 @@ function Ranking({ scope, area, filters }: { scope: Entity["scope"]; area: strin
     <h3 id={`rank-${scope}`} className="text-lg font-semibold">{title} · {number.format(rows.length)} de {number.format(target)} com dado nesta função</h3>
     <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label={`Ranking de ${title.toLowerCase()} por morador`}>
       <table className="w-full text-sm">
-        <thead><tr><th className="p-2 text-left" scope="col">Posição</th><th className="p-2 text-left" scope="col">Local</th><th className="p-2 text-right" scope="col">Por morador</th><th className="p-2 text-right" scope="col">Valor liquidado</th></tr></thead>
+        <thead><tr><th className="p-2 text-left" scope="col">Posição</th><th className="p-2 text-left" scope="col">Local</th><th className="p-2 text-right" scope="col">Por morador no ano e no mês</th><th className="p-2 text-right" scope="col">Valor liquidado</th></tr></thead>
         <tbody>{visible.map(({entity,amount,rank})=>{
           const per = amount/entity.population;
           return <tr key={entity.code} className="border-t border-[var(--border-1)]">
@@ -47,7 +48,7 @@ function Ranking({ scope, area, filters }: { scope: Entity["scope"]; area: strin
               <Link href={scope==="city"?cityCostHref(entity.code):entity.href} prefetch={false} className="font-semibold underline decoration-[var(--border-2)] underline-offset-2">{entity.name}{scope === "city" ? ` · ${entity.uf}` : ""}</Link>
               <span className="block text-xs font-normal text-[var(--muted)]">{number.format(entity.population)} habitantes</span>
             </th>
-            <td className="p-2 text-right font-semibold tabular-nums"><span className="whitespace-nowrap">{reais(per)}</span><span aria-hidden="true" className="ml-auto mt-1 block h-1 rounded bg-[var(--green)]" style={{width:`${chartMax>0 ? Math.max(0,per)/chartMax*100 : 0}%`}} /></td>
+            <td className="p-2 text-right font-semibold tabular-nums"><span className="whitespace-nowrap">{reais(per)}</span><span className="block whitespace-nowrap text-xs font-normal text-[var(--muted)]">{reais(per/12)}/mês</span><span aria-hidden="true" className="ml-auto mt-1 block h-1 rounded bg-[var(--green)]" style={{width:`${chartMax>0 ? Math.max(0,per)/chartMax*100 : 0}%`}} /></td>
             <td className="whitespace-nowrap p-2 text-right tabular-nums">{reais(amount)} <a className="source-link block" href={entity.source} aria-label={`Demonstrativo do Tesouro: ${entity.name}`}>Fonte</a></td>
           </tr>;
         })}</tbody>
@@ -75,12 +76,15 @@ export default async function PublicSpending({ searchParams }: { searchParams: P
       <nav className="flex flex-wrap gap-2" aria-label="Seções do relatório">
         <a className="btn btn--primary" href="#ranking"><ChartNoAxesCombined size={16} aria-hidden /> Ver rankings</a>
         <a className="btn" href="#comparar">Comparar estado e cidade</a>
+        <a className="btn" href="#uniao">Gasto da União</a>
+        <a className="btn" href="#simulador-saude">Simular planos de saúde</a>
         <a className="btn" href="#simulador">Simular escola particular</a>
       </nav>
     </header>
     <div className="grid gap-4 xl:grid-cols-2">
       <PilotCard code="52" listing /><PilotCard code="5204508" listing />
     </div>
+    <FederalSummary />
     <SpendingCompare params={filters} area={area} />
     <section id="ranking" className="grid scroll-mt-24 gap-4" aria-labelledby="ranking-title">
       <div className="card p-5 sm:p-7">
