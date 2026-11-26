@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PilotCard } from "../../gasto-por-morador/pilot-card";
 import Form from "next/form";
 import { PageHeader } from "@/components/shell/shell-context";
 import { PaginationLinks } from "@/components/ui/pagination-links";
@@ -57,11 +58,14 @@ export default async function MunicipalAccounts({ searchParams }: PageProps<"/co
   return <div className="flex flex-col gap-6">
     <PageHeader group="Contas do Município" current="Caldas Novas" />
     <Link href={directoryHref("GO")} prefetch={false} className="source-link flex w-fit items-center gap-2"><ArrowLeft size={15} aria-hidden /> Escolher outra cidade</Link>
+    <a className="source-link w-fit" href="#gasto-por-morador">Ver saúde e educação por morador · piloto 2025</a>
     <MunicipalDashboard reports={fiscal} groups={result?.groups ?? []} labels={municipalOrgs} path={municipalPath}
       resultCount={result?.total ?? 0} scope={Object.values(flowFilters).some(Boolean) ? "Filtros da busca" : "Todo o acervo coletado"}
       flowRevenue={municipalFlowRevenue()} funding={result?.funding ?? []} flowFilters={flowFilters}
       initialTrailStep={input("etapa") === "fornecedores" ? 4 : 0}
       filterParams={{ de: from, ate: to, min: minInput, max: maxInput }} />
+
+    <PilotCard code="5204508" />
 
     <PaidStreetParking />
 

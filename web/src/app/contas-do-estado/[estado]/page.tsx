@@ -6,6 +6,7 @@ import { getStateDashboard } from "@/lib/state-accounts/data";
 import { getNationalFiscal } from "@/lib/state-accounts/national-fiscal";
 import { getSihProduction } from "@/lib/state-accounts/national-sih";
 import { NationalFiscalPanel } from "./national-fiscal-panel";
+import { PilotCard } from "../../gasto-por-morador/pilot-card";
 import { StateDashboard } from "./state-dashboard";
 
 // Load the validated snapshots from the persistent volume when serving the page.
@@ -47,6 +48,8 @@ export default async function StateAccounts({ params }: { params: Promise<{ esta
       url: `https://politica007.com.br/contas-do-estado/${state.slug}`, creator: { "@type": "Organization", name: "Política007" },
       spatialCoverage: { "@type": "Place", name: `${state.name}, Brasil` }, dateModified: data.collectedAt,
       isBasedOn: data.sources.slice(0, 20).map(source => source.url), inLanguage: "pt-BR" }) }} />
+    {state.uf === "GO" && <a className="source-link w-fit" href="#gasto-por-morador">Ver saúde e educação por morador · piloto 2025</a>}
     <StateDashboard data={data} slug={state.slug} />
+    {state.uf === "GO" && <PilotCard code="52" />}
   </div>;
 }
