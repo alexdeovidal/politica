@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { ArrowUpRight, Building2, FileText, GitCompareArrows, MapPinned } from "lucide-react";
+import { ArrowUpRight, FileCheck2, Landmark, MapPinned } from "lucide-react";
 import { PageHeader } from "@/components/shell/shell-context";
+import { BrazilStateMap } from "@/components/geography/brazil-state-map";
 import { pageMetadata } from "@/lib/seo-metadata";
-import { STATES, hasFiscalCoverage, publishedStates } from "@/lib/state-accounts/registry";
+import { STATES, publishedStates } from "@/lib/state-accounts/registry";
+import styles from "./[estado]/state-dashboard.module.css";
+import hub from "./state-directory.module.css";
 
 export const metadata = pageMetadata(
   "Contas dos estados · despesas públicas com fontes | Politica007",
@@ -10,44 +13,50 @@ export const metadata = pageMetadata(
   "/contas-do-estado",
 );
 
+const destination = (slug: string) => `/contas-do-estado/${slug}`;
+
 export default function StateAccountsHub() {
   const available = publishedStates();
-  const planned = STATES.filter(state => !state.active && !hasFiscalCoverage(state.slug));
-  return <div className="flex flex-col gap-7">
+  const states = [...STATES].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  const published = new Set(available.map(item => item.uf));
+  const entries = new Map(states.map(state => {
+    const ready = published.has(state.uf);
+    return [state.uf, { href: ready ? destination(state.slug) : undefined, label: `${state.name} · ${ready ? "painel publicado" : "ainda sem painel"}`, ready }];
+  }));
+  return <div className={styles.dashboard}>
     <PageHeader group="Transparência" current="Contas do Estado" />
-    <header className="rounded-[20px] border border-[var(--border-1)] bg-[var(--surface)] p-6 sm:p-9">
-      <p className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]"><MapPinned size={16} aria-hidden /> Cobertura estadual</p>
-      <h1 className="mb-4 text-3xl font-semibold tracking-tight sm:text-5xl">Contas dos estados</h1>
-      <p className="max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Compare o destino dos recursos públicos e confira os documentos que sustentam cada valor. Escolha uma unidade da Federação com integração publicada.</p>
+    <header className={styles.hero}>
+      <div className={styles.heroCopy}>
+        <div className={styles.eyebrow}><span className={styles.liveDot} /> TRANSPARÊNCIA <span>/</span> BRASIL</div>
+        <h1>Contas dos estados.<br /><span>Explore o orçamento do Brasil.</span></h1>
+        <p>Escolha um estado ou o Distrito Federal para comparar áreas do orçamento e abrir os documentos oficiais que sustentam cada valor.</p>
+        <div className={styles.heroMeta}><span><Landmark size={16} aria-hidden />{available.length} de {STATES.length} UFs com painel publicado</span></div>
+      </div>
+      <div className={styles.stateCard}><span>COBERTURA NACIONAL</span><strong>{available.length}</strong><div>UFs publicadas</div><small>26 estados e Distrito Federal</small></div>
     </header>
 
-    <section aria-labelledby="states-available" className="flex flex-col gap-4">
-      <div><h2 id="states-available" className="text-xl font-semibold">Disponível para consulta</h2><p className="mt-1 text-sm text-[var(--muted)]">O painel informa a cobertura de cada órgão e período.</p></div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {available.map(state => <Link key={state.uf} prefetch={false} href={`/contas-do-estado/${state.slug}`} className="card flex flex-col gap-5 p-6 transition-colors hover:border-[var(--border-2)]">
-          <div className="flex items-center justify-between gap-4"><span className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border-2)] bg-[var(--bg)] text-sm font-bold">{state.uf}</span><span className="rounded-full border border-[var(--border-1)] px-3 py-1 text-xs text-[var(--muted)]">{state.active ? "Fiscal e temático" : "Fiscal e produção SUS"}</span></div>
-          <div><h3 className="text-2xl font-semibold tracking-tight">{state.name}</h3><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{state.active ? "Publicidade, repasses para cirurgias e funções orçamentárias, com documentos." : "Orçamento por área e produção cirúrgica hospitalar do SUS, em bases separadas."}</p></div>
-          <span className="mt-auto flex items-center gap-2 text-sm font-semibold">Explorar {state.name}<ArrowUpRight size={17} aria-hidden /></span>
-        </Link>)}
-        <div className="grid gap-4 rounded-[var(--r-lg)] border border-[var(--border-1)] bg-[var(--surface)] p-6">
-          <h3 className="text-base font-semibold">Leia cada comparação com contexto</h3>
-          <div className="flex items-start gap-3"><GitCompareArrows size={19} aria-hidden className="mt-0.5 shrink-0 text-[var(--muted)]" /><p className="text-sm leading-relaxed text-[var(--muted)]">Compare a mesma janela temporal e a mesma etapa financeira: pago, liquidado ou contratado.</p></div>
-          <div className="flex items-start gap-3"><Building2 size={19} aria-hidden className="mt-0.5 shrink-0 text-[var(--muted)]" /><p className="text-sm leading-relaxed text-[var(--muted)]">Confira quais órgãos entram no recorte. Um conjunto parcial não representa o total de gastos do estado.</p></div>
-          <div className="flex items-start gap-3"><FileText size={19} aria-hidden className="mt-0.5 shrink-0 text-[var(--muted)]" /><p className="text-sm leading-relaxed text-[var(--muted)]">Cada valor mantém a origem e o período para consulta e verificação.</p></div>
-        </div>
-      </div>
-    </section>
+    <div className={hub.explorer}>
+      <section className={styles.panel} aria-labelledby="mapa-estadual">
+        <header className={styles.sectionTitle}><span><MapPinned size={18} aria-hidden /></span><div>
+          <h2 id="mapa-estadual">Explore pelo mapa</h2><p>Toque ou clique em uma UF para abrir o painel. Malha do IBGE.</p>
+        </div></header>
+        <div className={hub.map}><BrazilStateMap entries={entries} /></div>
+      </section>
 
-    {planned.length > 0 && <section aria-labelledby="states-planned" className="card p-5 sm:p-6">
-      <h2 id="states-planned" className="text-xl font-semibold">Cobertura em expansão</h2>
-      <p className="mb-5 mt-2 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">As demais unidades da Federação ainda não têm integração publicada neste módulo. A ausência de um painel não informa quanto um estado gastou.</p>
-      <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {planned.map(state => <li key={state.uf} className="flex items-center gap-3 rounded-lg border border-[var(--border-1)] px-3 py-3">
-          <span className="w-7 shrink-0 text-xs font-semibold text-[var(--muted)]">{state.uf}</span>
-          <span className="min-w-0 flex-1 text-sm">{state.name}</span>
-          <span className="shrink-0 text-[11px] text-[var(--muted)]">Ainda sem painel</span>
-        </li>)}
-      </ul>
-    </section>}
+      <section className={styles.panel} aria-labelledby="lista-ufs">
+        <header className={styles.sectionTitle}><span>27</span><div><h2 id="lista-ufs">Escolha uma UF</h2><p>Abra as contas de uma unidade da Federação.</p></div></header>
+        <ul className={hub.list}>
+          {states.map(state => <li key={state.uf}>
+            {published.has(state.uf) ? <Link prefetch={false} href={destination(state.slug)} className={hub.state}>
+              <span className={hub.code}>{state.uf}</span><span><strong>{state.name}</strong><small>{state.active ? "Fiscal e temático" : "Fiscal e produção SUS"}</small></span><ArrowUpRight size={15} aria-hidden />
+            </Link> : <div className={hub.state}><span className={hub.code}>{state.uf}</span><span><strong>{state.name}</strong><small>Ainda sem painel</small></span></div>}
+          </li>)}
+        </ul>
+      </section>
+    </div>
+
+    <div className={styles.note}><FileCheck2 size={19} aria-hidden />
+      <p><strong>Compare a mesma medida, fonte e período.</strong> Produção do SUS não é pagamento do Tesouro. Os recortes de publicidade e repasses de Goiás são integrações específicas e não representam cobertura igual em todas as UFs.</p>
+    </div>
   </div>;
 }

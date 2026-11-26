@@ -1,0 +1,10 @@
+.explorer { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+.map { --map-accent: var(--go-teal); margin-top: 16px; }
+.list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(174px,100%),1fr)); gap: 8px; margin-top: 16px; }
+.state { display: flex; width: 100%; min-height: 54px; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border-1); border-radius: 8px; background: var(--surface); min-width: 0; }
+.state:hover { border-color: var(--go-teal); }
+.state svg { margin-left: auto; flex-shrink: 0; color: var(--go-teal); }
+.state strong { display: block; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.state small { display: block; font-size: 10px; color: var(--muted); line-height: 1.5; }
+.code { flex: 0 0 auto; font: 700 10px var(--font-mono),monospace; color: var(--go-teal); background: var(--go-teal-soft); border-radius: 5px; padding: 6px; }
+@media(max-width: 900px) { .explorer { grid-template-columns: 1fr; } }

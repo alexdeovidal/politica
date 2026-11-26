@@ -1,0 +1,11 @@
+.brazil { width: 100%; height: clamp(235px,36vw,350px); background: radial-gradient(ellipse at 60% 45%,color-mix(in srgb,var(--map-accent, var(--green, #087059)) 8%,var(--bg)),var(--bg)); border: 1px solid var(--border-1); border-radius: 14px; }
+
+.territory path,.territory circle { fill: var(--surface); stroke: var(--border-2); stroke-width: 1; }
+
+.territory[data-ready] path { fill: color-mix(in srgb, var(--map-accent, var(--green, #087059)) 22%, var(--surface)); }
+
+.territory[data-active] path,.territory:hover path,.territory:focus-visible path,.territory:hover circle,.territory:focus-visible circle { fill: color-mix(in srgb,var(--map-accent, var(--green, #087059)) 52%,var(--surface)); stroke: var(--fg-1); }
+
+.territory text { font-size: 1px; font-weight: 740; text-anchor: middle; dominant-baseline: central; fill: var(--fg-1); pointer-events: none; }
+
+.territory:focus-visible { outline: none; }

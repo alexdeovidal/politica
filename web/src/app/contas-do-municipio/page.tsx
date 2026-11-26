@@ -8,7 +8,7 @@ import { allMunicipalities, municipalPublishedCodes } from "@/lib/municipal-cata
 import { directoryHref, directoryPath, directoryQuery, municipalDirectory } from "@/lib/municipal-directory";
 import { municipalHref } from "@/lib/municipal-registry";
 import { STATES } from "@/lib/state-accounts/registry";
-import map from "../../../public/maps/live-2026/br.json";
+import { BrazilStateMap } from "@/components/geography/brazil-state-map";
 import dashboard from "./caldas-novas/painel.module.css";
 import styles from "./directory.module.css";
 
@@ -28,7 +28,10 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
   const { uf, q, includePending, page: requestedPage } = directoryQuery(await searchParams, stateCodes);
   const { states, state, page, pages, first, last, total, rows } = municipalDirectory(cities, published, { uf, q, includePending, page: requestedPage });
   const ready = states.reduce((sum, item) => sum + item.ready, 0);
-  const byUf = new Map(states.map(item => [item.uf, item]));
+  const mapEntries = new Map(states.map(item => [item.uf, {
+    href: directoryHref(item.uf), label: `${stateNames.get(item.uf) ?? item.uf} · ${format(item.ready)} de ${format(item.total)} publicados`, ready: item.ready > 0,
+  }]));
+  mapEntries.set("DF", { href: district, label: "Distrito Federal · painel próprio", ready: false });
   return <div className={`${dashboard.dashboard} ${styles.directory}`}>
     <PageHeader group="Transparência" current="Contas do Município" />
     <header className={dashboard.hero}>
@@ -49,21 +52,7 @@ export default async function MunicipalIndex({ searchParams }: { searchParams: P
         <div className={dashboard.sectionHead}>
           <div><h2 id="mapa-brasil">Explore pelo mapa</h2><p>Toque ou clique em um estado para listar suas cidades.</p></div>
         </div>
-        <svg className={styles.brazil} viewBox="-76 -8 44 45" role="group" aria-label="Mapa interativo dos estados do Brasil">
-          {[...map.shapes].sort((a, b) => Number(a.code === "df") - Number(b.code === "df")).map(shape => {
-            const id = shape.code.toUpperCase();
-            const active = id === uf;
-            const tally = byUf.get(id);
-            const label = `${stateNames.get(id) ?? id}${tally ? ` · ${format(tally.ready)} de ${format(tally.total)} publicados` : " · painel próprio"}`;
-            return <a key={id} href={id === "DF" ? district : directoryHref(id)} className={styles.territory}
-              aria-label={label} aria-current={active ? "true" : undefined} data-active={active || undefined} data-ready={Boolean(tally?.ready) || undefined}>
-              <title>{label}</title>
-              <path d={shape.d} fillRule="evenodd" vectorEffect="non-scaling-stroke" />
-              {id === "DF" ? <circle cx={shape.point[0]} cy={shape.point[1]} r=".5" vectorEffect="non-scaling-stroke" /> :
-                !["AL", "ES", "PB", "RJ", "RN", "SE"].includes(id) && <text x={shape.point[0]} y={shape.point[1]} aria-hidden="true">{id}</text>}
-            </a>;
-          })}
-        </svg>
+        <BrazilStateMap selected={uf} entries={mapEntries} />
         <p className={styles.mapLegend}><span aria-hidden="true" /> Estado com painel publicado <span aria-hidden="true" /> Estado selecionado</p>
         <p className={styles.muted}>Malha territorial do IBGE.</p>
       </section>

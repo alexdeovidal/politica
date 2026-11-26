@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { ArrowDownToLine, ArrowRight, ArrowUpRight, BarChart3, Building2, Check, ChevronLeft, ChevronRight, CircleHelp,
   FileCheck2, Files, HeartPulse, Landmark, Layers3, ListFilter, MapPinned, Megaphone, Search, Share2, ShieldCheck, Wallet } from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import type { DashboardSnapshot, EvidencePage, FiscalFunction, LedgerId, MonthlyCell } from "@/lib/state-accounts/dashboard-model";
 import { getComparisonRatio, getKnownAmount, getSnapshotYearMonths, getTreasuryMonths } from "@/lib/state-accounts/availability";
 import styles from "./state-dashboard.module.css";
+import { StateHero, StateFooter } from "./state-chrome";
 
 const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const n = new Intl.NumberFormat("pt-BR");
@@ -21,7 +21,7 @@ type Mode = "compare" | "publicity" | "health" | "budget" | "sources";
 type Filters = { year: number; fromMonth: number; toMonth: number; agency: string; category: string };
 type BudgetMeasure = "settledCents" | "committedCents" | "updatedBudgetCents";
 type PublicityOptions = { ledger: "invoices" | "companies"; agency: string; group: "vehicle" | "medium" | "campaign" | "supplier" };
-type BudgetOptions = { left: string; right: string; measure: BudgetMeasure };
+export type BudgetOptions = { left: string; right: string; measure: BudgetMeasure };
 type ViewOptions = { evidenceCategory: "publicity" | "elective-surgeries"; publicity: PublicityOptions;
   healthDetail: "treasury" | "pce"; budget: BudgetOptions; query: string; page: number };
 type EvidenceControls = { query: string; page: number; onQueryChange: (query: string) => void; onPageChange: (page: number) => void };
@@ -139,17 +139,8 @@ export function StateDashboard({ data, slug }: { data: DashboardSnapshot; slug: 
     catch { setShared("Use o endereço desta página para compartilhar"); }
   }
   return <div className={styles.dashboard}>
-    <header className={styles.hero}>
-      <div className={styles.heroCopy}>
-        <div className={styles.eyebrow}><span className={styles.liveDot} /> CONTAS DO ESTADO <span>/</span> {data.name.toLocaleUpperCase("pt-BR")}</div>
-        <h1>O dinheiro público.<br /><span>As escolhas em perspectiva.</span></h1>
-        <p>Da despesa ao documento. Compare publicidade, repasses para cirurgias e as áreas do orçamento de {data.name}.</p>
-        <div className={styles.heroMeta}><span><ShieldCheck size={14} /> Fontes oficiais identificadas</span><span>Coleta: {date(data.collectedAt)}</span></div>
-      </div>
-      <Link href="/contas-do-estado" prefetch={false} className={styles.stateCard} aria-label={`${data.name}, ver cobertura dos estados`}>
-        <span>ESTADO EM FOCO</span><strong>{data.uf}</strong><div>{data.name} <ArrowUpRight size={20} /></div><small>Uma estrutura para as 27 UFs</small>
-      </Link>
-    </header>
+    <StateHero name={data.name} uf={data.uf} collected={data.collectedAt}
+      description={`Da despesa ao documento. Compare publicidade, repasses para cirurgias e as áreas do orçamento de ${data.name}.`} />
     <div className={styles.auditStrip}><span><Files size={16} /><strong>{n.format(data.scannedPayments)}</strong> ordens de pagamento examinadas</span>
       <span><Building2 size={16} /><strong>{data.scannedAgencies}</strong> unidades na base original</span><button onClick={() => change({}, "sources")}>Entenda a cobertura <ArrowRight size={14} /></button></div>
     <nav className={styles.tabs} aria-label="Visões das contas estaduais">{tabs.map(({ id, title, Icon }) => <button key={id} type="button" aria-pressed={mode === id}
@@ -207,7 +198,7 @@ export function StateDashboard({ data, slug }: { data: DashboardSnapshot; slug: 
       onDetailChange={healthDetail => changeView({ healthDetail }, true)} evidenceControls={evidenceControls} />}
     {mode === "budget" && <BudgetView data={data} year={filters.year} options={view.budget} onChange={budget => changeView({ budget })} />}
     {mode === "sources" && <SourcesView data={data} slug={slug} />}
-    <footer className={styles.pageFooter}><span>POLÍTICA007 <i /> DADOS PÚBLICOS, CONTEXTO VISÍVEL.</span><Link href="/contas-do-estado" prefetch={false}>Cobertura dos estados <ArrowRight size={14} /></Link></footer>
+    <StateFooter />
   </div>;
 }
 
@@ -348,7 +339,7 @@ function HealthView({ data, slug, filters, rows, detail, onDetailChange, evidenc
   </>;
 }
 
-function BudgetView({ data, year, options, onChange }: { data: DashboardSnapshot; year: number; options: BudgetOptions; onChange: (options: BudgetOptions) => void }) {
+export function BudgetView({ data, year, options, onChange, national = false }: { data: Pick<DashboardSnapshot, "fiscal">; year: number; options: BudgetOptions; onChange: (options: BudgetOptions) => void; national?: boolean }) {
   const [fiscalYear, setFiscalYear] = useState<number | null>(null);
   const effectiveYear = fiscalYear ?? year;
   const report = data.fiscal.find(r => r.year === effectiveYear);
@@ -369,7 +360,7 @@ function BudgetView({ data, year, options, onChange }: { data: DashboardSnapshot
   const value = (row: FiscalFunction | undefined) => row?.[measure] ?? null;
   const comparativeRatio = left === right ? null : getComparisonRatio(value(a), value(b));
   const reconciled = Number.isSafeInteger(total) && ranked.reduce((sum, row) => sum + (row[measure] ?? 0), 0) === total;
-  return <><SectionTitle index="04" title="Compare as áreas do orçamento" text="Uma visão fiscal consolidada, além dos recortes de publicidade e cirurgias." />
+  return <><SectionTitle index="04" title="Compare as áreas do orçamento" text={national ? "Compare funções no mesmo exercício e na mesma etapa financeira do RREO." : "Uma visão fiscal consolidada, além dos recortes de publicidade e cirurgias."} />
     {yearSelector}
     <div className={styles.note}><Landmark size={18} /><p><strong>Período oficial: {date(report.periodStart)} a {date(report.periodEnd)}.</strong> {label} por função, sem despesas intraorçamentárias. O RREO não publica pagamento por função nesta base; por isso esta visão oferece liquidado, empenhado e dotação, com os nomes corretos.</p></div>
     <div className={styles.compareFilters}><label>Medida<select value={measure} onChange={e => onChange({ left, right, measure: e.target.value as BudgetMeasure })}><option value="settledCents">Liquidado · obrigação reconhecida</option><option value="committedCents">Empenhado · compromisso assumido</option><option value="updatedBudgetCents">Dotação atualizada · autorização</option></select></label>

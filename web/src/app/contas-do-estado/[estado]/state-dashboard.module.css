@@ -17,3 +17,10 @@
 @media(max-width:480px){.comparison{grid-template-columns:1fr}.compareCard{padding:21px}.bigMoney{font-size:36px}.metricLabel{min-height:22px;font-size:9px}.compareCard>p{min-height:0;font-size:10px}.compareCard footer{font-size:10px}.compareCard footer button{font-size:10px}}
 
 .bigMoney[data-missing],.statCard .money[data-missing]{font-size:clamp(19px,2.2vw,25px);letter-spacing:-.5px;line-height:1.4}.comparisonReading>div>strong.unavailableValue{display:block;font-size:14px;letter-spacing:0;overflow-wrap:anywhere;line-height:1.6;margin-top:5px}.search:focus-within{outline:2px solid var(--go-teal);outline-offset:2px}
+
+.nationalBody { display: grid; gap: 21px; min-width: 0; scroll-margin-top: 85px; }
+.nationalBody[hidden] { display: none; }
+.nationalBody .panel > summary { cursor: pointer; font-weight: 650; font-size: 15px; }
+.nativeFiscalTable { border-collapse: collapse; width: 100%; min-width: 450px; font-size: 12px; }
+.nativeFiscalTable th,.nativeFiscalTable td { padding: 10px 7px; border-bottom: 1px solid var(--border-1); }
+.nativeFiscalTable td { white-space: nowrap; }

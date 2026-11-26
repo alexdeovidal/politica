@@ -5,12 +5,6 @@
 .coverage span,.muted,.mapLegend,.directoryNote,.resultCount { font-size: 13px; color: var(--muted); }
 .explorer { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 16px; align-items: start; }
 .mapCard,.searchCard,.results { border: 1px solid var(--border-1); border-radius: 18px; background: var(--surface); padding: clamp(14px,2.7vw,26px); min-width: 0; }
-.brazil { width: 100%; height: clamp(235px,36vw,350px); background: radial-gradient(ellipse at 60% 45%,color-mix(in srgb,var(--green) 8%,var(--bg)),var(--bg)); border: 1px solid var(--border-1); border-radius: 14px; }
-.territory path,.territory circle { fill: var(--surface); stroke: var(--border-2); stroke-width: 1; }
-.territory[data-ready] path { fill: color-mix(in srgb, var(--green) 22%, var(--surface)); }
-.territory[data-active] path,.territory:hover path,.territory:focus-visible path,.territory:hover circle,.territory:focus-visible circle { fill: color-mix(in srgb,var(--green) 52%,var(--surface)); stroke: var(--fg-1); }
-.territory text { font-size: 1px; font-weight: 740; text-anchor: middle; dominant-baseline: central; fill: var(--fg-1); pointer-events: none; }
-.territory:focus-visible { outline: none; }
 .mapLegend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 12px; }
 .mapLegend span { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--green); background: color-mix(in srgb,var(--green) 22%,var(--surface)); }
 .mapLegend span:nth-of-type(2) { margin-left: 4px; background: color-mix(in srgb,var(--green) 52%,var(--surface)); }
